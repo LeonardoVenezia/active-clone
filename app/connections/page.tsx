@@ -27,6 +27,7 @@ function Result({ result }: { result: Feedback }) {
 }
 export default function Connections() {
   const [provider, setProvider] = useState<"gmail" | "outlook">("gmail");
+  useEffect(() => { if (new URLSearchParams(window.location.search).get("returned") === "outlook") setProvider("outlook"); }, []);
   return <ProviderConnections key={provider} provider={provider} onProviderChange={setProvider} />;
 }
 function ProviderConnections({ provider, onProviderChange }: { provider: "gmail" | "outlook"; onProviderChange: (p: "gmail" | "outlook") => void }) {
