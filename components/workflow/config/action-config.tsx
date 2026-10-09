@@ -390,6 +390,8 @@ export function ActionConfig({
 
     // Check plugin actions
     const action = findActionById(actionType);
+    // Composio uses the server project key, not a per-user credential record.
+    if (action?.integration === "composio") return undefined;
     return action?.integration as IntegrationType | undefined;
   }, [actionType]);
 
