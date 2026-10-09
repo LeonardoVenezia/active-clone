@@ -2,7 +2,9 @@ import "server-only";
 
 const BASE = "https://backend.composio.dev/api/v3";
 export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
-const CONFIG_NAME = "Active-clone Gmail read-only v1";
+const CONFIG_ID = "ac_BK5hd2o5ZRoT";
+const GOOGLE_CLIENT_ID = "718373983926-c1sof08k6k69os2sqiq5r0f2g5o04qrd.apps.googleusercontent.com";
+const GOOGLE_CALLBACK = "https://backend.composio.dev/api/v3/toolkits/auth/callback";
 const TOOL = "GMAIL_FETCH_EMAILS";
 const VERSION = "20261008_00";
 type Row = Record<string, any>;
@@ -27,21 +29,17 @@ function readonlyScope(value: unknown) {
   return list.includes(GMAIL_SCOPE) && list.every(s => [GMAIL_SCOPE, "openid", "email", "profile", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"].includes(s));
 }
 async function configValid(id: string) {
+  if (id !== CONFIG_ID) return false;
   const c = await request(`/auth_configs/${encodeURIComponent(id)}`);
-  return c.toolkit?.slug?.toLowerCase() === "gmail" && c.auth_scheme === "OAUTH2" && c.status === "ENABLED" && readonlyScope(c.credentials?.scopes);
+  const requested = scopes(c.credentials?.scopes);
+  return c.type === "custom" && c.is_composio_managed === false &&
+    c.toolkit?.slug?.toLowerCase() === "gmail" && c.auth_scheme === "OAUTH2" &&
+    c.status === "ENABLED" && requested.length === 1 && requested[0] === GMAIL_SCOPE &&
+    c.credentials?.client_id === GOOGLE_CLIENT_ID && c.credentials?.oauth_redirect_uri === GOOGLE_CALLBACK;
 }
 async function authConfig() {
-  const result = await request(`/auth_configs?${new URLSearchParams({ toolkit_slug: "gmail", search: CONFIG_NAME, limit: "100" })}`);
-  for (const c of result.items ?? []) {
-    if (c.name === CONFIG_NAME && await configValid(c.id)) return c.id as string;
-  }
-  const created = await request("/auth_configs", {
-    toolkit: { slug: "gmail" },
-    auth_config: { type: "use_composio_managed_auth", name: CONFIG_NAME, credentials: { scopes: GMAIL_SCOPE } },
-  });
-  const id = created.auth_config?.id;
-  if (typeof id !== "string" || !await configValid(id)) throw new Error("Read-only auth config could not be verified. Connection stopped.");
-  return id;
+  if (!await configValid(CONFIG_ID)) throw new Error("Custom read-only auth config could not be verified. Connection stopped.");
+  return CONFIG_ID;
 }
 // The session owns userId. Never accept it from a form or callback query.
 async function ownAccounts(userId: string, id?: string) {
