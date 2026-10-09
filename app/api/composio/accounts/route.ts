@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { connectGmail, listGmailAccounts, testGmail } from "@/lib/composio-oauth";
+import { connectGmail, listGmailAccounts, testGmail, connectOutlook, listOutlookAccounts, testOutlook } from "@/lib/composio-oauth";
 const ORIGINS = ["https://active-clone.vercel.app", "https://active-clone-leonardo-venezias-projects.vercel.app"];
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session?.user || session.user.isAnonymous) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
-  try { return NextResponse.json({ accounts: await listGmailAccounts(session.user.id) }); }
+  const provider = new URL(request.url).searchParams.get("provider") || "gmail";
+  if (!["gmail", "outlook"].includes(provider)) return NextResponse.json({ error: "Unsupported provider." }, { status: 400 });
+  try { return NextResponse.json({ accounts: await (provider === "outlook" ? listOutlookAccounts(session.user.id) : listGmailAccounts(session.user.id)) }); }
   catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Connections unavailable." }, { status: 503 }); }
 }
 export async function POST(request: Request) {
@@ -15,6 +17,12 @@ export async function POST(request: Request) {
   if (!session?.user || session.user.isAnonymous) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   try {
     const body = await request.json();
+    if (body.provider === "outlook") {
+      if (body.action === "connect") return NextResponse.json(await connectOutlook(session.user.id, `${origin}/connections?returned=outlook`));
+      if (body.action === "test" && typeof body.id === "string" && /^ca_[A-Za-z0-9_-]+$/.test(body.id)) return NextResponse.json(await testOutlook(session.user.id, body.id));
+      return NextResponse.json({ error: "Unsupported action." }, { status: 400 });
+    }
+    if (body.provider && body.provider !== "gmail") return NextResponse.json({ error: "Unsupported provider." }, { status: 400 });
     if (body.action === "connect") return NextResponse.json(await connectGmail(session.user.id, `${origin}/connections?returned=1`));
     if (body.action === "test" && typeof body.id === "string" && /^ca_[A-Za-z0-9_-]+$/.test(body.id)) return NextResponse.json(await testGmail(session.user.id, body.id));
     return NextResponse.json({ error: "Unsupported action." }, { status: 400 });
