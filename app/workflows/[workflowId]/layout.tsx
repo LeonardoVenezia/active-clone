@@ -1,5 +1,8 @@
 import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 import type { ReactNode } from "react";
 import { db } from "@/lib/db";
 import { workflows } from "@/lib/db/schema";
@@ -40,21 +43,21 @@ export async function generateMetadata({
   }
 
   const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL || "https://workflow-builder.dev";
+    process.env.NEXT_PUBLIC_APP_URL || "https://active-clone.vercel.app";
   const workflowUrl = `${baseUrl}/workflows/${workflowId}`;
   const ogImageUrl = isPublic
     ? `${baseUrl}/api/og/workflow/${workflowId}`
     : `${baseUrl}/og-default.png`;
 
   return {
-    title: `${title} | AI Workflow Builder`,
-    description: `View and explore the "${title}" workflow built with AI Workflow Builder.`,
+    title: `${title} | Active-clone`,
+    description: `View and explore the "${title}" workflow built with Active-clone.`,
     openGraph: {
-      title: `${title} | AI Workflow Builder`,
-      description: `View and explore the "${title}" workflow built with AI Workflow Builder.`,
+      title: `${title} | Active-clone`,
+      description: `View and explore the "${title}" workflow built with Active-clone.`,
       type: "website",
       url: workflowUrl,
-      siteName: "AI Workflow Builder",
+      siteName: "Active-clone",
       images: [
         {
           url: ogImageUrl,
@@ -66,13 +69,23 @@ export async function generateMetadata({
     },
     twitter: {
       card: "summary_large_image",
-      title: `${title} | AI Workflow Builder`,
-      description: `View and explore the "${title}" workflow built with AI Workflow Builder.`,
+      title: `${title} | Active-clone`,
+      description: `View and explore the "${title}" workflow built with Active-clone.`,
       images: [ogImageUrl],
     },
   };
 }
 
-export default function WorkflowLayout({ children }: WorkflowLayoutProps) {
+export default async function WorkflowLayout({ children, params }: WorkflowLayoutProps) {
+  const { workflowId } = await params;
+  const workflow = await db.query.workflows.findFirst({
+    where: eq(workflows.id, workflowId), columns: { visibility: true },
+  });
+  if (workflow?.visibility !== "public") {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session?.user || session.user.isAnonymous) {
+      redirect(`/login?next=${encodeURIComponent(`/workflows/${workflowId}`)}`);
+    }
+  }
   return children;
 }
