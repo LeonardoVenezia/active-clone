@@ -27,7 +27,8 @@ async function account(id: string, toolkit: string) {
   const a = await api(`/connected_accounts/${encodeURIComponent(id)}`);
   if (a.user_id !== OWNER || a.experimental?.account_type !== "PRIVATE" || a.toolkit?.slug !== toolkit || a.status !== "ACTIVE" || a.is_disabled) throw new Error("Active private owner connection required.");
   if (toolkit === "googlesheets") {
-    if (a.auth_config?.id !== CONFIG || !sheetsScope(a.requested_scopes) || !sheetsScope(a.state?.val?.scope || a.data?.scope)) throw new Error("Sheets granted scopes could not be verified.");
+    if (a.auth_config?.id !== CONFIG || !sheetsScope(a.requested_scopes)) throw new Error("Sheets requested configuration could not be verified.");
+    if (!sheetsScope(a.state?.val?.scope || a.data?.scope)) throw new Error("Google did not grant spreadsheet access. Click Connect Google Sheets again and select the spreadsheets permission on the Google consent screen, then activate the new connection. Existing connection was not revoked.");
     await validConfig();
   } else {
     const grant = list(a.state?.val?.scope || a.data?.scope);
