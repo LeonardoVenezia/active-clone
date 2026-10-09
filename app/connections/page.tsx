@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { EmailVerification } from "./email-verification";
 import { useSession } from "@/lib/auth-client";
 import { AuthDialog } from "@/components/auth/dialog";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ export default function Connections() {
   return <main className="pointer-events-auto fixed inset-0 z-20 overflow-auto bg-background p-6"><div className="mx-auto max-w-2xl space-y-6">
     <Link className="text-sm underline" href="/">Back to Active-clone</Link>
     <h1 className="text-2xl font-bold">Connections</h1>
+    <EmailVerification />
     <p className="text-muted-foreground">Connect Gmail through Composio. You choose your Google account and review access on the consent screen. Composio stores the OAuth tokens. This first version requests read-only Gmail access, not sending or editing permission.</p>
     {isPending ? <p>Loading session...</p> : !session?.user || session.user.isAnonymous ? <AuthDialog><Button>Sign In</Button></AuthDialog> : <>
       <div className="flex flex-wrap gap-3"><Button disabled={busy} onClick={() => void act("connect")}>Connect Gmail (read-only)</Button><Button variant="outline" disabled={busy} onClick={() => void load()}>Refresh status</Button></div>
