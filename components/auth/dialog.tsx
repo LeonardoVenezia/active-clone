@@ -619,8 +619,8 @@ const MultiProviderDialog = ({
   );
 };
 
-export const AuthDialog = ({ children }: AuthDialogProps) => {
-  const [open, setOpen] = useState(false);
+export const AuthDialog = ({ children, defaultOpen = false }: AuthDialogProps & { defaultOpen?: boolean }) => {
+  const [open, setOpen] = useState(defaultOpen);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
