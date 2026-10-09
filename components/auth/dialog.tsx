@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -212,6 +213,14 @@ const EmailForm = ({
         {getButtonText(loading, mode)}
       </Button>
     </form>
+    {mode === "signin" && (
+      <Link
+        className="block text-sm underline underline-offset-4"
+        href="/forgot-password"
+      >
+        Forgot your password?
+      </Link>
+    )}
 
     <div className="flex justify-center">
       <button
@@ -284,7 +293,7 @@ const SocialButtons = ({
 
 type UseAuthHandlers = {
   handleSocialSignIn: (
-    provider: "github" | "google" | "vercel"
+    provider: "github" | "google" | "vercel",
   ) => Promise<void>;
   handleEmailAuth: (e: React.FormEvent) => Promise<void>;
   toggleMode: () => void;
@@ -316,7 +325,7 @@ const useAuthHandlers = (options: AuthHandlersOptions): UseAuthHandlers => {
   } = options;
 
   const handleSocialSignIn = async (
-    provider: "github" | "google" | "vercel"
+    provider: "github" | "google" | "vercel",
   ) => {
     try {
       setLoadingProvider(provider);
