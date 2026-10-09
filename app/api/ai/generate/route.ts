@@ -1,4 +1,4 @@
-import { streamText } from "ai";
+import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
@@ -266,7 +266,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const apiKey = process.env.AI_GATEWAY_API_KEY || process.env.OPENAI_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    const model = process.env.AI_CHAT_MODEL || "openrouter/free";
+
+    // Explicit allowlist: never accept paid models or silently fall back to them.
+    // Add named :free variants only after checking the current provider catalog.
+    const freeModels = new Set(["openrouter/free"]);
+    if (!freeModels.has(model)) {
+      return NextResponse.json(
+        { error: "AI_CHAT_MODEL is not in the verified free-model allowlist." },
+        { status: 503 }
+      );
+    }
 
     if (!apiKey) {
       return NextResponse.json(
@@ -324,18 +335,37 @@ Example: If user says "connect node A to node B", output:
 {"op": "addEdge", "edge": {"id": "e-new", "source": "A", "target": "B", "type": "default"}}`;
     }
 
-    const result = streamText({
-      model: "openai/gpt-5.1-instant",
-      system: getSystemPrompt(),
-      prompt: userPrompt,
+    // Use the existing OpenAI SDK dependency directly with Chat Completions.
+    // A fixed endpoint prevents accidental Gateway/paid provider routing.
+    const provider = new OpenAI({
+      apiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+      maxRetries: 0,
+      timeout: 60_000,
     });
+    const result = await provider.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: getSystemPrompt() },
+        { role: "user", content: userPrompt },
+      ],
+      stream: true,
+      max_tokens: 4096,
+    });
+
+    async function* textChunks() {
+      for await (const chunk of result) {
+        const text = chunk.choices[0]?.delta?.content;
+        if (text) yield text;
+      }
+    }
 
     // Create a streaming response
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          await processOperationStream(result.textStream, encoder, controller);
+          await processOperationStream(textChunks(), encoder, controller);
           controller.close();
         } catch (error) {
           controller.enqueue(
