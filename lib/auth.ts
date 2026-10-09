@@ -142,6 +142,12 @@ const plugins = [
 
 export const auth = betterAuth({
   baseURL: getBaseURL(),
+  // Exact production aliases only. Keep the canonical callback URL unchanged.
+  trustedOrigins: [
+    getBaseURL(),
+    "https://active-clone.vercel.app",
+    "https://active-clone-leonardo-venezias-projects.vercel.app",
+  ],
   database: drizzleAdapter(db, {
     provider: "pg",
     schema,
