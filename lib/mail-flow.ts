@@ -10,6 +10,11 @@ const OUTLOOK = "ca_yCkXFi2Yv9mw";
 const CONFIG = "ac_GUA-bnbuicij";
 const SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/userinfo.email"];
 type Obj = Record<string, any>;
+export function safeFlowError(e: unknown) {
+  const message = e instanceof Error ? e.message : "Flow request failed.";
+  if (/failed query|params:|postgres|sql|relation .*exist|column .*exist|database|connect econn|socket/i.test(message)) return "Flow storage operation failed. No completed activation was confirmed. Refresh status before retrying; if it persists, contact support.";
+  return message.slice(0,700);
+}
 export function requireOwner(id: string) { if (id !== OWNER) throw new Error("This flow is private to its owner."); }
 async function api(path: string, body?: Obj): Promise<Obj> {
   if (!process.env.COMPOSIO_API_KEY) throw new Error("Server connection not configured.");
@@ -53,7 +58,7 @@ export async function flowStatus(id: string) {
   const flows = await db.execute(sql`SELECT status, trigger_id, sheets_account_id, activated_at, next_row FROM mail_flows WHERE user_id=${OWNER}`);
   const runs = await db.execute(sql`SELECT message_id, row_number, status, error, updated_at FROM mail_flow_events WHERE user_id=${OWNER} ORDER BY updated_at DESC LIMIT 20`);
   const a = await api(`/connected_accounts?user_ids=${OWNER}&account_type=PRIVATE&limit=100`);
-  return { flow: flows[0] || null, runs: [...runs], accounts: (a.items || []).filter((x: Obj) => x.user_id === OWNER && x.toolkit?.slug === "googlesheets" && x.auth_config?.id === CONFIG && x.experimental?.account_type !== "SHARED").map((x: Obj) => ({ id: x.id, status: x.status })), sheetUrl: SHEET_URL };
+  return { flow: flows[0] || null, runs: [...runs].map(r => ({...r,error:r.error ? safeFlowError(new Error(String(r.error))) : null})), accounts: (a.items || []).filter((x: Obj) => x.user_id === OWNER && x.toolkit?.slug === "googlesheets" && x.auth_config?.id === CONFIG && x.experimental?.account_type !== "SHARED").map((x: Obj) => ({ id: x.id, status: x.status })), sheetUrl: SHEET_URL };
 }
 export async function activateFlow(id: string, sheetAccount: string) {
   requireOwner(id); await account(OUTLOOK, "outlook"); await account(sheetAccount, "googlesheets");
@@ -66,8 +71,7 @@ export async function activateFlow(id: string, sheetAccount: string) {
   if (current.sheets_account_id !== sheetAccount) throw new Error("A different Sheets connection is already pinned.");
   if (current.status === "active") return { success: true };
   // Start boundary precedes subscription creation. No inbox history is fetched.
-  const start = current.activated_at ? new Date(current.activated_at as string) : new Date();
-  await db.execute(sql`UPDATE mail_flows SET activated_at=${start},status='starting' WHERE user_id=${OWNER}`);
+  await db.execute(sql`UPDATE mail_flows SET activated_at=COALESCE(activated_at,now()),status='starting' WHERE user_id=${OWNER}`);
   const t = await api("/trigger_instances/OUTLOOK_MESSAGE_TRIGGER/upsert", { connected_account_id: OUTLOOK, user_id: OWNER, trigger_config: { folder_id: "inbox" }, toolkit_versions: { outlook: "20261009_00" }, egress_url: "https://active-clone.vercel.app/api/mail-flow/webhook" });
   if (typeof t.trigger_id !== "string") throw new Error("Trigger creation could not be verified.");
   await db.execute(sql`UPDATE mail_flows SET trigger_id=${t.trigger_id},status='active' WHERE user_id=${OWNER}`);
@@ -132,7 +136,7 @@ export async function handleMailEvent(payload: Obj) {
     await db.execute(sql`UPDATE mail_flow_events SET status='success',lease_until=NULL,lease_token=NULL,updated_at=now() WHERE user_id=${OWNER} AND message_id=${mid} AND lease_token=${lease}`);
     return { success: true, row: n };
   } catch (e) {
-    const error = e instanceof Error ? e.message : "Provider result unknown.";
+    const error = safeFlowError(e);
     await db.execute(sql`UPDATE mail_flow_events SET status='error',error=${error},lease_until=NULL,lease_token=NULL,updated_at=now() WHERE user_id=${OWNER} AND message_id=${mid} AND lease_token=${lease}`);
     throw new Error(error);
   }
