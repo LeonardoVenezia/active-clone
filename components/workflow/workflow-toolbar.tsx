@@ -1,7 +1,7 @@
 "use client";
 
 import { useReactFlow } from "@xyflow/react";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   Check,
   ChevronDown,
@@ -513,6 +513,8 @@ function useWorkflowHandlers({
 }: WorkflowHandlerParams) {
   const { open: openOverlay } = useOverlay();
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const startingRunRef = useRef(false);
+  const store = useStore();
 
   // Cleanup polling interval on unmount
   useEffect(
@@ -547,7 +549,33 @@ function useWorkflowHandlers({
       return;
     }
 
-    // Switch to Runs tab when starting a test run
+    if (startingRunRef.current || store.get(isExecutingAtom) || store.get(isSavingAtom)) return;
+    startingRunRef.current = true;
+    setIsSaving(true);
+    try {
+      // Execute API reads the saved workflow, so persist this exact canvas first.
+      await api.workflow.update(currentWorkflowId, { nodes, edges });
+      if (store.get(currentWorkflowIdAtom) !== currentWorkflowId) {
+        toast.error("Workflow changed while saving. Run stopped.");
+        return;
+      }
+      if (JSON.stringify(store.get(nodesAtom)) !== JSON.stringify(nodes) ||
+          JSON.stringify(store.get(edgesAtom)) !== JSON.stringify(edges)) {
+        toast.error("The canvas changed while saving. Run again to include your latest edits.");
+        return;
+      }
+      setHasUnsavedChanges(false);
+      setIsExecuting(true);
+    } catch (error) {
+      console.error("Failed to save before run:", error);
+      toast.error("Could not save your changes. Nothing was run. Try Run again.");
+      return;
+    } finally {
+      setIsSaving(false);
+      startingRunRef.current = false;
+    }
+
+    // Switch to Runs tab only after the canvas is saved.
     setActiveTab("runs");
 
     // Deselect all nodes and edges
@@ -585,7 +613,7 @@ function useWorkflowHandlers({
 
   const handleExecute = async () => {
     // Guard against concurrent executions
-    if (isExecuting) {
+    if (startingRunRef.current || store.get(isExecutingAtom) || store.get(isSavingAtom)) {
       return;
     }
 
@@ -1320,11 +1348,11 @@ function RunButtonGroup({
     <Button
       className="border hover:bg-black/5 disabled:opacity-100 dark:hover:bg-white/5 disabled:[&>svg]:text-muted-foreground"
       disabled={
-        state.isExecuting || state.nodes.length === 0 || state.isGenerating
+        state.isExecuting || state.isSaving || state.nodes.length === 0 || state.isGenerating
       }
       onClick={() => actions.handleExecute()}
       size="icon"
-      title="Run Workflow"
+      title="Save and Run Workflow"
       variant="secondary"
     >
       {state.isExecuting ? (
