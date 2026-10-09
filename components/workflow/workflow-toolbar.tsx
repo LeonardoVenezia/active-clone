@@ -1472,6 +1472,7 @@ export const WorkflowToolbar = ({ workflowId }: WorkflowToolbarProps) => {
                 onDuplicate={actions.handleDuplicate}
               />
             )}
+            <a className="text-sm underline" href="/connections">Connections</a>
             <UserMenu />
           </div>
         </div>
