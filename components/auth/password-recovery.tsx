@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,9 +14,21 @@ export function PasswordRecovery({ reset = false }: { reset?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [invalidLink, setInvalidLink] = useState(false);
+  const [completed, setCompleted] = useState(false);
+
+  useEffect(() => {
+    if (!reset) return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.get("token") || params.get("error")) {
+      setInvalidLink(true);
+      setError("This reset link is invalid or expired. Request a new one.");
+    }
+  }, [reset]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (invalidLink || completed) return;
     setError("");
     setMessage("");
     if (reset && password !== confirmation) {
@@ -40,6 +52,7 @@ export function PasswordRecovery({ reset = false }: { reset?: boolean }) {
           setError("This reset link is invalid or expired. Request a new one.");
           return;
         }
+        setCompleted(true);
         setPassword("");
         setConfirmation("");
         setMessage("Password changed. Sign in with your new password.");
@@ -126,7 +139,11 @@ export function PasswordRecovery({ reset = false }: { reset?: boolean }) {
             {message}
           </p>
         )}
-        <Button type="submit" className="w-full" disabled={busy}>
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={busy || invalidLink || completed}
+        >
           {busy ? "Working..." : reset ? "Change password" : "Send reset link"}
         </Button>
       </form>
