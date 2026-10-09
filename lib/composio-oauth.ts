@@ -68,7 +68,11 @@ export async function testGmail(userId: string, id: string) {
   const account = await request(`/connected_accounts/${encodeURIComponent(owned.id)}`);
   if (!account || account.status !== "ACTIVE" || account.is_disabled || !readonlyScope(account.requested_scopes) || !await configValid(account.auth_config?.id)) throw new Error("An active, owned, verified read-only Gmail connection is required.");
   const result = await request(`/tools/execute/${TOOL}`, { connected_account_id: account.id, user_id: userId, version: VERSION, arguments: { user_id: "me", max_results: 5, ids_only: true, include_payload: false, verbose: false } });
-  if (result.successful !== true) throw new Error("Gmail read returned an unsuccessful result.");
+  if (result.successful !== true) {
+    const diagnostic = [result.error, result.data?.message].filter(v => typeof v === "string").join(" ");
+    if (/mail service not enabled/i.test(diagnostic)) throw new Error("This Google account does not have Gmail enabled (Google HTTP 400: Mail service not enabled). Connecting a Google account with an Outlook email does not connect the Microsoft Outlook mailbox. Choose a Google account with an existing Gmail mailbox, or use an Outlook integration instead. Nothing was sent or changed.");
+    throw new Error("Gmail read failed. No message IDs returned. Nothing was sent or changed.");
+  }
   const data = typeof result.data === "string" ? JSON.parse(result.data) : result.data;
   const messages = Array.isArray(data?.messages) ? data.messages : [];
   // Test returns IDs only. No bodies, headers, tokens or provider state reach the browser.
