@@ -337,7 +337,8 @@ function getMissingIntegrations(
     const action = findActionById(actionType);
     // Fall back to built-in action integrations for actions not in the registry
     const requiredIntegrationType =
-      action?.integration || BUILTIN_ACTION_INTEGRATIONS[actionType];
+      (action?.integration === "composio" ? undefined : action?.integration) ||
+      BUILTIN_ACTION_INTEGRATIONS[actionType];
 
     if (!requiredIntegrationType) {
       continue;
