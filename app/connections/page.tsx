@@ -68,6 +68,7 @@ function ProviderConnections({ provider, onProviderChange }: { provider: "gmail"
   return <main className="pointer-events-auto fixed inset-0 z-20 overflow-auto bg-background p-6"><div className="mx-auto max-w-2xl space-y-6">
     <Link className="text-sm underline" href="/">Back to Active-clone</Link>
     <h1 className="text-2xl font-bold">Connections</h1>
+    <Link className="block rounded-lg border p-4 underline" href="/mail-flow">Outlook → Google Sheets flow</Link>
     <div aria-label="Mail provider" className="flex flex-wrap gap-3"><Button aria-pressed={provider === "gmail"} disabled={!!busy} variant={provider === "gmail" ? "default" : "outline"} onClick={() => onProviderChange("gmail")}>Gmail</Button><Button aria-pressed={provider === "outlook"} disabled={!!busy} variant={provider === "outlook" ? "default" : "outline"} onClick={() => onProviderChange("outlook")}>Outlook</Button></div>
     <EmailVerification />
     <p className="text-muted-foreground">Connect {label} through Composio. You choose your {provider === "gmail" ? "Google" : "Microsoft"} account and review access on the consent screen. Composio stores the OAuth tokens. This connection requests read-only mail access, not sending or editing permission.</p>
