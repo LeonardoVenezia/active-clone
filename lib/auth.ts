@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { anonymous, genericOAuth } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
-import { sendPasswordResetEmail } from "./email";
+import { sendPasswordResetEmail, sendAccountVerificationEmail } from "./email";
 import { isAiGatewayManagedKeysEnabled } from "./ai-gateway/config";
 import { db } from "./db";
 import {
@@ -158,6 +158,15 @@ export const auth = betterAuth({
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
       await sendPasswordResetEmail(user.email, url);
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    sendOnSignIn: false,
+    autoSignInAfterVerification: false,
+    expiresIn: 3600,
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendAccountVerificationEmail(user.email, url);
     },
   },
   socialProviders: {
