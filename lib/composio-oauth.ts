@@ -42,11 +42,11 @@ async function authConfig() {
   return CONFIG_ID;
 }
 // The session owns userId. Never accept it from a form or callback query.
-async function ownAccounts(userId: string, id?: string) {
+async function ownAccounts(userId: string, id?: string, toolkit = "gmail") {
   const params = new URLSearchParams({ user_ids: userId, limit: "100", account_type: "PRIVATE" });
   if (id) params.set("connected_account_ids", id);
   const result = await request(`/connected_accounts?${params}`);
-  return (result.items ?? []).filter((a: Row) => a.toolkit?.slug?.toLowerCase() === "gmail" && (!a.user_id || a.user_id === userId) && (!id || a.id === id) && a.experimental?.account_type !== "SHARED");
+  return (result.items ?? []).filter((a: Row) => a.toolkit?.slug?.toLowerCase() === toolkit && a.user_id === userId && (!id || a.id === id) && a.experimental?.account_type !== "SHARED");
 }
 export async function listGmailAccounts(userId: string) {
   const accounts = await ownAccounts(userId);
@@ -66,7 +66,7 @@ export async function testGmail(userId: string, id: string) {
   const owned = (await ownAccounts(userId, id))[0];
   if (!owned) throw new Error("Connection not found for this user.");
   const account = await request(`/connected_accounts/${encodeURIComponent(owned.id)}`);
-  if (!account || account.status !== "ACTIVE" || account.is_disabled || !readonlyScope(account.requested_scopes) || !await configValid(account.auth_config?.id)) throw new Error("An active, owned, verified read-only Gmail connection is required.");
+  if (!account || account.user_id !== userId || account.experimental?.account_type !== "PRIVATE" || account.status !== "ACTIVE" || account.is_disabled || !readonlyScope(account.requested_scopes) || !await configValid(account.auth_config?.id)) throw new Error("An active, owned, verified read-only Gmail connection is required.");
   const result = await request(`/tools/execute/${TOOL}`, { connected_account_id: account.id, user_id: userId, version: VERSION, arguments: { user_id: "me", max_results: 5, ids_only: true, include_payload: false, verbose: false } });
   if (result.successful !== true) {
     const diagnostic = [result.error, result.data?.message].filter(v => typeof v === "string").join(" ");
@@ -77,4 +77,44 @@ export async function testGmail(userId: string, id: string) {
   const messages = Array.isArray(data?.messages) ? data.messages : [];
   // Test returns IDs only. No bodies, headers, tokens or provider state reach the browser.
   return { success: true, count: messages.length, messageIds: messages.slice(0, 5).map((m: Row) => String(m.id ?? m.messageId ?? "")).filter(Boolean) };
+}
+
+const OUTLOOK_CONFIG = "ac_GJdxOyKYTKtt";
+const OUTLOOK_SCOPES = ["Mail.Read", "offline_access", "User.Read"];
+function outlookReadonly(value: unknown) {
+  const list = scopes(value);
+  return list.includes("Mail.Read") && list.every(s => OUTLOOK_SCOPES.includes(s));
+}
+async function outlookConfigValid(id: string) {
+  if (id !== OUTLOOK_CONFIG) return false;
+  const c = await request(`/auth_configs/${encodeURIComponent(id)}`);
+  const list = scopes(c.credentials?.scopes);
+  return c.type === "default" && c.is_composio_managed === true && c.toolkit?.slug === "outlook" && c.auth_scheme === "OAUTH2" && c.status === "ENABLED" && list.length === OUTLOOK_SCOPES.length && OUTLOOK_SCOPES.every(s => list.includes(s));
+}
+export async function listOutlookAccounts(userId: string) {
+  const accounts = await ownAccounts(userId, undefined, "outlook");
+  return Promise.all(accounts.slice(0, 10).map(async (a: Row) => {
+    const d = await request(`/connected_accounts/${encodeURIComponent(a.id)}`);
+    if (d.user_id !== userId || d.experimental?.account_type !== "PRIVATE") throw new Error("Connection ownership could not be verified.");
+    return { id: a.id, status: d.status, alias: d.alias || "Outlook", readOnly: outlookReadonly(d.requested_scopes) && d.auth_config?.id === OUTLOOK_CONFIG };
+  }));
+}
+export async function connectOutlook(userId: string, callback: string) {
+  if (!await outlookConfigValid(OUTLOOK_CONFIG)) throw new Error("Managed read-only Outlook config could not be verified. Connection stopped.");
+  const link = await request("/connected_accounts/link", { auth_config_id: OUTLOOK_CONFIG, user_id: userId, callback_url: callback, experimental: { account_type: "PRIVATE" } });
+  const url = new URL(link.redirect_url);
+  if (url.protocol !== "https:" || !(url.hostname === "composio.dev" || url.hostname.endsWith(".composio.dev"))) throw new Error("Unexpected connection URL. Connection stopped.");
+  return { redirectUrl: url.toString(), expiresAt: link.expires_at };
+}
+export async function testOutlook(userId: string, id: string) {
+  const owned = (await ownAccounts(userId, id, "outlook"))[0];
+  if (!owned) throw new Error("Outlook connection not found for this user.");
+  const account = await request(`/connected_accounts/${encodeURIComponent(owned.id)}`);
+  if (account.user_id !== userId || account.experimental?.account_type !== "PRIVATE" || account.status !== "ACTIVE" || account.is_disabled || !outlookReadonly(account.requested_scopes) || !outlookReadonly(account.state?.val?.scope || account.data?.scope) || !await outlookConfigValid(account.auth_config?.id)) throw new Error("An active, owned, verified read-only Outlook connection is required.");
+  const result = await request("/tools/execute/OUTLOOK_LIST_MESSAGES", { connected_account_id: account.id, user_id: userId, version: "20261009_00", arguments: { user_id: "me", folder: "inbox", top: 5, select: ["id"], response_detail: "minimal" } });
+  if (result.successful !== true) throw new Error("Outlook read failed. No message IDs returned. Check the connected Microsoft account and its mailbox. Nothing was sent or changed.");
+  const data = typeof result.data === "string" ? JSON.parse(result.data) : result.data;
+  if (!Array.isArray(data?.value)) throw new Error("Unexpected Outlook response. Cannot verify message IDs.");
+  const messageIds = data.value.slice(0, 5).map((m: Row) => typeof m.id === "string" ? m.id : "").filter(Boolean);
+  return { success: true, count: messageIds.length, messageIds };
 }
