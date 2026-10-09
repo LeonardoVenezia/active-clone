@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { anonymous, genericOAuth } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
+import { sendPasswordResetEmail } from "./email";
 import { isAiGatewayManagedKeysEnabled } from "./ai-gateway/config";
 import { db } from "./db";
 import {
@@ -61,7 +62,7 @@ const plugins = [
       const toUserId = data.newUser.user.id;
 
       console.log(
-        `[Anonymous Migration] Migrating from user ${fromUserId} to ${toUserId}`
+        `[Anonymous Migration] Migrating from user ${fromUserId} to ${toUserId}`,
       );
 
       try {
@@ -84,12 +85,12 @@ const plugins = [
           .where(eq(integrations.userId, fromUserId));
 
         console.log(
-          `[Anonymous Migration] Successfully migrated data from ${fromUserId} to ${toUserId}`
+          `[Anonymous Migration] Successfully migrated data from ${fromUserId} to ${toUserId}`,
         );
       } catch (error) {
         console.error(
           "[Anonymous Migration] Error migrating user data:",
-          error
+          error,
         );
         throw error;
       }
@@ -120,7 +121,7 @@ const plugins = [
                     headers: {
                       Authorization: `Bearer ${tokens.accessToken}`,
                     },
-                  }
+                  },
                 );
                 const profile = await response.json();
                 console.log("[Vercel OAuth] userinfo response:", profile);
@@ -148,6 +149,10 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false,
+    revokeSessionsOnPasswordReset: true,
+    sendResetPassword: async ({ user, url }) => {
+      await sendPasswordResetEmail(user.email, url);
+    },
   },
   socialProviders: {
     github: {
