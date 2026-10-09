@@ -116,7 +116,7 @@ const requiresIntegration = (actionType: string): boolean => {
 
   // Plugin actions always require integration
   const action = findActionById(actionType);
-  return action !== undefined;
+  return action !== undefined && action.integration !== "composio";
 };
 
 // Helper to get provider logo for action type
