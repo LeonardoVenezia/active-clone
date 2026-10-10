@@ -1,7 +1,7 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { IntegrationProvider } from "../../core/provider";
-import type { ActionResult, Connection, NormalizedEvent, Preset, Toolkit, ToolkitPage, Verification } from "../../core/types";
+import type { TestResult, ActionResult, Connection, NormalizedEvent, Preset, Toolkit, ToolkitPage, Verification } from "../../core/types";
 import { presetFor } from "../../presets";
 
 // The ONLY file in the app that knows Composio's URLs, ids, tool names and response shapes.
@@ -21,6 +21,7 @@ const IDENTITY = new Set(["openid", "email", "profile", "offline_access", "User.
 const CAPABILITIES: Record<string, { tool: string; version: string; args: (i: Row) => Row }> = {
   "mail.get_message": { tool: "OUTLOOK_GET_MESSAGE", version: "20261009_00", args: i => ({ message_id: i.id, user_id: "me", select: ["id", "receivedDateTime", "from", "subject"] }) },
   "mail.list_ids": { tool: "OUTLOOK_LIST_MESSAGES", version: "20261009_00", args: i => ({ user_id: "me", folder: "inbox", top: i.limit ?? 5, select: ["id"], response_detail: "minimal" }) },
+  "gmail.list_ids": { tool: "GMAIL_FETCH_EMAILS", version: "20261008_00", args: i => ({ user_id: "me", max_results: i.limit ?? 5, ids_only: true, include_payload: false, verbose: false }) },
   "sheets.sheet_names": { tool: "GOOGLESHEETS_GET_SHEET_NAMES", version: "20261001_00", args: i => ({ spreadsheet_id: i.spreadsheetId }) },
   "sheets.read_range": { tool: "GOOGLESHEETS_VALUES_GET", version: "20261001_00", args: i => ({ spreadsheet_id: i.spreadsheetId, range: i.range }) },
   "sheets.write_row": { tool: "GOOGLESHEETS_BATCH_UPDATE", version: "20261001_00", args: i => ({ spreadsheet_id: i.spreadsheetId, sheet_name: i.sheet, first_cell_location: i.cell, values: [i.values], value_input_option: "RAW", include_values_in_response: false }) },
@@ -107,16 +108,29 @@ export const composioProvider: IntegrationProvider = {
     const mine = (r.items ?? []).filter((a: Row) => a.user_id === userId && a.toolkit?.slug?.toLowerCase() === preset.toolkitId && a.auth_config?.id === cfg.authConfigId && a.experimental?.account_type !== "SHARED").slice(0, 10);
     return Promise.all(mine.map(async (x: Row): Promise<Connection> => {
       const a = await ownedAccount(userId, x.id, preset);
-      if (a.status === "INITIATED" || a.status === "INITIALIZING") return { id: a.id, toolkitId: preset.toolkitId, status: "pending", label: a.alias || preset.title, verification: null, recovery: null };
-      if (a.status !== "ACTIVE" || a.is_disabled) return { id: a.id, toolkitId: preset.toolkitId, status: "failed", label: a.alias || preset.title, verification: null, recovery: "This connection is not usable. Reconnect it." };
+      if (a.status === "INITIATED" || a.status === "INITIALIZING") return { id: a.id, toolkitId: preset.toolkitId, status: "pending", label: a.alias || preset.title, verification: null, recovery: null, usedBy: [] };
+      if (a.status !== "ACTIVE" || a.is_disabled) return { id: a.id, toolkitId: preset.toolkitId, status: "failed", label: a.alias || preset.title, verification: null, recovery: "This connection is not usable. Reconnect it.", usedBy: [] };
       const v = check(a, preset);
-      return { id: a.id, toolkitId: preset.toolkitId, status: v.ok ? "active" : "needs_attention", label: a.alias || preset.title, verification: v, recovery: recovery(v, preset) };
+      return { id: a.id, toolkitId: preset.toolkitId, status: v.ok ? "active" : "needs_attention", label: a.alias || preset.title, verification: v, recovery: recovery(v, preset), usedBy: [] };
     }));
   },
   async verify({ userId, connectionId, preset }) {
     const a = await ownedAccount(userId, connectionId, preset);
     if (a.status !== "ACTIVE" || a.is_disabled) throw new Error("The connection is not active.");
     return check(a, preset);
+  },
+  async testConnection({ userId, connectionId, preset }): Promise<TestResult> {
+    const checkedAt = new Date().toISOString();
+    const a = await ownedAccount(userId, connectionId, preset);
+    if (a.status !== "ACTIVE" || a.is_disabled) return { ok: false, message: "The connection is not active. Reconnect it.", checkedAt };
+    const v = check(a, preset);
+    if (!v.ok) return { ok: false, message: recovery(v, preset) ?? "Permissions do not match the reviewed setup.", checkedAt };
+    // One read-only call, IDs only. No message bodies, no writes.
+    const readCap = preset.id === "gmail.read" ? "gmail.list_ids" : preset.id === "outlook.read" ? "mail.list_ids" : null;
+    if (!readCap) return { ok: true, message: "Connection is active and its permissions match the reviewed setup.", checkedAt };
+    const r = await composioProvider.execute<Row>({ userId, connectionId, capability: readCap, input: { limit: 5 } });
+    if (!r.ok) return { ok: false, message: "Permissions look right, but a read-only test call failed. Check the connected mailbox exists. Nothing was sent or changed.", checkedAt };
+    return { ok: true, message: "Connection works: a read-only test call succeeded (IDs only, no email content). Nothing was sent or changed.", checkedAt };
   },
   async execute<T>({ userId, connectionId, capability, input }: { userId: string; connectionId: string; capability: string; input: Record<string, unknown> }): Promise<ActionResult<T>> {
     const cap = CAPABILITIES[capability];
