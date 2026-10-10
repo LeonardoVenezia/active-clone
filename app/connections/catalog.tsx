@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 type Permission = { id: string; label: string; risk: string };
 type Preset = { id: string; toolkitId: string; title: string; grants: Permission[]; doesNotGrant: string[]; consentHint: string; notes?: string };
 type Verification = { ok: boolean; checked: boolean; missing: { id: string; label: string }[]; unexpected: string[] };
-type Connection = { id: string; toolkitId: string; status: "pending" | "active" | "needs_attention" | "failed"; label: string; verification: Verification | null; recovery: string | null };
+type Connection = { id: string; toolkitId: string; status: "pending" | "active" | "needs_attention" | "failed"; label: string; verification: Verification | null; recovery: string | null; usedBy: string[] };
+type TestResult = { ok: boolean; message: string; checkedAt: string };
 type Toolkit = { id: string; name: string; description: string; logoUrl: string | null; categories: string[]; authKind: string; reviewed: boolean };
 type Data = { items: Toolkit[]; nextCursor: string | null; total: number | null; connections: Record<string, Connection[]>; featured: Preset[] };
 const BADGE: Record<string, string> = { active: "Connected and verified", needs_attention: "Needs attention", pending: "Waiting for consent", failed: "Not usable" };
@@ -27,6 +28,8 @@ export function Catalog({ signedIn }: { signedIn: boolean }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [tests, setTests] = useState<Record<string, TestResult>>({});
+  const [loadedAt, setLoadedAt] = useState<string>("");
   const lock = useRef(false);
   const load = useCallback(async (query: string, more?: string | null, quiet?: boolean) => {
     if (lock.current) return; lock.current = true;
@@ -34,7 +37,7 @@ export function Catalog({ signedIn }: { signedIn: boolean }) {
     try {
       const p = new URLSearchParams(); if (query) p.set("q", query); if (more) p.set("cursor", more);
       const d: Data = await call(`/api/connectors?${p}`);
-      setData(d); setItems(prev => more ? [...prev, ...d.items] : d.items); setCursor(d.nextCursor);
+      setData(d); setLoadedAt(new Date().toISOString()); setItems(prev => more ? [...prev, ...d.items] : d.items); setCursor(d.nextCursor);
     } catch (e) { setError(e instanceof Error ? e.message : "Request failed."); }
     finally { lock.current = false; setBusy(""); }
   }, []);
@@ -50,11 +53,20 @@ export function Catalog({ signedIn }: { signedIn: boolean }) {
     try { const d = await call("/api/connectors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "connect", toolkitId }) }); window.location.assign(d.redirectUrl); }
     catch (e) { setError(e instanceof Error ? e.message : "Request failed."); lock.current = false; setBusy(""); }
   }
+  async function test(toolkitId: string, connectionId: string) {
+    if (lock.current) return; lock.current = true; setBusy("Testing the connection with a read-only call..."); setError("");
+    try { const d: TestResult = await call("/api/connectors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "test", toolkitId, connectionId }) }); setTests(prev => ({ ...prev, [connectionId]: d })); }
+    catch (e) { setTests(prev => ({ ...prev, [connectionId]: { ok: false, message: e instanceof Error ? e.message : "Test failed.", checkedAt: new Date().toISOString() } })); }
+    finally { lock.current = false; setBusy(""); }
+  }
   function ConnectionRow({ c, preset }: { c: Connection; preset: Preset }) {
     return <div className={"rounded-lg border p-3 space-y-2 " + (c.status === "needs_attention" || c.status === "failed" ? "border-destructive" : "")}>
       <p className="text-sm"><span className={"font-semibold " + BADGE_CLASS[c.status]}>{BADGE[c.status]}</span> · {c.label}</p>
       {c.recovery && <div role="alert" className="text-sm space-y-2"><p>{c.recovery}</p><Button size="sm" disabled={!!busy} onClick={() => void connect(preset.toolkitId)}>Reconnect with the right permissions</Button></div>}
-      {c.status === "active" && <p className="text-xs text-muted-foreground">Granted permissions match the reviewed setup exactly.</p>}
+      {c.usedBy.length > 0 && <p className="text-xs text-muted-foreground">Used by: {c.usedBy.join(", ")}</p>}
+      {c.status === "active" && <p className="text-xs text-muted-foreground">Granted permissions match the reviewed setup exactly. Last verified {new Date((tests[c.id]?.checkedAt) || loadedAt).toLocaleTimeString()}.</p>}
+      {c.status !== "pending" && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void test(preset.toolkitId, c.id)}>Test connection</Button>}
+      {tests[c.id] && <p role={tests[c.id].ok ? "status" : "alert"} className={"text-sm " + (tests[c.id].ok ? "text-green-700" : "text-destructive")}>{tests[c.id].message}</p>}
       <details className="text-xs text-muted-foreground"><summary>Connection ID</summary><span className="break-all">{c.id}</span></details>
     </div>;
   }
