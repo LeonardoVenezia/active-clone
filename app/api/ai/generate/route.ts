@@ -123,6 +123,15 @@ async function processOperationStream(
     `[API] Stream complete. Chunks: ${chunkCount}, Operations: ${operationCount}`
   );
 
+  // An empty result is a failure, not a success: tell the user and let them retry with the prompt kept.
+  if (operationCount === 0) {
+    throw new Error(
+      chunkCount === 0
+        ? "The free AI model returned nothing (it may be busy). Your prompt was kept. Try again in a moment."
+        : "The AI answered, but not in a form that could change the workflow. Your prompt was kept. Try rephrasing it."
+    );
+  }
+
   // Send completion
   controller.enqueue(
     encodeMessage(encoder, {
