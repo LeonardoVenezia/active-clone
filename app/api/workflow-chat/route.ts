@@ -40,7 +40,7 @@ export async function POST(r: Request) {
     if ((await recentUserMessages(id)) >= 60) return NextResponse.json({ error: "You've sent a lot of messages this hour. Try again in a bit." }, { status: 429 });
     const past = await history(id, b.workflowId, 20);
     await append(id, b.workflowId, "user", text);
-    const client = new OpenAI({ apiKey: key, baseURL: "https://openrouter.ai/api/v1", maxRetries: 0, timeout: 18_000 });
+    const client = new OpenAI({ apiKey: key, baseURL: "https://openrouter.ai/api/v1", maxRetries: 0, timeout: 14_000 });
     const messages = [{ role: "system" as const, content: `${SYSTEM}\n\n${describe(b.snapshot)}` }, ...past.map(m => ({ role: m.role, content: m.content })), { role: "user" as const, content: text }];
     let reply = "";
     for (let i = 0; i < 3 && !reply; i++) {
