@@ -144,3 +144,11 @@ export async function resumeFlow(id: string) {
   catch (e) { await db.execute(sql`UPDATE mail_flows SET status='paused' WHERE user_id=${OWNER}`); throw e; }
   return { success: true, status: "active" };
 }
+// Flow registry. Each flow is addressable by its own ID. The mail flow is the first one.
+export async function listFlows(userId: string) {
+  if (userId !== OWNER) return [];
+  await db.execute(sql`ALTER TABLE mail_flows ADD COLUMN IF NOT EXISTS flow_id text`);
+  await db.execute(sql`UPDATE mail_flows SET flow_id='fl_'||substr(md5(random()::text||clock_timestamp()::text),1,12) WHERE user_id=${OWNER} AND flow_id IS NULL`);
+  const rows = await db.execute(sql`SELECT flow_id, status, activated_at FROM mail_flows WHERE user_id=${OWNER} AND flow_id IS NOT NULL`);
+  return [...rows].map(r => ({ id: String(r.flow_id), kind: "mail-sheets", name: "Outlook → Google Sheets", status: String(r.status) }));
+}
