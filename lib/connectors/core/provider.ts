@@ -9,5 +9,8 @@ export interface IntegrationProvider {
   testConnection(opts: { userId: string; connectionId: string; preset: Preset }): Promise<TestResult>;
   execute<T = unknown>(opts: { userId: string; connectionId: string; capability: string; input: Record<string, unknown> }): Promise<ActionResult<T>>;
   registerTrigger(opts: { userId: string; connectionId: string; event: string; webhookUrl: string }): Promise<TriggerRef>;
+  // Pause or resume event delivery without losing the trigger. Keeps the trigger id stable.
+  setTriggerEnabled(opts: { userId: string; triggerId: string; enabled: boolean }): Promise<void>;
+  removeTrigger(opts: { userId: string; triggerId: string }): Promise<void>;
   parseWebhook(headers: Headers, rawBody: string): NormalizedEvent;
 }
