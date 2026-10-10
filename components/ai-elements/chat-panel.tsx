@@ -43,7 +43,7 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
     } catch (e) { setError(e instanceof Error ? e.message : "Something went wrong. Your message is still in the box."); } finally { setBusy(false); }
   }
   if (!open) return <Button aria-label="Open chat" className="pointer-events-auto absolute left-4 top-16 z-10 gap-2 shadow-lg" onClick={() => setOpen(true)} size="sm"><MessageSquare className="size-4" />Chat</Button>;
-  return <aside aria-label="Workflow chat" className="pointer-events-auto absolute bottom-20 left-4 top-16 z-10 flex w-[22rem] max-w-[calc(100%-2rem)] flex-col rounded-lg border bg-background shadow-lg">
+  return <aside aria-label="Workflow chat" className="pointer-events-auto absolute bottom-40 left-4 top-16 z-10 flex w-[22rem] max-w-[calc(100%-2rem)] flex-col rounded-lg border bg-background shadow-lg">
     <div className="flex items-center justify-between border-b px-3 py-2"><p className="text-sm font-semibold">Chat</p><button aria-label="Close chat" className="rounded p-1 hover:bg-muted" onClick={() => setOpen(false)}><X className="size-4" /></button></div>
     {!signedIn ? <div className="space-y-3 p-4"><p className="text-sm font-semibold">Sign in to chat.</p><p className="text-xs text-muted-foreground">Your conversation is saved with this workflow, so it needs your account.</p><AuthDialog><Button size="sm">Sign In</Button></AuthDialog></div> : <>
       <div className="flex-1 space-y-3 overflow-auto p-3 text-sm">
