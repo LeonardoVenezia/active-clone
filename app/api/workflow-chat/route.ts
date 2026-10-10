@@ -47,6 +47,7 @@ export async function POST(r: Request) {
       try { reply = (await client.chat.completions.create({ model: "openrouter/free", max_tokens: 400, messages })).choices[0]?.message?.content?.trim() || ""; } catch { /* retry once */ }
     }
     if (!reply) return NextResponse.json({ error: "The free AI model didn't answer (it may be busy). Your message was kept; send it again in a moment." }, { status: 502 });
+    reply = reply.replace(/<\|[^|>]{1,40}\|>(\s*\[\s*\])?/g, "").trim();
     const cm = reply.match(/\[\[CONNECT:\s*([a-z0-9_]{1,40})\s*\]\]/i);
     let connect: Record<string, unknown> | null = null;
     if (cm) {
