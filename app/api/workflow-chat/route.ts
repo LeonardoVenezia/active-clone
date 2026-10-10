@@ -40,10 +40,11 @@ export async function POST(r: Request) {
     if ((await recentUserMessages(id)) >= 60) return NextResponse.json({ error: "You've sent a lot of messages this hour. Try again in a bit." }, { status: 429 });
     const past = await history(id, b.workflowId, 20);
     await append(id, b.workflowId, "user", text);
-    const client = new OpenAI({ apiKey: key, baseURL: "https://openrouter.ai/api/v1", maxRetries: 0, timeout: 45_000 });
+    const client = new OpenAI({ apiKey: key, baseURL: "https://openrouter.ai/api/v1", maxRetries: 0, timeout: 18_000 });
     const messages = [{ role: "system" as const, content: `${SYSTEM}\n\n${describe(b.snapshot)}` }, ...past.map(m => ({ role: m.role, content: m.content })), { role: "user" as const, content: text }];
     let reply = "";
-    for (let i = 0; i < 2 && !reply; i++) {
+    for (let i = 0; i < 3 && !reply; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 1500 * i));
       try { reply = (await client.chat.completions.create({ model: "openrouter/free", max_tokens: 400, messages })).choices[0]?.message?.content?.trim() || ""; } catch { /* retry once */ }
     }
     if (!reply) return NextResponse.json({ error: "The free AI model didn't answer (it may be busy). Your message was kept; send it again in a moment." }, { status: 502 });
