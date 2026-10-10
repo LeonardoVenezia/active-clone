@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { catalog, connect, myConnections, verifyConnection, testConnection } from "@/lib/connectors";
 import { flowUsage } from "@/lib/mail-flow";
+import { describeToolkit, genericConnect, genericActive } from "@/lib/connectors/generic";
 import { PRESETS } from "@/lib/connectors/presets";
 const ORIGINS = ["https://active-clone.vercel.app", "https://active-clone-leonardo-venezias-projects.vercel.app"];
 async function user(r: Request) { const s = await auth.api.getSession({ headers: r.headers }); return s?.user && !s.user.isAnonymous ? s.user.id : null; }
@@ -27,6 +28,9 @@ export async function POST(r: Request) {
     if (b.action === "connect") return NextResponse.json(await connect(id, b.toolkitId, `${origin}/connections?returned=${b.toolkitId}`));
     if (b.action === "verify" && typeof b.connectionId === "string" && /^ca_[A-Za-z0-9_-]+$/.test(b.connectionId)) return NextResponse.json(await verifyConnection(id, b.toolkitId, b.connectionId));
     if (b.action === "test" && typeof b.connectionId === "string" && /^ca_[A-Za-z0-9_-]+$/.test(b.connectionId)) return NextResponse.json(await testConnection(id, b.toolkitId, b.connectionId));
+    if (b.action === "describe") return NextResponse.json(await describeToolkit(b.toolkitId));
+    if (b.action === "connect_generic") { if (b.acknowledged !== true) return fail("Confirm the permissions notice first.", 400); return NextResponse.json(await genericConnect(id, b.toolkitId, `${origin}/connections?returned=${b.toolkitId}`)); }
+    if (b.action === "active") return NextResponse.json({ active: await genericActive(id, b.toolkitId) });
     return fail("Unsupported action.", 400);
   } catch (e) { return fail(e); }
 }
