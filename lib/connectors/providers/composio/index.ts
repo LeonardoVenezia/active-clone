@@ -30,10 +30,10 @@ const TRIGGERS: Record<string, { slug: string; version: string; config: Row }> =
   "mail.received": { slug: "OUTLOOK_MESSAGE_TRIGGER", version: "20261009_00", config: { folder_id: "inbox" } },
 };
 
-async function api(path: string, body?: Row): Promise<Row> {
+async function api(path: string, body?: Row, method?: "PATCH" | "DELETE"): Promise<Row> {
   const key = process.env.COMPOSIO_API_KEY;
   if (!key) throw new Error("Integrations are not configured on the server.");
-  const r = await fetch(BASE + path, { method: body ? "POST" : "GET", cache: "no-store", headers: { "x-api-key": key, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(25000) });
+  const r = await fetch(BASE + path, { method: method ?? (body ? "POST" : "GET"), cache: "no-store", headers: { "x-api-key": key, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(25000) });
   if (!r.ok) throw new Error(r.status === 429 ? "The integration provider is rate limiting requests. Try again shortly." : `The integration provider request failed (HTTP ${r.status}).`);
   return r.json();
 }
@@ -145,6 +145,14 @@ export const composioProvider: IntegrationProvider = {
     const r = await api(`/trigger_instances/${t.slug}/upsert`, { connected_account_id: connectionId, user_id: userId, trigger_config: t.config, toolkit_versions: { outlook: t.version }, egress_url: webhookUrl });
     if (typeof r.trigger_id !== "string") throw new Error("Trigger creation could not be verified.");
     return { triggerId: r.trigger_id };
+  },
+  async setTriggerEnabled({ triggerId, enabled }) {
+    if (!/^ti_[A-Za-z0-9_-]+$/.test(triggerId)) throw new Error("Invalid trigger id.");
+    await api(`/trigger_instances/manage/${encodeURIComponent(triggerId)}`, { status: enabled ? "enable" : "disable" }, "PATCH");
+  },
+  async removeTrigger({ triggerId }) {
+    if (!/^ti_[A-Za-z0-9_-]+$/.test(triggerId)) throw new Error("Invalid trigger id.");
+    await api(`/trigger_instances/manage/${encodeURIComponent(triggerId)}`, {}, "DELETE");
   },
   parseWebhook(headers, raw): NormalizedEvent {
     const secret = process.env.COMPOSIO_WEBHOOK_SECRET;
