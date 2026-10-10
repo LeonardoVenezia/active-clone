@@ -1,36 +1,17 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { useSession } from "@/lib/auth-client";
-import { AuthDialog } from "@/components/auth/dialog";
-type State = { flow: {status:string;trigger_id:string;activated_at:string;next_row:number}|null; accounts:{id:string;status:string}[]; runs:{message_id:string;row_number:number;status:string;error:string|null;updated_at:string}[];sheetUrl:string };
-const RUN_LABEL: Record<string,string> = { success: "Saved to sheet", error: "Failed", running: "Saving...", pending: "Waiting" };
-function Step({n,done,current,title,text}:{n:number;done:boolean;current:boolean;title:string;text:string}){
- return <li className={"rounded-xl border p-4 flex gap-3 "+(current?"border-primary":"")}><span className={"flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold "+(done?"bg-green-600 text-white":current?"bg-primary text-primary-foreground":"bg-muted text-muted-foreground")}>{done?"✓":n}</span><div><p className="font-semibold">{title}{done&&<span className="ml-2 text-sm font-normal text-green-700">Done</span>}{current&&<span className="ml-2 text-sm font-normal text-primary">Do this now</span>}</p><p className="text-sm text-muted-foreground mt-1">{text}</p></div></li>;
-}
-export default function MailFlow(){
- const {data:session,isPending}=useSession();const [data,setData]=useState<State|null>(null);const [busy,setBusy]=useState("");const [error,setError]=useState("");const [notice,setNotice]=useState("");const lock=useRef(false);
- async function call(action?:string,id?:string,quiet?:boolean){if(lock.current)return;lock.current=true;if(!quiet){setBusy(action==="connect"?"Opening Google consent...":action==="activate"?"Activating: checking your connections and creating the email trigger. This can take up to a minute.":action==="retry"?"Retrying the failed email...":action==="pause"?"Pausing: stopping email delivery...":action==="resume"?"Resuming: checking connections and restarting delivery...":"Refreshing...");setError("");setNotice("");}
- try{const r=await fetch("/api/mail-flow",{cache:"no-store",...(action?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,id})}:{}),signal:AbortSignal.timeout(65000)});const d=await r.json();if(!r.ok)throw Error(d.error||"Request failed.");if(d.redirectUrl){window.location.assign(d.redirectUrl);return;}if(!action)setData(d);else{const read=await fetch("/api/mail-flow",{cache:"no-store"});const s=await read.json();if(!read.ok)throw Error(s.error);setData(s);if(action==="activate")setNotice("The flow is active. From now on, every new email in your Outlook inbox adds a row to the sheet. Send yourself an email to try it, then press Refresh.");else if(action==="retry")setNotice("Retry finished. Check the run below.");else if(action==="pause")setNotice("Paused. New emails are not being saved. Resume any time; no new consent needed.");else if(action==="resume")setNotice("Resumed. Only emails that arrive from now on are saved. Emails received while paused are not imported.");}}catch(e){if(!quiet)setError(e instanceof Error?e.message:"Request failed.");}finally{lock.current=false;if(!quiet)setBusy("");}}
- useEffect(()=>{document.title="Outlook to Sheets | Active-clone";if(session?.user&&!session.user.isAnonymous)void call();},[session?.user?.id]);
- useEffect(()=>{if(data?.flow?.status!=="active")return;const t=setInterval(()=>void call(undefined,undefined,true),20000);return()=>clearInterval(t);},[data?.flow?.status]);
- const paused=data?.flow?.status==="paused";const active=data?.flow?.status==="active";const sheetsOk=!!data?.accounts.some(a=>a.status==="ACTIVE");const gotMail=!!data?.runs.some(r=>r.status==="success");
- const headline=paused?"Paused: new emails are not being saved.":active?(gotMail?"Working: emails are being saved to your sheet.":"Active. Waiting for the first new email."):sheetsOk?"Almost there: press Activate this flow.":"Not started: connect Google Sheets first.";
- return <main className="pointer-events-auto fixed inset-0 z-20 overflow-auto bg-background p-6"><div className="mx-auto max-w-3xl space-y-6"><Link href="/connections" className="underline text-sm">Back to connections</Link><h1 className="text-2xl font-bold">Outlook → Google Sheets</h1><p>Every new email in your Outlook inbox adds one row to a private Google Sheet: date received, sender, subject and message ID. Nothing else is saved (no email text, no attachments), and old emails are not imported.</p>
- {isPending?<p>Loading session...</p>:!session?.user||session.user.isAnonymous?<AuthDialog><Button>Sign In</Button></AuthDialog>:<>
- <div className={"rounded-xl border-2 p-5 "+(active?"border-green-600":"border-primary")}><p className="text-xs uppercase tracking-wide text-muted-foreground">Current status</p><p className="text-lg font-bold mt-1">{headline}</p>{data?.flow?.activated_at&&active&&<p className="text-sm mt-2">Watching for emails received since {new Date(data.flow.activated_at).toLocaleString()}.</p>}</div>
- {busy&&<p role="status" className="rounded-lg border border-primary p-4 animate-pulse">{busy}</p>}
- {notice&&<p role="status" className="rounded-lg border border-green-600 text-green-800 p-4">{notice}</p>}
- {error&&<p role="alert" className="border border-destructive text-destructive rounded-lg p-4">{error}</p>}
- <ol className="space-y-3">
- <Step n={1} done={!!data} current={false} title="Outlook is connected" text="Read-only access to your inbox, set up already. New emails are announced to this app by a signed webhook."/>
- <Step n={2} done={sheetsOk} current={!sheetsOk&&!!data} title="Connect Google Sheets" text="Google asks for spreadsheet access (and your email identity). Tick the spreadsheets permission on Google's screen. This app only ever writes to the Active-clone - Mail log sheet."/>
- <Step n={3} done={active||paused} current={sheetsOk&&!active&&!paused} title="Activate the flow" text="Checks the sheet and starts watching your inbox. After this, nothing else to do."/>
- <Step n={4} done={gotMail} current={active&&!gotMail} title="First email saved" text="Send yourself an email. A row should show up in the sheet within a minute. Press Refresh to see it below."/>
- </ol>
- <div className="flex flex-wrap gap-3"><Button disabled={!!busy||active||paused||sheetsOk} onClick={()=>void call("connect")}>{sheetsOk?"Google Sheets connected":"Connect Google Sheets"}</Button>{data?.accounts.filter(a=>a.status==="ACTIVE").map(a=><Button key={a.id} disabled={!!busy||active||paused} onClick={()=>void call("activate",a.id)}>{active||paused?"Flow is set up":"Activate this flow"}</Button>)}{active&&<Button variant="outline" disabled={!!busy} onClick={()=>void call("pause")}>Pause</Button>}{paused&&<Button disabled={!!busy} onClick={()=>void call("resume")}>Resume</Button>}<Button variant="outline" disabled={!!busy} onClick={()=>void call()}>Refresh</Button>{data&&<a className="underline self-center" href={data.sheetUrl} target="_blank" rel="noreferrer">Open the spreadsheet</a>}</div>
- {!!data?.accounts.length&&<details className="text-xs text-muted-foreground"><summary>Connection details</summary>{data.accounts.map(a=><p key={a.id} className="break-all">{a.id} · {a.status}</p>)}</details>}
- <section className="space-y-3"><h2 className="text-lg font-bold">Emails processed</h2><p className="text-sm text-muted-foreground">Each email gets its own row, so a retry never creates a duplicate. This list refreshes by itself every 20 seconds while the flow is active. The sheet stops at 999 rows until you raise the limit.</p>{!data?.runs.length&&<p>No emails yet.</p>}{data?.runs.map(r=><article className="rounded-lg border p-4 space-y-2" key={r.message_id}><p className="font-semibold">{RUN_LABEL[r.status]||r.status} · sheet row {r.row_number}</p><p className="text-xs">{new Date(r.updated_at).toLocaleString()}</p>{r.error&&<p role="alert" className="text-sm text-destructive">{r.error}</p>}{r.status==="error"&&<Button variant="outline" disabled={!!busy} onClick={()=>void call("retry",r.message_id)}>Retry this email</Button>}</article>)}</section>
- </>}</div></main>;
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+// The fixed /mail-flow address now forwards to the flow's own ID page (keeps the Google return query).
+export default function MailFlowRedirect() {
+  const router = useRouter();
+  useEffect(() => {
+    (async () => {
+      try {
+        const d = await (await fetch("/api/flows", { cache: "no-store" })).json();
+        const f = d.flows?.find((x: { kind: string }) => x.kind === "mail-sheets");
+        router.replace(f ? `/flows/${f.id}${window.location.search}` : "/flows");
+      } catch { router.replace("/flows"); }
+    })();
+  }, [router]);
+  return <main className="p-6">Opening your flow...</main>;
 }
