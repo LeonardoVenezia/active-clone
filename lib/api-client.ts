@@ -88,6 +88,7 @@ type StreamMessage = {
 type StreamState = {
   buffer: string;
   currentData: WorkflowData;
+  streamError?: string;
 };
 
 type OperationHandler = (
@@ -223,7 +224,7 @@ function processStreamLine(
       onUpdate({ ...state.currentData });
     } else if (message.type === "error") {
       console.error("[API Client] Error:", message.error);
-      throw new Error(message.error);
+      state.streamError = message.error || "The AI request failed.";
     }
   } catch (error) {
     console.error("[API Client] Failed to parse JSONL line:", error);
@@ -311,6 +312,8 @@ export const aiApi = {
         processStreamChunk(value, decoder, onUpdate, state);
       }
 
+      // A server-reported failure must reach the caller, not be swallowed by the line parser.
+      if (state.streamError) throw new Error(state.streamError);
       return state.currentData;
     } finally {
       reader.releaseLock();
