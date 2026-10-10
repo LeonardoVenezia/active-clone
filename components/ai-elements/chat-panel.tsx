@@ -51,7 +51,8 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
         setEdges((partial.edges || []).filter(e => ids.has(e.source) && ids.has(e.target)).map(e => ({ ...e, type: "animated" })));
         if (partial.name) setName(partial.name);
       }, existing ? { nodes: real, edges, name: undefined } : undefined);
-      const bad = (data.nodes || []).filter(n => (n.data?.type === "trigger" && !(n.data?.config as { triggerType?: string })?.triggerType) || (n.data?.type === "action" && !(n.data?.config as { actionType?: string })?.actionType));
+      const wasThere = new Set(real.map(n => n.id));
+      const bad = (data.nodes || []).filter(n => !wasThere.has(n.id) && ((n.data?.type === "trigger" && !(n.data?.config as { triggerType?: string })?.triggerType) || (n.data?.type === "action" && !(n.data?.config as { actionType?: string })?.actionType)));
       if (bad.length) throw new Error(`I could not build that: ${bad.length} step(s) need an action this board does not have yet. Nothing was changed. Try describing it with the available actions (email, Slack, ticket, database query, HTTP request, text/image generation, scrape, search).`);
       if (!(data.nodes || []).length) throw new Error("Nothing was built. Nothing was changed. Try describing it a bit differently.");
       const finalEdges = (data.edges || []).map(e => ({ ...e, type: "animated" }));
