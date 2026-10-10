@@ -27,7 +27,7 @@ export default function FlowsPage() {
     })();
   }, [signedIn]);
   return <main className="pointer-events-auto fixed inset-0 z-20 overflow-auto bg-background p-6"><div className="mx-auto max-w-3xl space-y-6">
-    <div className="flex items-center justify-between"><h1 className="text-2xl font-bold">Flows</h1><div className="flex gap-3"><Link className="underline self-center text-sm" href="/connections">Connections</Link><Link className="underline self-center text-sm" href="/">Editor</Link></div></div>
+    <div className="flex items-center justify-between"><h1 className="text-2xl font-bold">Flows</h1><div className="flex gap-3"><Link className="underline self-center text-sm" href="/connections">Connections</Link><Link className="underline self-center text-sm" href="/history">History</Link><Link className="underline self-center text-sm" href="/">Editor</Link></div></div>
     {isPending ? <p>Loading...</p> : !signedIn ? <div className="rounded-xl border p-5 space-y-3"><p className="font-semibold">Sign in to see and create flows.</p><p className="text-sm text-muted-foreground">Flows are saved to your account, so creating or running one needs you to be signed in.</p><AuthDialog><Button>Sign In</Button></AuthDialog></div> : <>
       {error && <p role="alert" className="text-destructive">{error}</p>}
       {rows === null && <p>Loading flows...</p>}
