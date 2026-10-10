@@ -1,17 +1,24 @@
 "use client";
-import { useAtomValue } from "jotai";
+import { useReactFlow } from "@xyflow/react";
+import { useAtom } from "jotai";
 import { MessageSquare, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AuthDialog } from "@/components/auth/dialog";
 import { useSession } from "@/lib/auth-client";
-import { edgesAtom, nodesAtom } from "@/lib/workflow-store";
+import { toast } from "sonner";
+import { api } from "@/lib/api-client";
+import { currentWorkflowNameAtom, edgesAtom, nodesAtom } from "@/lib/workflow-store";
 type Msg = { id: string; role: "user" | "assistant"; content: string };
 export function ChatPanel({ workflowId }: { workflowId: string }) {
   const { data: session } = useSession();
   const signedIn = !!session?.user && !session.user.isAnonymous;
-  const nodes = useAtomValue(nodesAtom);
-  const edges = useAtomValue(edgesAtom);
+  const [nodes, setNodes] = useAtom(nodesAtom);
+  const [edges, setEdges] = useAtom(edgesAtom);
+  const [, setName] = useAtom(currentWorkflowNameAtom);
+  const { fitView } = useReactFlow();
+  const [undo, setUndo] = useState<{ nodes: typeof nodes; edges: typeof edges; name?: string } | null>(null);
+  const [building, setBuilding] = useState(false);
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
@@ -27,6 +34,42 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
     return () => { live = false; };
   }, [open, signedIn, workflowId]);
   useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy, open]);
+  // Applies the plan to the canvas the same way Ask AI does, keeps the previous state so Undo works, restores it on failure.
+  async function build(instruction: string, convo: Msg[]) {
+    if (building) return;
+    setBuilding(true); setError("");
+    const before = { nodes, edges };
+    const real = nodes.filter(n => n.type !== "add");
+    const existing = real.length ? { nodes: real, edges } : undefined;
+    const prompt = `Conversation so far:\n${convo.slice(-6).map(m => `${m.role}: ${m.content}`).join("\n")}\n\nWhat to do on the canvas now: ${instruction}`;
+    try {
+      const data = await api.ai.generateStream(prompt, partial => {
+        const triggers = (partial.nodes || []).filter(n => n.data?.type === "trigger");
+        const keep = triggers.length > 1 ? (partial.nodes || []).filter(n => n.data?.type !== "trigger" || n.id === triggers[0].id) : partial.nodes || [];
+        const ids = new Set(keep.map(n => n.id));
+        setNodes(keep);
+        setEdges((partial.edges || []).filter(e => ids.has(e.source) && ids.has(e.target)).map(e => ({ ...e, type: "animated" })));
+        if (partial.name) setName(partial.name);
+      }, existing ? { nodes: real, edges, name: undefined } : undefined);
+      const bad = (data.nodes || []).filter(n => (n.data?.type === "trigger" && !(n.data?.config as { triggerType?: string })?.triggerType) || (n.data?.type === "action" && !(n.data?.config as { actionType?: string })?.actionType));
+      if (bad.length) throw new Error(`I could not build that: ${bad.length} step(s) need an action this board does not have yet. Nothing was changed. Try describing it with the available actions (email, Slack, ticket, database query, HTTP request, text/image generation, scrape, search).`);
+      if (!(data.nodes || []).length) throw new Error("Nothing was built. Nothing was changed. Try describing it a bit differently.");
+      const finalEdges = (data.edges || []).map(e => ({ ...e, type: "animated" }));
+      await api.workflow.update(workflowId, { name: data.name, description: data.description, nodes: data.nodes, edges: finalEdges });
+      setUndo({ nodes: before.nodes, edges: before.edges });
+      setTimeout(() => fitView({ padding: 0.2, duration: 200 }), 0);
+      toast.success("Done. You can undo it from the chat.");
+    } catch (e) {
+      setNodes(before.nodes); setEdges(before.edges); // restore: a failed build never leaves half a workflow
+      setError(e instanceof Error ? e.message : "The build failed. Nothing was changed.");
+    } finally { setBuilding(false); }
+  }
+  async function undoBuild() {
+    if (!undo) return;
+    setNodes(undo.nodes); setEdges(undo.edges);
+    try { await api.workflow.update(workflowId, { nodes: undo.nodes.filter(n => n.type !== "add"), edges: undo.edges }); setUndo(null); toast.success("Undone."); }
+    catch { setError("Undone on screen, but saving failed. Press Save."); }
+  }
   async function send() {
     const t = text.trim(); if (!t || busy) return;
     setBusy(true); setError("");
@@ -38,8 +81,10 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
       const r = await fetch("/api/workflow-chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflowId, message: t, snapshot }), signal: AbortSignal.timeout(65000) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Request failed.");
-      setMsgs(m => [...m, { id: `u${Date.now()}`, role: "user", content: t }, { id: `a${Date.now()}`, role: "assistant", content: d.reply }]);
+      const next: Msg[] = [...msgs, { id: `u${Date.now()}`, role: "user", content: t }, { id: `a${Date.now()}`, role: "assistant", content: d.reply }];
+      setMsgs(next);
       setText("");
+      if (d.build) void build(d.build, next);
     } catch (e) { setError(e instanceof Error ? e.message : "Something went wrong. Your message is still in the box."); } finally { setBusy(false); }
   }
   if (!open) return <Button aria-label="Open chat" className="pointer-events-auto absolute left-4 top-16 z-10 gap-2 shadow-lg" onClick={() => setOpen(true)} size="sm"><MessageSquare className="size-4" />Chat</Button>;
@@ -50,12 +95,15 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
         {msgs.length === 0 && !busy && <p className="text-muted-foreground">Tell me what you want to automate, or ask me anything about this board. For now I can talk it through with you; building on the canvas is coming next.</p>}
         {msgs.map(m => <div key={m.id} className={m.role === "user" ? "text-right" : ""}><div className={"inline-block max-w-[90%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-left " + (m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted")}>{m.content}</div></div>)}
         {busy && <p className="animate-pulse text-xs text-muted-foreground">Thinking...</p>}
+        {building && <p role="status" className="animate-pulse text-xs text-muted-foreground">Building on the canvas...</p>}
+        {undo && !building && <p className="text-xs"><button className="underline" onClick={() => void undoBuild()}>Undo last change</button></p>}
+        {!building && !busy && msgs.length > 0 && msgs[msgs.length - 1].role === "assistant" && <p className="text-xs"><button className="underline text-muted-foreground" onClick={() => void build("Build or change the workflow as discussed in the conversation.", msgs)}>Build this on the canvas</button></p>}
         {error && <p role="alert" className="rounded-lg border border-destructive p-2 text-xs text-destructive">{error}</p>}
         <div ref={end} />
       </div>
       <form className="flex gap-2 border-t p-2" onSubmit={e => { e.preventDefault(); void send(); }}>
         <textarea aria-label="Message" className="max-h-28 min-h-9 flex-1 resize-none rounded-md border bg-background px-2 py-1.5 text-sm" rows={1} maxLength={2000} value={text} placeholder="Ask or describe what you want..." onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} />
-        <Button size="sm" type="submit" disabled={busy || !text.trim()}>Send</Button>
+        <Button size="sm" type="submit" disabled={busy || building || !text.trim()}>Send</Button>
       </form>
     </>}
   </aside>;
