@@ -278,7 +278,9 @@ export const aiApi = {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      let detail = "";
+      try { detail = (await response.json())?.error || ""; } catch { /* no body */ }
+      throw new Error(detail || `The AI request failed (status ${response.status}). Your prompt was kept; try again.`);
     }
 
     if (!response.body) {
