@@ -25,6 +25,7 @@ type AIPromptProps = {
 export function AIPrompt({ workflowId, onWorkflowCreated }: AIPromptProps) {
   const [isGenerating, setIsGenerating] = useAtom(isGeneratingAtom);
   const [prompt, setPrompt] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -81,6 +82,7 @@ export function AIPrompt({ workflowId, onWorkflowCreated }: AIPromptProps) {
       }
 
       setIsGenerating(true);
+      setErrorMsg("");
 
       try {
         // Send existing workflow data for context when modifying
@@ -263,7 +265,9 @@ export function AIPrompt({ workflowId, onWorkflowCreated }: AIPromptProps) {
         inputRef.current?.blur();
       } catch (error) {
         console.error("Failed to generate workflow:", error);
-        toast.error("Failed to generate workflow");
+        const msg = error instanceof Error && error.message ? error.message : "Failed to generate workflow. Your prompt was kept; try again.";
+        setErrorMsg(msg);
+        toast.error(msg, { duration: 10000 });
       } finally {
         setIsGenerating(false);
       }
@@ -297,6 +301,11 @@ export function AIPrompt({ workflowId, onWorkflowCreated }: AIPromptProps) {
           transition: "width 150ms ease-out",
         }}
       >
+        {errorMsg && (
+          <p className="mb-2 rounded-lg border border-destructive bg-background px-3 py-2 text-sm text-destructive shadow-lg" role="alert">
+            {errorMsg}
+          </p>
+        )}
         <form
           aria-busy={isGenerating}
           aria-label="AI workflow prompt"
