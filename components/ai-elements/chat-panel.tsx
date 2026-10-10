@@ -41,7 +41,7 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
     const before = { nodes, edges };
     const real = nodes.filter(n => n.type !== "add");
     const existing = real.length ? { nodes: real, edges } : undefined;
-    const prompt = `Conversation so far:\n${convo.slice(-6).map(m => `${m.role}: ${m.content}`).join("\n")}\n\nWhat to do on the canvas now: ${instruction}`;
+    const prompt = `Conversation so far:\n${convo.slice(-6).map(m => `${m.role}: ${m.content}`).join("\n")}\n\nWhat to do on the canvas now: ${instruction}\n\nFor any app or action not covered by another step (Slack, Notion, Airtable, Stripe, Docs, Hacker News and others) use a step with actionType "Run Composio Action" and config fields toolkit (lowercase app slug), tool (UPPERCASE tool slug such as SLACK_SEND_MESSAGE) and arguments (a JSON string).`;
     try {
       const data = await api.ai.generateStream(prompt, partial => {
         const triggers = (partial.nodes || []).filter(n => n.data?.type === "trigger");
