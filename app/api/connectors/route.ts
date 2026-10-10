@@ -10,9 +10,9 @@ export async function GET(r: Request) {
   const q = new URL(r.url).searchParams;
   try {
     const page = await catalog({ query: q.get("q") || undefined, cursor: q.get("cursor") || undefined });
-    // Reviewed toolkits are always listed first on the first page so they are never buried by search order.
+    // Reviewed presets are returned separately so they are never buried by catalog search order.
     const connections = await myConnections(id, Object.keys(PRESETS));
-    return NextResponse.json({ ...page, connections });
+    return NextResponse.json({ ...page, connections, featured: Object.values(PRESETS) });
   } catch (e) { return fail(e); }
 }
 export async function POST(r: Request) {
