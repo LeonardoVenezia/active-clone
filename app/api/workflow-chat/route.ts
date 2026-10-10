@@ -48,7 +48,7 @@ export async function POST(r: Request) {
     if (!reply) return NextResponse.json({ error: "The free AI model didn't answer (it may be busy). Your message was kept; send it again in a moment." }, { status: 502 });
     const cm = reply.match(/\[\[CONNECT:\s*([a-z0-9_]{1,40})\s*\]\]/i);
     const connect = cm && PRESETS[cm[1].toLowerCase()] ? PRESETS[cm[1].toLowerCase()] : null;
-    if (cm) reply = reply.replace(/\s*\[\[CONNECT:[^\]]*\]\]\s*/gi, "\n").trim();
+    if (cm) reply = reply.replace(/\s*\[\[CONNECT:[^\]]*\]\]\s*/gi, "\n").trim() || "To continue I need you to connect that account. Check the permissions below.";
     const m = reply.match(/\[\[BUILD:\s*([\s\S]{3,600}?)\]\]\s*$/);
     const build = m ? m[1].trim() : null;
     const shown = m ? reply.slice(0, m.index).trim() || "On it." : reply;
