@@ -113,3 +113,12 @@ export async function handleMailEvent(ev: NormalizedEvent) {
     throw new Error(error);
   }
 }
+
+// Which connections the live flow uses, for the connections page. Owner only; others get nothing.
+export async function flowUsage(userId: string): Promise<Record<string, string>> {
+  if (userId !== OWNER) return {};
+  const f = (await db.execute(sql`SELECT status, sheets_account_id FROM mail_flows WHERE user_id=${OWNER}`))[0];
+  if (!f || f.status !== "active") return {};
+  const name = "Outlook → Google Sheets flow";
+  return { [OUTLOOK]: name, [String(f.sheets_account_id)]: name };
+}
