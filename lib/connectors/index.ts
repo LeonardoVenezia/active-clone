@@ -1,7 +1,7 @@
 import "server-only";
 import { catalogProvider, providerFor } from "./registry";
 import { presetFor } from "./presets";
-import type { Connection, ToolkitPage, Verification } from "./core/types";
+import type { TestResult, Connection, ToolkitPage, Verification } from "./core/types";
 export async function catalog(opts: { query?: string; cursor?: string }): Promise<ToolkitPage> { return catalogProvider().listToolkits({ ...opts, limit: 24 }); }
 export async function myConnections(userId: string, toolkitIds: string[]): Promise<Record<string, Connection[]>> {
   const out: Record<string, Connection[]> = {};
@@ -15,4 +15,8 @@ export async function connect(userId: string, toolkitId: string, callbackUrl: st
 export async function verifyConnection(userId: string, toolkitId: string, connectionId: string): Promise<Verification> {
   const p = presetFor(toolkitId); if (!p) throw new Error("Permissions for this integration have not been reviewed yet.");
   return providerFor(toolkitId).verify({ userId, connectionId, preset: p });
+}
+export async function testConnection(userId: string, toolkitId: string, connectionId: string): Promise<TestResult> {
+  const p = presetFor(toolkitId); if (!p) throw new Error("Permissions for this integration have not been reviewed yet.");
+  return providerFor(toolkitId).testConnection({ userId, connectionId, preset: p });
 }
