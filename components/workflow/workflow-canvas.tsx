@@ -17,6 +17,7 @@ import { Canvas } from "@/components/ai-elements/canvas";
 import { Connection } from "@/components/ai-elements/connection";
 import { Controls } from "@/components/ai-elements/controls";
 import { AIPrompt } from "@/components/ai-elements/prompt";
+import { ChatPanel } from "@/components/ai-elements/chat-panel";
 import { WorkflowToolbar } from "@/components/workflow/workflow-toolbar";
 import "@xyflow/react/dist/style.css";
 
@@ -575,6 +576,7 @@ export function WorkflowCanvas() {
 
       {/* AI Prompt */}
       {currentWorkflowId && <AIPrompt workflowId={currentWorkflowId} />}
+      {currentWorkflowId && <ChatPanel workflowId={currentWorkflowId} />}
 
       {/* Context Menu */}
       <WorkflowContextMenu
