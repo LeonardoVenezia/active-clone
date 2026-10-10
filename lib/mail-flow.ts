@@ -51,6 +51,7 @@ export async function activateFlow(id: string, sheetAccount: string) {
   const current = (await db.execute(sql`SELECT * FROM mail_flows WHERE user_id=${OWNER}`))[0];
   if (current.sheets_account_id !== sheetAccount) throw new Error("A different Sheets connection is already pinned.");
   if (current.status === "active") return { success: true };
+  if (current.status === "paused") throw new Error("This flow is paused. Use Resume instead of Activate.");
   // Start boundary precedes subscription creation. No inbox history is fetched.
   await db.execute(sql`UPDATE mail_flows SET activated_at=COALESCE(activated_at,now()),status='starting' WHERE user_id=${OWNER}`);
   const t = await providerFor("outlook").registerTrigger({ userId: OWNER, connectionId: OUTLOOK, event: "mail.received", webhookUrl: "https://active-clone.vercel.app/api/mail-flow/webhook" });
@@ -121,4 +122,25 @@ export async function flowUsage(userId: string): Promise<Record<string, string>>
   if (!f || f.status !== "active") return {};
   const name = "Outlook → Google Sheets flow";
   return { [OUTLOOK]: name, [String(f.sheets_account_id)]: name };
+}
+// Pause stops new emails from being processed. The trigger is kept (disabled), so Resume does not need new consent.
+export async function pauseFlow(id: string) {
+  requireOwner(id);
+  const f = (await db.execute(sql`SELECT status, trigger_id FROM mail_flows WHERE user_id=${OWNER}`))[0];
+  if (!f || f.status !== "active" || typeof f.trigger_id !== "string") throw new Error("Only an active flow can be paused.");
+  // Stop accepting events first, then stop delivery. If the second step fails, nothing is processed either way.
+  await db.execute(sql`UPDATE mail_flows SET status='paused' WHERE user_id=${OWNER}`);
+  await providerFor("outlook").setTriggerEnabled({ userId: OWNER, triggerId: f.trigger_id, enabled: false });
+  return { success: true, status: "paused" };
+}
+// Resume starts a new boundary: emails that arrived while paused are NOT imported.
+export async function resumeFlow(id: string) {
+  requireOwner(id);
+  const f = (await db.execute(sql`SELECT status, trigger_id, sheets_account_id FROM mail_flows WHERE user_id=${OWNER}`))[0];
+  if (!f || f.status !== "paused" || typeof f.trigger_id !== "string") throw new Error("Only a paused flow can be resumed.");
+  await requireConn("outlook", OUTLOOK); await requireConn("googlesheets", String(f.sheets_account_id));
+  await db.execute(sql`UPDATE mail_flows SET status='active', activated_at=now() WHERE user_id=${OWNER}`);
+  try { await providerFor("outlook").setTriggerEnabled({ userId: OWNER, triggerId: f.trigger_id, enabled: true }); }
+  catch (e) { await db.execute(sql`UPDATE mail_flows SET status='paused' WHERE user_id=${OWNER}`); throw e; }
+  return { success: true, status: "active" };
 }
