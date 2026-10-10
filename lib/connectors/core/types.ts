@@ -41,7 +41,9 @@ export type Connection = {
   label: string;
   verification: Verification | null;
   recovery: string | null; // guided next step when status is needs_attention
+  usedBy: string[]; // names of app flows that use this connection
 };
+export type TestResult = { ok: boolean; message: string; checkedAt: string };
 export type ActionResult<T = unknown> = { ok: true; data: T } | { ok: false; error: string };
 export type TriggerRef = { triggerId: string };
 export type NormalizedEvent = {
