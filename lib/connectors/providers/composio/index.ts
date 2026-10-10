@@ -1,0 +1,148 @@
+import "server-only";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import type { IntegrationProvider } from "../../core/provider";
+import type { ActionResult, Connection, NormalizedEvent, Preset, Toolkit, ToolkitPage, Verification } from "../../core/types";
+import { presetFor } from "../../presets";
+
+// The ONLY file in the app that knows Composio's URLs, ids, tool names and response shapes.
+const BASE = "https://backend.composio.dev/api/v3";
+type Row = Record<string, any>;
+
+// Our preset id -> Composio auth config (created with minimal scopes; never Composio defaults) and scope mapping.
+const CONFIGS: Record<string, { authConfigId: string; scopes: Record<string, string> }> = {
+  "gmail.read": { authConfigId: "ac_BK5hd2o5ZRoT", scopes: { "mail.read": "https://www.googleapis.com/auth/gmail.readonly" } },
+  "outlook.read": { authConfigId: "ac_GJdxOyKYTKtt", scopes: { "mail.read": "Mail.Read" } },
+  "googlesheets.rw": { authConfigId: "ac_GUA-bnbuicij", scopes: { "sheets.readwrite": "https://www.googleapis.com/auth/spreadsheets" } },
+};
+// Provider scopes that only identify the account. They never count as extra permissions.
+const IDENTITY = new Set(["openid", "email", "profile", "offline_access", "User.Read", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"]);
+
+// App capability names -> provider tool slugs and argument shapes.
+const CAPABILITIES: Record<string, { tool: string; version: string; args: (i: Row) => Row }> = {
+  "mail.get_message": { tool: "OUTLOOK_GET_MESSAGE", version: "20261009_00", args: i => ({ message_id: i.id, user_id: "me", select: ["id", "receivedDateTime", "from", "subject"] }) },
+  "mail.list_ids": { tool: "OUTLOOK_LIST_MESSAGES", version: "20261009_00", args: i => ({ user_id: "me", folder: "inbox", top: i.limit ?? 5, select: ["id"], response_detail: "minimal" }) },
+  "sheets.sheet_names": { tool: "GOOGLESHEETS_GET_SHEET_NAMES", version: "20261001_00", args: i => ({ spreadsheet_id: i.spreadsheetId }) },
+  "sheets.read_range": { tool: "GOOGLESHEETS_VALUES_GET", version: "20261001_00", args: i => ({ spreadsheet_id: i.spreadsheetId, range: i.range }) },
+  "sheets.write_row": { tool: "GOOGLESHEETS_BATCH_UPDATE", version: "20261001_00", args: i => ({ spreadsheet_id: i.spreadsheetId, sheet_name: i.sheet, first_cell_location: i.cell, values: [i.values], value_input_option: "RAW", include_values_in_response: false }) },
+};
+const TRIGGERS: Record<string, { slug: string; version: string; config: Row }> = {
+  "mail.received": { slug: "OUTLOOK_MESSAGE_TRIGGER", version: "20261009_00", config: { folder_id: "inbox" } },
+};
+
+async function api(path: string, body?: Row): Promise<Row> {
+  const key = process.env.COMPOSIO_API_KEY;
+  if (!key) throw new Error("Integrations are not configured on the server.");
+  const r = await fetch(BASE + path, { method: body ? "POST" : "GET", cache: "no-store", headers: { "x-api-key": key, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(25000) });
+  if (!r.ok) throw new Error(r.status === 429 ? "The integration provider is rate limiting requests. Try again shortly." : `The integration provider request failed (HTTP ${r.status}).`);
+  return r.json();
+}
+function scopeList(v: unknown): string[] { return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : typeof v === "string" ? v.split(/[ ,]+/).filter(Boolean) : []; }
+function authKind(x: Row): Toolkit["authKind"] {
+  if (x.no_auth === true) return "none";
+  const s: string[] = (Array.isArray(x.auth_schemes) ? x.auth_schemes : []).map((v: unknown) => String(v).toUpperCase());
+  return s.some(v => v.includes("OAUTH")) ? "oauth" : s.some(v => v.includes("API_KEY")) ? "apikey" : "other";
+}
+function toToolkit(x: Row): Toolkit {
+  const id = String(x.slug ?? "").toLowerCase();
+  const preset = presetFor(id);
+  const cats = Array.isArray(x.meta?.categories) ? x.meta.categories.map((c: Row) => String(c?.name ?? c?.slug ?? c)).filter(Boolean) : [];
+  return { id, name: String(x.name ?? id), description: String(x.meta?.description ?? "").slice(0, 240), logoUrl: typeof x.meta?.logo === "string" ? x.meta.logo : null, categories: cats.slice(0, 3), authKind: authKind(x), reviewed: !!preset && !!CONFIGS[preset.id], preset };
+}
+function safeRedirect(u: string) {
+  const url = new URL(u);
+  if (url.protocol !== "https:" || !(url.hostname === "composio.dev" || url.hostname.endsWith(".composio.dev"))) throw new Error("Unexpected consent destination. Connection stopped.");
+  return url.toString();
+}
+// Fetch one account and prove it belongs to this user, is private, and matches the preset's auth config.
+async function ownedAccount(userId: string, connectionId: string, preset: Preset): Promise<Row> {
+  const cfg = CONFIGS[preset.id];
+  if (!cfg) throw new Error("This integration has no reviewed permission preset.");
+  const a = await api(`/connected_accounts/${encodeURIComponent(connectionId)}`);
+  if (a.user_id !== userId || a.experimental?.account_type !== "PRIVATE" || a.toolkit?.slug?.toLowerCase() !== preset.toolkitId || a.auth_config?.id !== cfg.authConfigId) throw new Error("Connection not found for this user.");
+  return a;
+}
+function check(a: Row, preset: Preset): Verification {
+  const cfg = CONFIGS[preset.id];
+  const reported = scopeList(a.state?.val?.scope || a.data?.scope);
+  const wanted = preset.grants.map(g => ({ g, scope: cfg.scopes[g.id] }));
+  if (!reported.length) return { ok: false, checked: false, granted: [], missing: preset.grants.map(g => ({ id: g.id, label: g.label })), unexpected: [] };
+  const granted = wanted.filter(w => reported.includes(w.scope)).map(w => w.g.id);
+  const allowed = new Set([...wanted.map(w => w.scope), ...IDENTITY]);
+  const unexpected = reported.filter(s => !allowed.has(s));
+  const missing = preset.grants.filter(g => !granted.includes(g.id)).map(g => ({ id: g.id, label: g.label }));
+  return { ok: missing.length === 0 && unexpected.length === 0, checked: true, granted, missing, unexpected };
+}
+function recovery(v: Verification, preset: Preset): string | null {
+  if (v.ok) return null;
+  if (!v.checked) return "The provider did not report which permissions were granted. Reconnect to be sure. " + preset.consentHint;
+  if (v.unexpected.length) return "This connection has more access than we allow. Reconnect it using the button below; nothing was changed.";
+  return `The provider did not receive: ${v.missing.map(m => m.label).join("; ")}. Reconnect and make sure it is selected. ${preset.consentHint}`;
+}
+
+export const composioProvider: IntegrationProvider = {
+  id: "composio",
+  async listToolkits({ query, cursor, limit }) {
+    const p = new URLSearchParams({ limit: String(Math.min(limit ?? 24, 50)) });
+    if (query) p.set("search", query.slice(0, 100));
+    if (cursor) p.set("cursor", cursor.slice(0, 200));
+    const r = await api(`/toolkits?${p}`);
+    const items = (Array.isArray(r.items) ? r.items : []).map(toToolkit).filter((t: Toolkit) => t.id);
+    return { items, nextCursor: typeof r.next_cursor === "string" ? r.next_cursor : null, total: typeof r.total_items === "number" ? r.total_items : null } satisfies ToolkitPage;
+  },
+  async beginConnect({ userId, preset, callbackUrl }) {
+    const cfg = CONFIGS[preset.id];
+    if (!cfg) throw new Error("Permissions for this integration have not been reviewed yet.");
+    const c = await api(`/auth_configs/${encodeURIComponent(cfg.authConfigId)}`);
+    const requested = scopeList(c.credentials?.scopes);
+    const allowed = new Set([...Object.values(cfg.scopes), ...IDENTITY]);
+    if (c.status !== "ENABLED" || c.toolkit?.slug?.toLowerCase() !== preset.toolkitId || requested.some(s => !allowed.has(s))) throw new Error("The stored permission setup does not match the reviewed preset. Connection stopped.");
+    const l = await api("/connected_accounts/link", { auth_config_id: cfg.authConfigId, user_id: userId, callback_url: callbackUrl, experimental: { account_type: "PRIVATE" } });
+    return { redirectUrl: safeRedirect(l.redirect_url) };
+  },
+  async listConnections({ userId, preset }) {
+    const cfg = CONFIGS[preset.id];
+    if (!cfg) return [];
+    const p = new URLSearchParams({ user_ids: userId, limit: "100", account_type: "PRIVATE" });
+    const r = await api(`/connected_accounts?${p}`);
+    const mine = (r.items ?? []).filter((a: Row) => a.user_id === userId && a.toolkit?.slug?.toLowerCase() === preset.toolkitId && a.auth_config?.id === cfg.authConfigId && a.experimental?.account_type !== "SHARED").slice(0, 10);
+    return Promise.all(mine.map(async (x: Row): Promise<Connection> => {
+      const a = await ownedAccount(userId, x.id, preset);
+      if (a.status === "INITIATED" || a.status === "INITIALIZING") return { id: a.id, toolkitId: preset.toolkitId, status: "pending", label: a.alias || preset.title, verification: null, recovery: null };
+      if (a.status !== "ACTIVE" || a.is_disabled) return { id: a.id, toolkitId: preset.toolkitId, status: "failed", label: a.alias || preset.title, verification: null, recovery: "This connection is not usable. Reconnect it." };
+      const v = check(a, preset);
+      return { id: a.id, toolkitId: preset.toolkitId, status: v.ok ? "active" : "needs_attention", label: a.alias || preset.title, verification: v, recovery: recovery(v, preset) };
+    }));
+  },
+  async verify({ userId, connectionId, preset }) {
+    const a = await ownedAccount(userId, connectionId, preset);
+    if (a.status !== "ACTIVE" || a.is_disabled) throw new Error("The connection is not active.");
+    return check(a, preset);
+  },
+  async execute<T>({ userId, connectionId, capability, input }: { userId: string; connectionId: string; capability: string; input: Record<string, unknown> }): Promise<ActionResult<T>> {
+    const cap = CAPABILITIES[capability];
+    if (!cap) return { ok: false, error: "Unsupported action." };
+    const r = await api(`/tools/execute/${cap.tool}`, { connected_account_id: connectionId, user_id: userId, version: cap.version, arguments: cap.args(input) });
+    if (r.successful !== true) return { ok: false, error: `${capability} failed.` };
+    return { ok: true, data: (typeof r.data === "string" ? JSON.parse(r.data) : r.data) as T };
+  },
+  async registerTrigger({ userId, connectionId, event, webhookUrl }) {
+    const t = TRIGGERS[event];
+    if (!t) throw new Error("Unsupported event.");
+    const r = await api(`/trigger_instances/${t.slug}/upsert`, { connected_account_id: connectionId, user_id: userId, trigger_config: t.config, toolkit_versions: { outlook: t.version }, egress_url: webhookUrl });
+    if (typeof r.trigger_id !== "string") throw new Error("Trigger creation could not be verified.");
+    return { triggerId: r.trigger_id };
+  },
+  parseWebhook(headers, raw): NormalizedEvent {
+    const secret = process.env.COMPOSIO_WEBHOOK_SECRET;
+    const id = headers.get("webhook-id"), ts = headers.get("webhook-timestamp"), sig = headers.get("webhook-signature");
+    if (!secret || !id || !ts || !sig || !/^\d+$/.test(ts) || Math.abs(Date.now() / 1000 - Number(ts)) > 300) throw new Error("Invalid webhook signature.");
+    const expected = createHmac("sha256", secret).update(`${id}.${ts}.${raw}`).digest("base64");
+    const ok = sig.split(/\s+/).some(s => { const v = s.startsWith("v1,") ? s.slice(3) : s; return v.length === expected.length && timingSafeEqual(Buffer.from(v), Buffer.from(expected)); });
+    if (!ok) throw new Error("Invalid webhook signature.");
+    const p = JSON.parse(raw) as Row; const m = p.metadata ?? {};
+    const kind = Object.entries(TRIGGERS).find(([, t]) => t.slug === m.trigger_slug)?.[0];
+    if (p.type !== "composio.trigger.message" || !kind) throw new Error("Unexpected event.");
+    const item = p.data?.id || p.data?.outlook_message?.id || p.data?.message?.id;
+    return { kind, userId: String(m.user_id ?? ""), connectionId: String(m.connected_account_id ?? ""), triggerId: String(m.trigger_id ?? ""), itemId: typeof item === "string" && item.length <= 2048 ? item : null };
+  },
+};
