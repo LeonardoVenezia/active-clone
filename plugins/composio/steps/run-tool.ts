@@ -40,7 +40,7 @@ export async function runComposioToolStep(input: StepInput & { toolkit?: string;
       const userId = exec.userId;
       const accounts = await request(`/connected_accounts?${new URLSearchParams({ user_ids: userId, toolkit_slugs: toolkit, statuses: "ACTIVE", limit: "20" })}`);
       const mine = (accounts.items ?? []).filter((a: Row) => a.user_id === userId && a.status === "ACTIVE" && !a.is_disabled && String(a.toolkit?.slug).toLowerCase() === toolkit && a.experimental?.account_type !== "SHARED");
-      const meta = await request(`/tools/${encodeURIComponent(tool)}`);
+      const meta = await request(`/tools/${encodeURIComponent(tool)}?toolkit_versions=latest`);
       if (String(meta.toolkit?.slug ?? "").toLowerCase() !== toolkit) return { success: false, error: "That action does not belong to that app." };
       if (!mine.length && meta.no_auth !== true) return { success: false, error: `No connected ${toolkit} account for the workflow owner. Connect it from the chat first.` };
       const r = await request(`/tools/execute/${encodeURIComponent(tool)}`, { user_id: userId, version: meta.version, arguments: args, ...(mine.length ? { connected_account_id: mine[0].id } : {}) });
