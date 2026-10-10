@@ -70,12 +70,13 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
     try { await api.workflow.update(workflowId, { nodes: undo.nodes.filter(n => n.type !== "add"), edges: undo.edges }); setUndo(null); toast.success("Undone."); }
     catch { setError("Undone on screen, but saving failed. Press Save."); }
   }
-  const [card, setCard] = useState<{ toolkitId: string; title: string; grants: { label: string }[]; doesNotGrant: string[]; consentHint: string } | null>(null);
+  const [card, setCard] = useState<{ toolkitId: string; title: string; grants: { label: string }[]; doesNotGrant: string[]; consentHint: string; generic?: boolean } | null>(null);
   const [cardNote, setCardNote] = useState("");
+  const [ack, setAck] = useState(false);
   async function startConnect() {
     if (!card) return; setCardNote("");
     try {
-      const r = await fetch("/api/connectors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "connect", toolkitId: card.toolkitId }) });
+      const r = await fetch("/api/connectors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: card.generic ? "connect_generic" : "connect", toolkitId: card.toolkitId, acknowledged: card.generic ? ack : undefined }) });
       const d = await r.json(); if (!r.ok || !d.redirectUrl) throw new Error(d.error || "Could not start the connection.");
       window.open(d.redirectUrl, "_blank", "noopener"); setCardNote("Finish on the new tab, then come back and press \"I connected it\".");
     } catch (e) { setCardNote(e instanceof Error ? e.message : "Could not start the connection."); }
@@ -83,8 +84,8 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
   async function checkConnected() {
     if (!card) return;
     try {
-      const d = await (await fetch("/api/connectors", { cache: "no-store" })).json();
-      const ok = (d.connections?.[card.toolkitId] ?? []).some((c: { status: string }) => c.status === "active");
+      const d = card.generic ? null : await (await fetch("/api/connectors", { cache: "no-store" })).json();
+      const ok = card.generic ? (await (await fetch("/api/connectors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "active", toolkitId: card.toolkitId }) })).json()).active === true : (d.connections?.[card.toolkitId] ?? []).some((c: { status: string }) => c.status === "active");
       if (ok) { const t = card.title; setCard(null); setCardNote(""); setMsgs(m => [...m, { id: `a${Date.now()}`, role: "assistant", content: `Connected: ${t}. Tell me to continue.` }]); }
       else setCardNote("I don't see an active connection yet. Finish the sign-in tab and try again.");
     } catch { setCardNote("Could not check. Try again."); }
@@ -114,7 +115,7 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
       <div className="flex-1 space-y-3 overflow-auto p-3 text-sm">
         {msgs.length === 0 && !busy && <p className="text-muted-foreground">Tell me what you want to automate, or ask me anything about this board. For now I can talk it through with you; building on the canvas is coming next.</p>}
         {msgs.map(m => <div key={m.id} className={m.role === "user" ? "text-right" : ""}><div className={"inline-block max-w-[90%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-left " + (m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted")}>{m.content}</div></div>)}
-        {card && <div className="space-y-2 rounded-lg border p-3 text-xs"><p className="text-sm font-semibold">Connect: {card.title}</p><p>This will allow:</p><ul className="list-disc pl-4">{card.grants.map(g => <li key={g.label}>{g.label}</li>)}</ul><p>It will not allow: {card.doesNotGrant.join(", ")}.</p><p className="text-muted-foreground">{card.consentHint}</p><div className="flex gap-2"><Button size="sm" onClick={() => void startConnect()}>Connect</Button><Button size="sm" variant="outline" onClick={() => void checkConnected()}>I connected it</Button></div>{cardNote && <p role="status">{cardNote}</p>}</div>}
+        {card && <div className="space-y-2 rounded-lg border p-3 text-xs"><p className="text-sm font-semibold">Connect: {card.title}</p>{card.generic ? <><p>This app signs in through our integration provider. Its permissions cannot be narrowed ahead of time: the app's own screen shows exactly what it asks for, and you can decline there.</p><label className="flex items-start gap-2"><input type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)} /><span>I understand and will review the permissions on the next screen.</span></label></> : <><p>This will allow:</p><ul className="list-disc pl-4">{card.grants.map(g => <li key={g.label}>{g.label}</li>)}</ul><p>It will not allow: {card.doesNotGrant.join(", ")}.</p><p className="text-muted-foreground">{card.consentHint}</p></>}<div className="flex gap-2"><Button size="sm" disabled={!!card.generic && !ack} onClick={() => void startConnect()}>Connect</Button><Button size="sm" variant="outline" onClick={() => void checkConnected()}>I connected it</Button></div>{cardNote && <p role="status">{cardNote}</p>}</div>}
         {busy && <p className="animate-pulse text-xs text-muted-foreground">Thinking...</p>}
         {building && <p role="status" className="animate-pulse text-xs text-muted-foreground">Building on the canvas...</p>}
         {undo && !building && <p className="text-xs"><button className="underline" onClick={() => void undoBuild()}>Undo last change</button></p>}
