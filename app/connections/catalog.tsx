@@ -8,7 +8,7 @@ type Connection = { id: string; toolkitId: string; status: "pending" | "active" 
 type TestResult = { ok: boolean; message: string; checkedAt: string };
 type Toolkit = { id: string; name: string; description: string; logoUrl: string | null; categories: string[]; authKind: string; reviewed: boolean };
 type Data = { items: Toolkit[]; nextCursor: string | null; total: number | null; connections: Record<string, Connection[]>; featured: Preset[] };
-const BADGE: Record<string, string> = { active: "Connected and verified", needs_attention: "Needs attention", pending: "Waiting for consent", failed: "Not usable" };
+const BADGE: Record<string, string> = { active: "Connected and verified", needs_attention: "Connected, permissions need attention", pending: "Waiting for consent", failed: "Not usable" };
 const BADGE_CLASS: Record<string, string> = { active: "text-green-700", needs_attention: "text-destructive", pending: "text-muted-foreground", failed: "text-destructive" };
 async function call(path: string, init?: RequestInit) {
   const r = await fetch(path, { cache: "no-store", ...init, signal: AbortSignal.timeout(60000) });
@@ -62,7 +62,7 @@ export function Catalog({ signedIn }: { signedIn: boolean }) {
   function ConnectionRow({ c, preset }: { c: Connection; preset: Preset }) {
     return <div className={"rounded-lg border p-3 space-y-2 " + (c.status === "needs_attention" || c.status === "failed" ? "border-destructive" : "")}>
       <p className="text-sm"><span className={"font-semibold " + BADGE_CLASS[c.status]}>{BADGE[c.status]}</span> · {c.label}</p>
-      {c.recovery && <div role="alert" className="text-sm space-y-2"><p>{c.recovery}</p><Button size="sm" disabled={!!busy} onClick={() => void connect(preset.toolkitId)}>Reconnect with the right permissions</Button></div>}
+      {c.recovery && <div role="alert" className="text-sm space-y-2"><p>{c.recovery}</p><Button size="sm" disabled={!!busy} onClick={() => void connect(preset.toolkitId)}>Reconnect with reviewed permissions</Button></div>}
       {c.usedBy.length > 0 && <p className="text-xs text-muted-foreground">Used by: {c.usedBy.join(", ")}</p>}
       {c.status === "active" && <p className="text-xs text-muted-foreground">Granted permissions match the reviewed setup exactly. Last verified {new Date((tests[c.id]?.checkedAt) || loadedAt).toLocaleTimeString()}.</p>}
       {c.status !== "pending" && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void test(preset.toolkitId, c.id)}>Test connection</Button>}
