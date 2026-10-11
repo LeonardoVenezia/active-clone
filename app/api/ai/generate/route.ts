@@ -1,3 +1,4 @@
+import { FREE_MODELS } from "@/lib/free-models";
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
@@ -276,17 +277,7 @@ export async function POST(request: Request) {
     }
 
     const apiKey = process.env.OPENROUTER_API_KEY;
-    const model = process.env.AI_CHAT_MODEL || "openrouter/free";
-
-    // Explicit allowlist: never accept paid models or silently fall back to them.
-    // Add named :free variants only after checking the current provider catalog.
-    const freeModels = new Set(["openrouter/free"]);
-    if (!freeModels.has(model)) {
-      return NextResponse.json(
-        { error: "AI_CHAT_MODEL is not in the verified free-model allowlist." },
-        { status: 503 }
-      );
-    }
+    // Free models only (lib/free-models.ts); never a paid fallback.
 
     if (!apiKey) {
       return NextResponse.json(
@@ -350,22 +341,33 @@ Example: If user says "connect node A to node B", output:
       apiKey,
       baseURL: "https://openrouter.ai/api/v1",
       maxRetries: 0,
-      timeout: 60_000,
+      timeout: 20_000,
     });
-    const result = await provider.chat.completions.create({
-      model,
-      messages: [
-        { role: "system", content: getSystemPrompt() },
-        { role: "user", content: userPrompt },
-      ],
-      stream: true,
-      max_tokens: 4096,
-    });
-
     async function* textChunks() {
-      for await (const chunk of result) {
-        const text = chunk.choices[0]?.delta?.content;
-        if (text) yield text;
+      for (const model of FREE_MODELS) {
+        let got = false;
+        try {
+          const result = await provider.chat.completions.create({
+            model,
+            messages: [
+              { role: "system", content: getSystemPrompt() },
+              { role: "user", content: userPrompt },
+            ],
+            stream: true,
+            max_tokens: 4096,
+          });
+          for await (const chunk of result) {
+            const text = chunk.choices[0]?.delta?.content;
+            if (text) {
+              got = true;
+              yield text;
+            }
+          }
+        } catch (error) {
+          if (got) throw error;
+          continue;
+        }
+        if (got) return;
       }
     }
 
