@@ -54,7 +54,7 @@ export async function POST(r: Request) {
     if (cm) {
       const slug = cm[1].toLowerCase();
       if (PRESETS[slug]) connect = { ...PRESETS[slug], generic: false };
-      else { const t = await describeToolkit(slug).catch(() => null); if (t && t.oauth && t.managed) connect = { toolkitId: t.id, title: t.name, grants: [], doesNotGrant: [], consentHint: "", generic: true }; }
+      else { const t = await describeToolkit(slug).catch(() => null); if (t && ((t.oauth && t.managed) || t.keyScheme)) connect = { toolkitId: t.id, title: t.name, grants: [], doesNotGrant: [], consentHint: "", generic: true, apiKey: !t.managed }; }
     }
     if (cm) reply = reply.replace(/\s*\[\[CONNECT:[^\]]*\]\]\s*/gi, "\n").trim() || "To continue I need you to connect that account. Check the permissions below.";
     const m = reply.match(/\[\[BUILD:\s*([\s\S]{3,600}?)\]\]\s*$/);
