@@ -36,12 +36,117 @@ function getSystemPrompt(composioCatalog = ""): string {
 
 ${composioCatalog}
 
-CRITICAL: Output your workflow as INDIVIDUAL OPERATIONS, one per line in JSONL format. Each line must be a complete, separate JSON object.
-Operations: setName, setDescription, addNode, addEdge, removeNode, removeEdge, updateNode. Start with setName and setDescription, add nodes, then add edges so every node is reachable from exactly one trigger. Output only valid JSON operations, one per line; no markdown or explanatory prose.
-Node structure: {"id":"unique-id","type":"trigger"|"action","position":{"x":number,"y":number},"data":{"label":"Node Label","description":"Node description","type":"trigger"|"action","config":{},"status":"idle"}}. Use built-in action types when appropriate. Plugin actions (from integrations):
-${pluginActionPrompts}
-If the request needs a Composio action, use only a listed exact toolkit/slug pair and its schema. Do not invent actions or args. For conditions, use separate Condition nodes for distinct branches. Connect all nodes. Put new nodes about 250px apart, avoid overlaps, and preserve existing nodes when modifying a workflow.`;
+CRITICAL: Output your workflow as INDIVIDUAL OPERATIONS, one per line in JSONL format.
+Each line must be a complete, separate JSON object.
+
+Operations you can output:
+1. {"op": "setName", "name": "Workflow Name"}
+2. {"op": "setDescription", "description": "Brief description"}
+3. {"op": "addNode", "node": {COMPLETE_NODE_OBJECT}}
+4. {"op": "addEdge", "edge": {COMPLETE_EDGE_OBJECT}}
+5. {"op": "removeNode", "nodeId": "node-id-to-remove"}
+6. {"op": "removeEdge", "edgeId": "edge-id-to-remove"}
+7. {"op": "updateNode", "nodeId": "node-id", "updates": {"position": {"x": 100, "y": 200}}}
+
+IMPORTANT RULES:
+- Every workflow must have EXACTLY ONE trigger node
+- Output ONE operation per line
+- Each line must be complete, valid JSON
+- Start with setName and setDescription
+- Then add nodes one at a time
+- Finally add edges one at a time to CONNECT ALL NODES
+- CRITICAL: Every node (except the last) MUST be connected to at least one other node
+- To update node positions or properties, use updateNode operation
+- NEVER output explanatory text - ONLY JSON operations
+- Do NOT wrap in markdown code blocks
+- Do NOT add explanatory text
+
+Node structure:
+{
+  "id": "unique-id",
+  "type": "trigger" or "action",
+  "position": {"x": number, "y": number},
+  "data": {
+    "label": "Node Label",
+    "description": "Node description",
+    "type": "trigger" or "action",
+    "config": {...},
+    "status": "idle"
+  }
 }
+
+NODE POSITIONING RULES:
+- Nodes are squares, so use equal spacing in both directions
+- Horizontal spacing between sequential nodes: 250px (e.g., x: 100, then x: 350, then x: 600)
+- Vertical spacing for parallel branches: 250px (e.g., y: 75, y: 325, y: 575)
+- Start trigger node at position {"x": 100, "y": 200}
+- For linear workflows: increment x by 250 for each subsequent node, keep y constant
+- For branching workflows: keep x the same for parallel branches, space y by 250px per branch
+- When adding nodes to existing workflows, position new nodes 250px away from existing nodes
+
+Trigger types:
+- Manual: {"triggerType": "Manual"}
+- Webhook: {"triggerType": "Webhook", "webhookPath": "/webhooks/name", ...}
+- Schedule: {"triggerType": "Schedule", "scheduleCron": "0 9 * * *", ...}
+
+System action types (built-in):
+- Database Query: {"actionType": "Database Query", "dbQuery": "SELECT * FROM table", "dbTable": "table"}
+- HTTP Request: {"actionType": "HTTP Request", "httpMethod": "POST", "endpoint": "https://api.example.com", "httpHeaders": "{}", "httpBody": "{}"}
+- Condition: {"actionType": "Condition", "condition": "{{@nodeId:Label.field}} === 'value'"}
+
+Plugin action types (from integrations):
+${pluginActionPrompts}
+
+CRITICAL ABOUT CONDITION NODES:
+- Condition nodes evaluate a boolean expression
+- When TRUE: ALL connected nodes execute
+- When FALSE: ALL connected nodes are SKIPPED
+- For if/else logic, CREATE MULTIPLE SEPARATE condition nodes (one per branch)
+- NEVER connect multiple different outcome paths to a single condition node
+- Each condition should check for ONE specific case
+
+Example: "if good send Slack, if bad create ticket" needs TWO conditions:
+{"op": "addNode", "node": {"id": "cond-good", "data": {"config": {"condition": "{{@rate:Rate.value}} === 'good'"}}}}
+{"op": "addNode", "node": {"id": "cond-bad", "data": {"config": {"condition": "{{@rate:Rate.value}} === 'bad'"}}}}
+{"op": "addEdge", "edge": {"source": "rate", "target": "cond-good"}}
+{"op": "addEdge", "edge": {"source": "rate", "target": "cond-bad"}}
+{"op": "addEdge", "edge": {"source": "cond-good", "target": "slack"}}
+{"op": "addEdge", "edge": {"source": "cond-bad", "target": "ticket"}}
+
+Edge structure:
+{
+  "id": "edge-id",
+  "source": "source-node-id",
+  "target": "target-node-id",
+  "type": "default"
+}
+
+WORKFLOW FLOW:
+- Trigger connects to first action
+- Actions connect in sequence or to multiple branches
+- ALWAYS create edges to connect the workflow flow
+- For linear workflows: trigger -> action1 -> action2 -> etc
+- For branching (conditions): one source can connect to multiple targets
+
+Example output (linear workflow with 250px horizontal spacing):
+{"op": "setName", "name": "Contact Form Workflow"}
+{"op": "setDescription", "description": "Processes contact form submissions"}
+{"op": "addNode", "node": {"id": "trigger-1", "type": "trigger", "position": {"x": 100, "y": 200}, "data": {"label": "Contact Form", "type": "trigger", "config": {"triggerType": "Manual"}, "status": "idle"}}}
+{"op": "addNode", "node": {"id": "send-email", "type": "action", "position": {"x": 350, "y": 200}, "data": {"label": "Send Email", "type": "action", "config": {"actionType": "Send Email", "emailTo": "admin@example.com", "emailSubject": "New Contact", "emailBody": "New contact form submission"}, "status": "idle"}}}
+{"op": "addNode", "node": {"id": "log-action", "type": "action", "position": {"x": 600, "y": 200}, "data": {"label": "Log Result", "type": "action", "config": {"actionType": "HTTP Request", "httpMethod": "POST", "endpoint": "https://api.example.com/log"}, "status": "idle"}}}
+{"op": "addEdge", "edge": {"id": "e1", "source": "trigger-1", "target": "send-email", "type": "default"}}
+{"op": "addEdge", "edge": {"id": "e2", "source": "send-email", "target": "log-action", "type": "default"}}
+
+Example output (branching workflow with 250px vertical spacing):
+{"op": "addNode", "node": {"id": "trigger-1", "type": "trigger", "position": {"x": 100, "y": 200}, "data": {"label": "Webhook", "type": "trigger", "config": {"triggerType": "Webhook"}, "status": "idle"}}}
+{"op": "addNode", "node": {"id": "branch-a", "type": "action", "position": {"x": 350, "y": 75}, "data": {"label": "Branch A", "type": "action", "config": {"actionType": "Send Email"}, "status": "idle"}}}
+{"op": "addNode", "node": {"id": "branch-b", "type": "action", "position": {"x": 350, "y": 325}, "data": {"label": "Branch B", "type": "action", "config": {"actionType": "Send Slack Message"}, "status": "idle"}}}
+{"op": "addEdge", "edge": {"id": "e1", "source": "trigger-1", "target": "branch-a", "type": "default"}}
+{"op": "addEdge", "edge": {"id": "e2", "source": "trigger-1", "target": "branch-b", "type": "default"}}
+
+REMEMBER: After adding all nodes, you MUST add edges to connect them! Every node should be reachable from the trigger.`;
+}
+
 export async function POST(request: Request) {
   try {
     const session = await auth.api.getSession({ headers: request.headers });
