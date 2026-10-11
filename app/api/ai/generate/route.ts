@@ -146,7 +146,6 @@ function getSystemPrompt(composioCatalog = ""): string {
   const pluginActionPrompts = generateAIActionPrompts();
   return `You are a workflow automation expert. Generate a workflow based on the user's description.
 
-For Composio actions, use only exact toolkit/tool slugs and input schemas from the live catalog below. Never invent a slug or schema. If no applicable action is listed, use a built-in action or ask the user.
 ${composioCatalog}
 
 CRITICAL: Output your workflow as INDIVIDUAL OPERATIONS, one per line in JSONL format.
