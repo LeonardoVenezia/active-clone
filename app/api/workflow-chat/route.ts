@@ -61,7 +61,7 @@ export async function POST(r: Request) {
       if (PRESETS[slug]) connect = { ...PRESETS[slug], generic: false };
       else { const t = await describeToolkit(slug).catch(() => null); if (t && ((t.oauth && t.managed) || t.keyScheme)) connect = { toolkitId: t.id, title: t.name, grants: [], doesNotGrant: [], consentHint: "", generic: true, apiKey: !t.managed }; }
     }
-    if (cm) reply = reply.replace(/\s*\[{1,2}CONNECT[^\]]\]{1,2}\s/gi, "\n").trim() || "To continue I need you to connect that account. Check the permissions below.";
+    if (cm) reply = reply.replace(/\s*\[{1,2}CONNECT[^\]]*\]{1,2}\s*/gi, "\n").trim() || "To continue I need you to connect that account. Check the permissions below.";
     const m = reply.match(/\[\[BUILD:\s*([\s\S]{3,600}?)\]\]\s*$/);
     const build = m ? m[1].trim() : null;
     const shown = m ? reply.slice(0, m.index).trim() || "On it." : reply;
