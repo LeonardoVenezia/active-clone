@@ -11,11 +11,11 @@ const SLUG = /^[A-Za-z0-9_]{1,80}$/;
 const MAX_STEPS_PER_RUN = 100;
 type Row = Record<string, any>;
 
-async function request(path: string, body?: Row): Promise<Row> {
+async function request(path: string, body?: Row, stage = "Composio request"): Promise<Row> {
   const key = process.env.COMPOSIO_API_KEY;
   if (!key) throw new Error("COMPOSIO_API_KEY is not configured on the server.");
   const r = await fetch(`${BASE}${path}`, { method: body ? "POST" : "GET", cache: "no-store", headers: { "x-api-key": key, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(30000) });
-  if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? "Composio authentication failed." : r.status === 429 ? "Composio rate limit reached. No automatic retry." : `Composio request failed (HTTP ${r.status}).`);
+  if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? "Composio authentication failed." : r.status === 429 ? "Composio rate limit reached. No automatic retry." : `${stage} failed (HTTP ${r.status}).`);
   return r.json();
 }
 
@@ -38,12 +38,22 @@ export async function runComposioToolStep(input: StepInput & { toolkit?: string;
       const logs = await db.select({ id: workflowExecutionLogs.id }).from(workflowExecutionLogs).where(eq(workflowExecutionLogs.executionId, executionId)).limit(MAX_STEPS_PER_RUN + 1);
       if (logs.length > MAX_STEPS_PER_RUN) return { success: false, error: "This run hit the step limit." };
       const userId = exec.userId;
-      const accounts = await request(`/connected_accounts?${new URLSearchParams({ user_ids: userId, toolkit_slugs: toolkit, statuses: "ACTIVE", limit: "20" })}`);
+      const accounts = await request(`/connected_accounts?${new URLSearchParams({ user_ids: userId, toolkit_slugs: toolkit, statuses: "ACTIVE", limit: "20" })}`, undefined, "Composio account lookup");
       const mine = (accounts.items ?? []).filter((a: Row) => a.user_id === userId && a.status === "ACTIVE" && !a.is_disabled && String(a.toolkit?.slug).toLowerCase() === toolkit && a.experimental?.account_type !== "SHARED");
-      const meta = await request(`/tools/${encodeURIComponent(tool)}?toolkit_versions=latest`);
-      if (String(meta.toolkit?.slug ?? "").toLowerCase() !== toolkit) return { success: false, error: "That action does not belong to that app." };
+      let catalog: Row;
+      try {
+        const params = new URLSearchParams({ toolkit_slug: toolkit, toolkit_versions: "latest", limit: "100" });
+        catalog = await request(`/tools?${params}`, undefined, `Composio metadata lookup for toolkit ${toolkit}`);
+      } catch (error) {
+        throw new Error(error instanceof Error ? error.message : `Composio metadata lookup for toolkit ${toolkit} failed.`);
+      }
+      const matches = (Array.isArray(catalog.items) ? catalog.items : []).filter((item: Row) =>
+        String(item.slug ?? "").toUpperCase() === tool && String(item.toolkit?.slug ?? "").toLowerCase() === toolkit
+      );
+      const meta: Row | undefined = matches[0];
+      if (!meta) return { success: false, error: `Composio catalog validation failed: ${tool} is not listed under toolkit ${toolkit}.` };
       if (!mine.length && meta.no_auth !== true) return { success: false, error: `No connected ${toolkit} account for the workflow owner. Connect it from the chat first.` };
-      const r = await request(`/tools/execute/${encodeURIComponent(tool)}`, { user_id: userId, version: meta.version, arguments: args, ...(mine.length ? { connected_account_id: mine[0].id } : {}) });
+      const r = await request(`/tools/execute/${encodeURIComponent(tool)}`, { user_id: userId, version: meta.version, arguments: args, ...(mine.length ? { connected_account_id: mine[0].id } : {}) }, `Composio execution of ${tool}`);
       if (r.successful !== true) return { success: false, error: "The action returned an unsuccessful result." };
       return { success: true, data: r.data };
     } catch (error) { return { success: false, error: error instanceof Error ? error.message : "Composio action failed." }; }
