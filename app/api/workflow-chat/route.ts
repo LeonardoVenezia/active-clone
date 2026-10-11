@@ -1,4 +1,4 @@
-import { FREE_MODELS } from "@/lib/free-models";
+import { llmRoutes } from "@/lib/free-models";
 import { describeToolkit } from "@/lib/connectors/generic";
 import { PRESETS } from "@/lib/connectors/presets";
 import OpenAI from "openai";
@@ -41,12 +41,15 @@ export async function POST(r: Request) {
     if ((await recentUserMessages(id)) >= 60) return NextResponse.json({ error: "You've sent a lot of messages this hour. Try again in a bit." }, { status: 429 });
     const past = await history(id, b.workflowId, 20);
     await append(id, b.workflowId, "user", text);
-    const client = new OpenAI({ apiKey: key, baseURL: "https://openrouter.ai/api/v1", maxRetries: 0, timeout: 12_000 });
     const messages = [{ role: "system" as const, content: `${SYSTEM}\n\n${describe(b.snapshot)}` }, ...past.map(m => ({ role: m.role, content: m.content })), { role: "user" as const, content: text }];
     let reply = "";
-    for (const model of FREE_MODELS) {
+    for (const r of llmRoutes()) {
       if (reply) break;
-      try { reply = (await client.chat.completions.create({ model, max_tokens: 500, messages })).choices[0]?.message?.content?.trim() || ""; } catch (e) { console.error("[workflow-chat] model failed", model, (e as { status?: number })?.status, String((e as Error)?.message).slice(0, 200)); }
+      try {
+        const client = new OpenAI({ apiKey: r.apiKey, baseURL: r.baseURL, maxRetries: 0, timeout: 10_000 });
+        reply = (await client.chat.completions.create({ model: r.model, max_tokens: r.maxTokens, messages })).choices[0]?.message?.content?.trim() || "";
+        if (!reply) console.error("[workflow-chat] empty reply from", r.name, r.model);
+      } catch (e) { console.error("[workflow-chat] model failed", r.name, r.model, (e as { status?: number })?.status); }
     }
     if (!reply) return NextResponse.json({ error: "The free AI model didn't answer (it may be busy). Your message was kept; send it again in a moment." }, { status: 502 });
     if (/\[\[BUILD:\s*one plain sentence|Composio toolkit slug in lowercase|one extra final line/i.test(reply)) reply = "I got confused there. Could you say that again in one sentence?";
