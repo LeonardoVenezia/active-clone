@@ -24,6 +24,7 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [pendingBuild, setPendingBuild] = useState<{ instruction: string; convo: Msg[] } | null>(null);
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open || !signedIn) return;
@@ -131,7 +132,7 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
       setMsgs(next);
       setText("");
       setCard(d.connect ?? null); setCardNote("");
-      if (d.build) void build(d.build, next);
+      setPendingBuild(d.build ? { instruction: d.build, convo: next } : null);
     } catch (e) { setError(e instanceof Error ? e.message : "Something went wrong. Your message is still in the box."); } finally { setBusy(false); }
   }
   if (!open) return <Button aria-label="Open chat" className="pointer-events-auto absolute left-4 top-16 z-10 gap-2 shadow-lg" onClick={() => setOpen(true)} size="sm"><MessageSquare className="size-4" />Chat</Button>;
@@ -145,7 +146,7 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
         {busy && <p className="animate-pulse text-xs text-muted-foreground">Thinking...</p>}
         {building && <p role="status" className="animate-pulse text-xs text-muted-foreground">Building on the canvas...</p>}
         {undo && !building && <p className="text-xs"><button className="underline" onClick={() => void undoBuild()}>Undo last change</button></p>}
-        {!building && !busy && msgs.length > 0 && msgs[msgs.length - 1].role === "assistant" && <p className="text-xs"><button className="underline text-muted-foreground" onClick={() => void build("Build or change the workflow as discussed in the conversation.", msgs)}>Build this on the canvas</button></p>}
+        {pendingBuild && !building && !busy && <p className="text-xs"><button className="underline text-muted-foreground" onClick={() => { const pending = pendingBuild; setPendingBuild(null); void build(pending.instruction, pending.convo); }}>Build this on the canvas</button></p>}
         {error && <p role="alert" className="rounded-lg border border-destructive p-2 text-xs text-destructive">{error}</p>}
         <div ref={end} />
       </div>
