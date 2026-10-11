@@ -50,14 +50,14 @@ export async function POST(r: Request) {
     if (!reply) return NextResponse.json({ error: "The free AI model didn't answer (it may be busy). Your message was kept; send it again in a moment." }, { status: 502 });
     if (/\[\[BUILD:\s*one plain sentence|Composio toolkit slug in lowercase|one extra final line/i.test(reply)) reply = "I got confused there. Could you say that again in one sentence?";
     reply = reply.replace(/<\|[^|>]{1,40}\|>(\s*\[\s*\])?/g, "").trim();
-    const cm = reply.match(/\[\[CONNECT:\s*([a-z0-9_]{1,40})\s*\]\]/i);
+    const cm = reply.match(/\[\[CONNECT\s*[:(=]?\s*(?:slug\s*=\s*)?['"]?([a-z0-9_]{1,40})['"]?\s*\)?\s*\]\]/i);
     let connect: Record<string, unknown> | null = null;
     if (cm) {
       const slug = cm[1].toLowerCase();
       if (PRESETS[slug]) connect = { ...PRESETS[slug], generic: false };
       else { const t = await describeToolkit(slug).catch(() => null); if (t && ((t.oauth && t.managed) || t.keyScheme)) connect = { toolkitId: t.id, title: t.name, grants: [], doesNotGrant: [], consentHint: "", generic: true, apiKey: !t.managed }; }
     }
-    if (cm) reply = reply.replace(/\s*\[\[CONNECT:[^\]]*\]\]\s*/gi, "\n").trim() || "To continue I need you to connect that account. Check the permissions below.";
+    if (cm) reply = reply.replace(/\s*\[\[CONNECT[^\]]*\]\]\s*/gi, "\n").trim() || "To continue I need you to connect that account. Check the permissions below.";
     const m = reply.match(/\[\[BUILD:\s*([\s\S]{3,600}?)\]\]\s*$/);
     const build = m ? m[1].trim() : null;
     const shown = m ? reply.slice(0, m.index).trim() || "On it." : reply;
