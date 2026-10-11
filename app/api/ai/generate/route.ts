@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
+import { discoverComposio } from "@/plugins/composio/steps/catalog";
 
 // Simple type for operations
 type Operation = {
@@ -141,9 +142,12 @@ async function processOperationStream(
   );
 }
 
-function getSystemPrompt(): string {
+function getSystemPrompt(composioCatalog = ""): string {
   const pluginActionPrompts = generateAIActionPrompts();
   return `You are a workflow automation expert. Generate a workflow based on the user's description.
+
+For Composio actions, use only exact toolkit/tool slugs and input schemas from the live catalog below. Never invent a slug or schema. If no applicable action is listed, use a built-in action or ask the user.
+${composioCatalog}
 
 CRITICAL: Output your workflow as INDIVIDUAL OPERATIONS, one per line in JSONL format.
 Each line must be a complete, separate JSON object.
@@ -289,6 +293,16 @@ export async function POST(request: Request) {
     }
 
     // Build the user prompt
+    let composioCatalog = "";
+    const requestedToolkits = ["outlook", "gmail", "slack", "notion", "airtable", "google_sheets", "google_drive", "github", "linear", "stripe", "hubspot", "jira", "hackernews"];
+    if (/\b(composio|outlook|gmail|email|mail|slack|notion|airtable|sheets|drive|github|linear|stripe|hubspot|jira|hacker\s*news)\b/i.test(String(prompt))) {
+      const results = await Promise.all(requestedToolkits.map(async toolkit => {
+        try { return { toolkit, result: await discoverComposio({ catalog: "tools", toolkit }) }; }
+        catch (error) { console.error("[ai-generate] Composio catalog lookup failed", toolkit, error instanceof Error ? error.message : "unknown"); return null; }
+      }));
+      const actions = results.flatMap(entry => entry?.result?.items?.map((tool: Record<string, unknown>) => ({ toolkit: entry.toolkit, slug: tool.slug, name: tool.name, description: tool.description, input_parameters: tool.input_parameters })) ?? []);
+      composioCatalog = actions.length ? `LIVE COMPOSIO ACTION CATALOG (exact names and schemas):\n${JSON.stringify(actions)}` : "No live Composio action catalog was available. Do not invent Composio actions.";
+    }
     let userPrompt = prompt;
     if (existingWorkflow) {
       // Identify nodes and their labels for context
@@ -345,7 +359,7 @@ Example: If user says "connect node A to node B", output:
           const result = await provider.chat.completions.create({
             model: route.model,
             messages: [
-              { role: "system", content: getSystemPrompt() },
+              { role: "system", content: getSystemPrompt(composioCatalog) },
               { role: "user", content: userPrompt },
             ],
             stream: true,
