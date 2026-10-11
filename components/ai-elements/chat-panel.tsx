@@ -19,7 +19,7 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
   const { fitView } = useReactFlow();
   const [undo, setUndo] = useState<{ nodes: typeof nodes; edges: typeof edges; name?: string } | null>(null);
   const [building, setBuilding] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,7 +41,32 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
     const before = { nodes, edges };
     const real = nodes.filter(n => n.type !== "add");
     const existing = real.length ? { nodes: real, edges } : undefined;
-    const prompt = `Conversation so far:\n${convo.slice(-6).map(m => `${m.role}: ${m.content}`).join("\n")}\n\nWhat to do on the canvas now: ${instruction}\n\nFor any app or action not covered by another step (Slack, Notion, Airtable, Stripe, Docs, Hacker News and others) use a step with actionType "composio/run-tool" (the Run Composio Action step) and config fields toolkit (lowercase app slug), tool (UPPERCASE tool slug such as SLACK_SEND_MESSAGE) and arguments (a JSON string).`;
+    const toolkitHints: [string, RegExp][] = [
+      ["outlook", /\boutlook\b|\bemail\b|\bmail\b/i], ["gmail", /\bgmail\b/i], ["slack", /\bslack\b/i],
+      ["notion", /\bnotion\b/i], ["airtable", /\bairtable\b/i], ["google_sheets", /\b(?:google\s+)?sheets\b/i],
+      ["google_drive", /\b(?:google\s+)?drive\b/i], ["github", /\bgithub\b/i], ["linear", /\blinear\b/i],
+      ["stripe", /\bstripe\b/i], ["hubspot", /\bhubspot\b/i], ["jira", /\bjira\b/i], ["hackernews", /\bhacker\s*news\b/i],
+    ];
+    const requestText = `${instruction}\n${convo.slice(-6).map(m => m.content).join("\n")}`;
+    const requestedToolkits = toolkitHints.filter(([, pattern]) => pattern.test(requestText)).map(([slug]) => slug);
+    let catalogs: { toolkit: string; tools: { slug: string; name?: string; description?: string; input_parameters?: unknown }[] }[] = [];
+    try {
+      catalogs = await Promise.all(requestedToolkits.map(async toolkit => {
+        const response = await fetch(`/api/composio/catalog?catalog=tools&toolkit=${encodeURIComponent(toolkit)}`, { cache: "no-store" });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `Could not load ${toolkit} actions from Composio.`);
+        return { toolkit, tools: result.items || [] };
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load Composio actions.");
+      setBuilding(false);
+      return;
+    }
+    const realTools = catalogs.flatMap(({ toolkit, tools }) => tools.map(tool => ({ toolkit, slug: tool.slug, name: tool.name, description: tool.description, input_parameters: tool.input_parameters })));
+    const catalogInstruction = realTools.length
+      ? `\n\nREAL COMPOSIO ACTIONS (use only exact toolkit and slug pairs below; copy the input schema and do not invent actions):\n${JSON.stringify(realTools)}`
+      : `\n\nNo Composio action catalog has been loaded. Do not create a Composio action or invent a tool slug. Use built-in actions where possible; otherwise ask which app/action is needed.`;
+    const prompt = `Conversation so far:\n${convo.slice(-6).map(m => `${m.role}: ${m.content}`).join("\n")}\n\nWhat to do on the canvas now: ${instruction}\n\nUse built-in actions when they fit. For another app, use Run Composio Action only with the exact toolkit/slug pair from the real catalog below. Set arguments as a JSON string matching that action's input schema. If there is no matching listed action, do not guess; ask or explain what is missing.${catalogInstruction}`;
     try {
       const data = await api.ai.generateStream(prompt, partial => {
         const triggers = (partial.nodes || []).filter(n => n.data?.type === "trigger");
@@ -114,7 +139,7 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
     <div className="flex items-center justify-between border-b px-3 py-2"><p className="text-sm font-semibold">Chat</p><button aria-label="Close chat" className="rounded p-1 hover:bg-muted" onClick={() => setOpen(false)}><X className="size-4" /></button></div>
     {!signedIn ? <div className="space-y-3 p-4"><p className="text-sm font-semibold">Sign in to chat.</p><p className="text-xs text-muted-foreground">Your conversation is saved with this workflow, so it needs your account.</p><AuthDialog><Button size="sm">Sign In</Button></AuthDialog></div> : <>
       <div className="flex-1 space-y-3 overflow-auto p-3 text-sm">
-        {msgs.length === 0 && !busy && <p className="text-muted-foreground">Tell me what you want to automate, or ask me anything about this board. For now I can talk it through with you; building on the canvas is coming next.</p>}
+        {msgs.length === 0 && !busy && <p className="text-muted-foreground">Tell me what you want to automate, or ask me anything about this board. Tell me what you want to automate. I can help plan it, explain each step, and build a draft on the canvas when you are ready.</p>}
         {msgs.map(m => <div key={m.id} className={m.role === "user" ? "text-right" : ""}><div className={"inline-block max-w-[90%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-left " + (m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted")}>{m.content}</div></div>)}
         {card && <div className="space-y-2 rounded-lg border p-3 text-xs"><p className="text-sm font-semibold">Connect: {card.title}</p>{card.generic ? <>{card.apiKey ? <p>This app uses an API key. You will paste it on a secure page of our integration provider, never in this chat. The key is stored by the provider and used only for your workflows.</p> : null}<p>This app signs in through our integration provider. Its permissions cannot be narrowed ahead of time: the app's own screen shows exactly what it asks for, and you can decline there.</p><label className="flex items-start gap-2"><input type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)} /><span>I understand and will review the permissions on the next screen.</span></label></> : <><p>This will allow:</p><ul className="list-disc pl-4">{card.grants.map(g => <li key={g.label}>{g.label}</li>)}</ul><p>It will not allow: {card.doesNotGrant.join(", ")}.</p><p className="text-muted-foreground">{card.consentHint}</p></>}<div className="flex gap-2"><Button size="sm" disabled={!!card.generic && !ack} onClick={() => void startConnect()}>Connect</Button><Button size="sm" variant="outline" onClick={() => void checkConnected()}>I connected it</Button></div>{cardNote && <p role="status">{cardNote}</p>}</div>}
         {busy && <p className="animate-pulse text-xs text-muted-foreground">Thinking...</p>}
