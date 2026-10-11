@@ -1094,14 +1094,15 @@ function ToolbarActions({
       {/* Add Step - Mobile Vertical */}
       <ButtonGroup className="flex lg:hidden" orientation="vertical">
         <Button
-          className="border hover:bg-black/5 disabled:opacity-100 dark:hover:bg-white/5 disabled:[&>svg]:text-muted-foreground"
+          className="h-9 gap-2 border px-3 hover:bg-black/5 disabled:opacity-100 dark:hover:bg-white/5 disabled:[&>svg]:text-muted-foreground"
           disabled={state.isGenerating}
           onClick={handleAddStep}
-          size="icon"
+          size="sm"
           title="Add Step"
           variant="secondary"
         >
           <Plus className="size-4" />
+          <span>Add step</span>
         </Button>
       </ButtonGroup>
 
@@ -1133,14 +1134,15 @@ function ToolbarActions({
       {/* Add Step - Desktop Horizontal */}
       <ButtonGroup className="hidden lg:flex" orientation="horizontal">
         <Button
-          className="border hover:bg-black/5 disabled:opacity-100 dark:hover:bg-white/5 disabled:[&>svg]:text-muted-foreground"
+          className="h-9 gap-2 border px-3 hover:bg-black/5 disabled:opacity-100 dark:hover:bg-white/5 disabled:[&>svg]:text-muted-foreground"
           disabled={state.isGenerating}
           onClick={handleAddStep}
-          size="icon"
+          size="sm"
           title="Add Step"
           variant="secondary"
         >
           <Plus className="size-4" />
+          <span>Add step</span>
         </Button>
       </ButtonGroup>
 
