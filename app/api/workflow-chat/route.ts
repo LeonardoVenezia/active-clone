@@ -1,3 +1,4 @@
+import { FREE_MODELS } from "@/lib/free-models";
 import { describeToolkit } from "@/lib/connectors/generic";
 import { PRESETS } from "@/lib/connectors/presets";
 import OpenAI from "openai";
@@ -40,12 +41,12 @@ export async function POST(r: Request) {
     if ((await recentUserMessages(id)) >= 60) return NextResponse.json({ error: "You've sent a lot of messages this hour. Try again in a bit." }, { status: 429 });
     const past = await history(id, b.workflowId, 20);
     await append(id, b.workflowId, "user", text);
-    const client = new OpenAI({ apiKey: key, baseURL: "https://openrouter.ai/api/v1", maxRetries: 0, timeout: 14_000 });
+    const client = new OpenAI({ apiKey: key, baseURL: "https://openrouter.ai/api/v1", maxRetries: 0, timeout: 12_000 });
     const messages = [{ role: "system" as const, content: `${SYSTEM}\n\n${describe(b.snapshot)}` }, ...past.map(m => ({ role: m.role, content: m.content })), { role: "user" as const, content: text }];
     let reply = "";
-    for (let i = 0; i < 3 && !reply; i++) {
-      if (i > 0) await new Promise(r => setTimeout(r, 1500 * i));
-      try { reply = (await client.chat.completions.create({ model: "openrouter/free", max_tokens: 400, messages })).choices[0]?.message?.content?.trim() || ""; } catch { /* retry once */ }
+    for (const model of FREE_MODELS) {
+      if (reply) break;
+      try { reply = (await client.chat.completions.create({ model, max_tokens: 500, messages })).choices[0]?.message?.content?.trim() || ""; } catch { /* next model */ }
     }
     if (!reply) return NextResponse.json({ error: "The free AI model didn't answer (it may be busy). Your message was kept; send it again in a moment." }, { status: 502 });
     if (/\[\[BUILD:\s*one plain sentence|Composio toolkit slug in lowercase|one extra final line/i.test(reply)) reply = "I got confused there. Could you say that again in one sentence?";
