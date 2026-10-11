@@ -31,7 +31,7 @@ export async function discoverComposio(input: CatalogInput) {
   if (input.catalog && !["toolkits", "hackernews", "tools"].includes(input.catalog)) throw new Error("Unsupported catalog.");
   const toolkit = String(input.toolkit ?? "").trim().toLowerCase();
   if (toolkitTools && !/^[a-z0-9_]{1,80}$/.test(toolkit)) throw new Error("Choose a valid Composio app first.");
-  const params = new URLSearchParams({ limit: toolkitTools ? "1000" : "20" });
+  const params = new URLSearchParams({ limit: toolkitTools ? "100" : "20" });
   if (hackerNewsTools) {
     params.set("toolkit_slug", "hackernews"); params.set("toolkit_versions", VERSION);
     params.set("tool_slugs", ALLOWED.join(","));
@@ -39,11 +39,20 @@ export async function discoverComposio(input: CatalogInput) {
     params.set("toolkit_slug", toolkit); params.set("toolkit_versions", "latest");
   } else if (input.search) params.set("search", String(input.search).slice(0, 100));
   const result = await request(`/${hackerNewsTools || toolkitTools ? "tools" : "toolkits"}?${params}`);
-  const items = (Array.isArray(result.items) ? result.items : []).slice(0, 20).map((x: Record<string, unknown>) => ({
+  let rawItems: Record<string, unknown>[] = Array.isArray(result.items) ? result.items : [];
+  let cursor: string | null = typeof result.next_cursor === "string" ? result.next_cursor : null;
+  // Read bounded pages so larger toolkits do not silently omit valid actions.
+  for (let page = 1; toolkitTools && cursor && page < 5; page++) {
+    const nextParams = new URLSearchParams({ limit: "100", toolkit_slug: toolkit, toolkit_versions: "latest", cursor });
+    const next = await request(`/tools?${nextParams}`);
+    rawItems = rawItems.concat(Array.isArray(next.items) ? next.items : []);
+    cursor = typeof next.next_cursor === "string" ? next.next_cursor : null;
+  }
+  const items = rawItems.slice(0, toolkitTools ? 500 : 20).map((x: Record<string, unknown>) => ({
     slug: x.slug, name: x.name, no_auth: x.no_auth, version: x.version,
     ...((hackerNewsTools || toolkitTools) ? { description: x.description, input_parameters: x.input_parameters, output_parameters: x.output_parameters, tags: x.tags } : { meta: x.meta, auth_schemes: x.auth_schemes }),
   }));
-  return { success: true, items, count: items.length, nextCursor: result.next_cursor ?? null, totalItems: result.total_items ?? null };
+  return { success: true, items, count: items.length, nextCursor: cursor, totalItems: result.total_items ?? null };
 }
 
 export async function discoverComposioStep(input: CatalogInput) {
