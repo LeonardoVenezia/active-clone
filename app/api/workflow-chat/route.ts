@@ -46,7 +46,7 @@ export async function POST(r: Request) {
     let reply = "";
     for (const model of FREE_MODELS) {
       if (reply) break;
-      try { reply = (await client.chat.completions.create({ model, max_tokens: 500, messages })).choices[0]?.message?.content?.trim() || ""; } catch { /* next model */ }
+      try { reply = (await client.chat.completions.create({ model, max_tokens: 500, messages })).choices[0]?.message?.content?.trim() || ""; } catch (e) { console.error("[workflow-chat] model failed", model, (e as { status?: number })?.status, String((e as Error)?.message).slice(0, 200)); }
     }
     if (!reply) return NextResponse.json({ error: "The free AI model didn't answer (it may be busy). Your message was kept; send it again in a moment." }, { status: 502 });
     if (/\[\[BUILD:\s*one plain sentence|Composio toolkit slug in lowercase|one extra final line/i.test(reply)) reply = "I got confused there. Could you say that again in one sentence?";
