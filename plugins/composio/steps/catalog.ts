@@ -24,19 +24,24 @@ async function request(path: string, body?: Record<string, unknown>) {
   return response.json();
 }
 
-type CatalogInput = StepInput & { catalog?: string; search?: string; integrationId?: string };
+type CatalogInput = StepInput & { catalog?: string; search?: string; toolkit?: string; integrationId?: string };
 export async function discoverComposio(input: CatalogInput) {
-  const tools = input.catalog === "hackernews";
-  if (input.catalog && !["toolkits", "hackernews"].includes(input.catalog)) throw new Error("Unsupported catalog.");
-  const params = new URLSearchParams({ limit: "20" });
-  if (tools) {
+  const hackerNewsTools = input.catalog === "hackernews";
+  const toolkitTools = input.catalog === "tools";
+  if (input.catalog && !["toolkits", "hackernews", "tools"].includes(input.catalog)) throw new Error("Unsupported catalog.");
+  const toolkit = String(input.toolkit ?? "").trim().toLowerCase();
+  if (toolkitTools && !/^[a-z0-9_]{1,80}$/.test(toolkit)) throw new Error("Choose a valid Composio app first.");
+  const params = new URLSearchParams({ limit: toolkitTools ? "1000" : "20" });
+  if (hackerNewsTools) {
     params.set("toolkit_slug", "hackernews"); params.set("toolkit_versions", VERSION);
     params.set("tool_slugs", ALLOWED.join(","));
+  } else if (toolkitTools) {
+    params.set("toolkit_slug", toolkit); params.set("toolkit_versions", "latest");
   } else if (input.search) params.set("search", String(input.search).slice(0, 100));
-  const result = await request(`/${tools ? "tools" : "toolkits"}?${params}`);
+  const result = await request(`/${hackerNewsTools || toolkitTools ? "tools" : "toolkits"}?${params}`);
   const items = (Array.isArray(result.items) ? result.items : []).slice(0, 20).map((x: Record<string, unknown>) => ({
     slug: x.slug, name: x.name, no_auth: x.no_auth, version: x.version,
-    ...(tools ? { input_parameters: x.input_parameters, output_parameters: x.output_parameters, tags: x.tags } : { meta: x.meta, auth_schemes: x.auth_schemes }),
+    ...((hackerNewsTools || toolkitTools) ? { description: x.description, input_parameters: x.input_parameters, output_parameters: x.output_parameters, tags: x.tags } : { meta: x.meta, auth_schemes: x.auth_schemes }),
   }));
   return { success: true, items, count: items.length, nextCursor: result.next_cursor ?? null, totalItems: result.total_items ?? null };
 }
