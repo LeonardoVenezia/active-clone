@@ -10,11 +10,12 @@ const plugin: IntegrationPlugin = {
   actions: [
     {
       slug: "discover", label: "Discover Composio Tools", category: "Composio",
-      description: "List available toolkits or inspect Hacker News tool schemas. Does not execute tools.",
+      description: "List available toolkits, inspect a toolkit's real action schemas, or inspect Hacker News actions. Does not execute tools.",
       stepFunction: "discoverComposioStep", stepImportPath: "catalog",
       configFields: [
-        { key: "catalog", label: "Catalog", type: "select", defaultValue: "toolkits", options: [{ value: "toolkits", label: "Toolkits" }, { value: "hackernews", label: "Hacker News tools" }] },
+        { key: "catalog", label: "Catalog", type: "select", defaultValue: "toolkits", options: [{ value: "toolkits", label: "Toolkits" }, { value: "hackernews", label: "Hacker News tools" }, { value: "tools", label: "Actions for one toolkit" }] },
         { key: "search", label: "Search", type: "template-input", placeholder: "hackernews" },
+        { key: "toolkit", label: "Toolkit slug (for actions)", type: "template-input", placeholder: "outlook", showWhen: { field: "catalog", equals: "tools" } },
       ],
       outputFields: [{ field: "items", description: "Toolkit or tool metadata, without credentials" }, { field: "count", description: "Items on this page" }],
     },
