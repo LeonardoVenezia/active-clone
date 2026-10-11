@@ -1,4 +1,4 @@
-import { FREE_MODELS } from "@/lib/free-models";
+import { llmRoutes } from "@/lib/free-models";
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
@@ -337,18 +337,13 @@ Example: If user says "connect node A to node B", output:
 
     // Use the existing OpenAI SDK dependency directly with Chat Completions.
     // A fixed endpoint prevents accidental Gateway/paid provider routing.
-    const provider = new OpenAI({
-      apiKey,
-      baseURL: "https://openrouter.ai/api/v1",
-      maxRetries: 0,
-      timeout: 20_000,
-    });
     async function* textChunks() {
-      for (const model of FREE_MODELS) {
+      for (const route of llmRoutes()) {
         let got = false;
         try {
+          const provider = new OpenAI({ apiKey: route.apiKey, baseURL: route.baseURL, maxRetries: 0, timeout: 15_000 });
           const result = await provider.chat.completions.create({
-            model,
+            model: route.model,
             messages: [
               { role: "system", content: getSystemPrompt() },
               { role: "user", content: userPrompt },
