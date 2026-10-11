@@ -10,14 +10,23 @@ async function api(path: string, body?: Row): Promise<Row> {
   return r.json();
 }
 const SLUG = /^[a-z0-9_]{1,60}$/;
-export type GenericToolkit = { id: string; name: string; description: string; logoUrl: string | null; oauth: boolean; managed: boolean };
+export type GenericToolkit = { id: string; name: string; description: string; logoUrl: string | null; oauth: boolean; managed: boolean; keyScheme: string | null };
 export async function describeToolkit(slug: string): Promise<GenericToolkit | null> {
   if (!SLUG.test(slug)) return null;
   const t = await api(`/toolkits/${encodeURIComponent(slug)}`).catch(() => null);
   if (!t || !t.slug) return null;
   const schemes: string[] = (Array.isArray(t.auth_config_details) ? t.auth_config_details : []).map((d: Row) => String(d.mode ?? "").toUpperCase());
   const managed = t.composio_managed_auth_schemes ? (t.composio_managed_auth_schemes as unknown[]).length > 0 : false;
-  return { id: String(t.slug).toLowerCase(), name: String(t.name ?? slug), description: String(t.meta?.description ?? "").slice(0, 240), logoUrl: typeof t.meta?.logo === "string" ? t.meta.logo : null, oauth: schemes.some(s => s.includes("OAUTH")), managed };
+  const keyScheme = schemes.includes("API_KEY") ? "API_KEY" : schemes.includes("BEARER_TOKEN") ? "BEARER_TOKEN" : null;
+  return { keyScheme, id: String(t.slug).toLowerCase(), name: String(t.name ?? slug), description: String(t.meta?.description ?? "").slice(0, 240), logoUrl: typeof t.meta?.logo === "string" ? t.meta.logo : null, oauth: schemes.some(s => s.includes("OAUTH")), managed };
+}
+async function keyConfigId(slug: string, scheme: string): Promise<string> {
+  const l = await api(`/auth_configs?toolkit_slug=${encodeURIComponent(slug)}&limit=20`);
+  const found = (l.items ?? []).find((c: Row) => c.status === "ENABLED" && c.is_composio_managed !== true && String(c.toolkit?.slug).toLowerCase() === slug && String(c.auth_scheme ?? "").toUpperCase() === scheme);
+  if (found) return String(found.id);
+  const c = await api("/auth_configs", { toolkit: { slug }, auth_config: { type: "use_custom_auth", authScheme: scheme, credentials: {} } });
+  const id = c.auth_config?.id; if (typeof id !== "string") throw new Error("Could not set up this app.");
+  return id;
 }
 async function managedConfigId(slug: string): Promise<string> {
   const l = await api(`/auth_configs?toolkit_slug=${encodeURIComponent(slug)}&is_composio_managed=true&limit=5`);
@@ -29,8 +38,8 @@ async function managedConfigId(slug: string): Promise<string> {
 }
 export async function genericConnect(userId: string, slug: string, callbackUrl: string): Promise<{ redirectUrl: string }> {
   const t = await describeToolkit(slug); if (!t) throw new Error("Unknown app.");
-  if (!t.managed) throw new Error("This app has no managed sign-in. It needs its own OAuth app or an API key, which is not set up yet.");
-  const cfg = await managedConfigId(t.id);
+  if (!t.managed && !t.keyScheme) throw new Error("This app has no managed sign-in or API-key option. It needs its own OAuth app, which is not set up yet.");
+  const cfg = t.managed ? await managedConfigId(t.id) : await keyConfigId(t.id, t.keyScheme as string);
   const l = await api("/connected_accounts/link", { auth_config_id: cfg, user_id: userId, callback_url: callbackUrl, experimental: { account_type: "PRIVATE" } });
   const u = new URL(String(l.redirect_url));
   if (u.protocol !== "https:" || !(u.hostname === "composio.dev" || u.hostname.endsWith(".composio.dev"))) throw new Error("Unexpected consent destination. Connection stopped.");
