@@ -126,7 +126,7 @@ export async function POST(r: Request) {
     }
     const m = reply.match(/\[\[BUILD:\s*([\s\S]{3,600}?)\]\]\s*$/);
     const build = m ? m[1].trim() : null;
-    const shown = m ? reply.slice(0, m.index).trim() || "On it." : reply;
+    const shown = m ? reply.slice(0, m.index).trim() || "Armando el flujo en el lienzo." : reply;
     await append(id, b.workflowId, "assistant", shown);
     return NextResponse.json({ reply: shown, build, connect, autoBuild: !!build && !connect && (explicitBuildIntent || recentlyConfirmedPlan) });
   } catch { return NextResponse.json({ error: "Something went wrong. Your message was kept; try again." }, { status: 503 }); }
