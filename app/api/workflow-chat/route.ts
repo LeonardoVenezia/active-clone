@@ -24,10 +24,18 @@ function describe(s: Snap | undefined) {
   const e = (s?.edges || []).slice(0, 60).map(x => `${String(x.source).slice(0, 24)} -> ${String(x.target).slice(0, 24)}`).join(", ");
   return `Current canvas steps:\n${n}\nConnections between steps: ${e || "none"}`;
 }
-const SYSTEM = `You are Active-clone's friendly workflow assistant for people who may be new to automation. Speak the user's language in plain, short sentences. Help them plan, understand and build workflows on the canvas.
-First understand the desired outcome. Ask one focused question at a time when the trigger, apps, who/what to act on, or result is unclear. Do not guess about important details. Explain what each step does in everyday language and distinguish a draft on the canvas from an activated workflow that will actually run. When the user explicitly asks you to create/build a plan, include the exact [[BUILD: ...]] marker and do not just say “On it.” A short acknowledgment like “ok” alone is not permission to build.
-When the user clearly asks to build or change the canvas, describe the exact plan briefly and end with the exact marker [[BUILD: one plain sentence describing the requested canvas change]]. This marker can trigger the build automatically after the user explicitly asks you to create/build it or confirms the proposed plan. Never claim the change is done before the build succeeds. When an app is required, use the connection-status block below: never ask the user whether they already connected an account. If status is not_connected, include [[CONNECT: toolkit_slug]] using the exact lowercase slug from the status block. If status is needs_attention, explain that the existing connection needs reviewed permissions and include [[CONNECT: toolkit_slug]] to reconnect. If status is connected, do not ask to connect it. If status is pending, say it is still finishing. If status is check_failed, say you could not verify and offer to retry; never include CONNECT. If both connection and build are needed, put CONNECT before the final BUILD marker. Never mention or promise a link, button, or click instruction in prose; only the app can show a connection card. Never tell users to log out. Review permissions with the user before they approve. Never ask for passwords, API keys or verification codes in chat. Do not invent available apps, actions, permissions, run status or results. For Composio apps, use only exact toolkit and action slugs supplied from the live catalog by the canvas builder; never guess an action slug or schema.
-Available canvas actions include the built-in steps described to the workflow builder and Run Composio Action for connected Composio apps. If unsure whether a tool is available, ask instead of pretending.`;
+const SYSTEM = `You are Active-clone's workflow manager. The user is a non-technical owner who does not want to do the work: you run the board, they approve. Speak the user's language in plain, short sentences. Never use jargon.
+GUIDED PROTOCOL - always drive the conversation through these steps, one at a time:
+1. UNDERSTAND: get the trigger (what starts it), the apps involved and the result wanted. Ask ONE short question only when something essential is missing.
+2. CONNECT AND COLLECT: for every app in the request, follow the connection-status block below. Then collect the setup details each step needs BEFORE showing the plan. Ask for every missing detail, one question per message: Google Sheets -> which spreadsheet (name or link) and which columns, or offer to start with a new one; Notion -> which page or database; Slack -> which channel; email -> which address or filter; any other app -> the one or two details its action needs. Never skip this, never invent a detail, never say a step is configured if the user did not give it.
+3. PLAN: when everything is connected and every detail is known, show the plan as a short numbered list that includes the collected details, and end with a yes/no question like "Lo armo asi?".
+4. BUILD: as soon as the user confirms (any form of yes, ok, dale, listo, de acuerdo, or a direct command like creá/armá), end your reply with the exact marker [[BUILD: one plain sentence with the full requested canvas change including the collected details]]. Do not ask again, do not repeat the plan.
+5. AFTER BUILD or for edits ("sacá ese nodo", "cambiá la hoja"): describe the change in one sentence and, when the user asked for a canvas change, end with [[BUILD: ...]] describing exactly that change. You may add, change and remove steps yourself. The user stays the final owner and can undo.
+STRICT RULES:
+- Never announce an intention without acting. Forbidden: "voy a crear", "voy a preparar", "on it", "lo voy a hacer", "I'll build". Either include the [[BUILD: ...]] marker in the same reply, or ask the specific question you still need. Never write a reply that only promises.
+- Never claim the change is done before the build succeeds. Never mention or promise a link, button, or click in prose; only the app shows connection cards.
+- When an app is required, use the connection-status block below: never ask the user whether they already connected an account. If status is not_connected, include [[CONNECT: toolkit_slug]] using the exact lowercase slug from the status block. If status is needs_attention, say the existing connection needs reviewed permissions and include [[CONNECT: toolkit_slug]]. If status is connected, do not ask to connect it. If status is pending, say it is still finishing. If status is check_failed, say you could not verify and offer to retry; never include CONNECT. If both connection and build are needed, put CONNECT first and do not include BUILD until the connection exists.
+- Distinguish a draft on the canvas from an activated workflow that really runs. Never tell users to log out. Never ask for passwords, API keys or verification codes in chat. Do not invent available apps, actions, permissions, run status or results. For Composio apps use only exact toolkit and action slugs supplied by the canvas builder from the live catalog; never guess one. If unsure whether something is possible, say so and offer the closest alternative.`;
 export async function GET(r: Request) {
   const id = await user(r); if (!id) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   const w = new URL(r.url).searchParams.get("workflowId");
@@ -51,7 +59,11 @@ export async function POST(r: Request) {
     const recentIntent = [...past.filter(m => m.role === "user").slice(-2).map(m => m.content), text].join("\n").replace(/\S+@\S+/g, " ");
     const recentAssistantText = past.filter(m => m.role === "assistant").slice(-4).map(m => m.content).join("\n");
     const explicitBuildIntent = /^\s*(?:(?:please|por favor)\s+)?(?:build|create|make it|put it on (?:the )?canvas|do it|go ahead|create it|arm[aá]lo|crea(?:lo|la|r)|hacelo|hazlo)\b/i.test(text) || /\b(?:por favor|please)\s+(?:cre[aá]|arm[aá]|constru[ií]|hac[eé]|build|create|make)/i.test(text) || /\bno\s+(?:veo|ves|est[aá]s|estas)\b[^.?!]{0,60}\b(?:cre|constru|arm|lienzo|canvas)/i.test(text) || /\b(?:cre[aá]lo|cre[aá]la|arm[aá]lo|hacelo|hazlo)\b/i.test(text);
-    const recentlyConfirmedPlan = /\b(?:plan|flow|workflow|flujo|borrador)\b/i.test(recentAssistantText) && /\b(?:yes|yeah|correct|perfect|exactly|that works|sí|si|perfecto|exacto|dale|así)\b/i.test(text);
+    const lastAssistant = (past.filter(m => m.role === "assistant").slice(-1)[0]?.content ?? "").trim();
+    const planShown = /\b(?:plan|flujo|workflow|borrador|pasos?|steps?)\b/i.test(lastAssistant) && (/\n\s*\d+[.)]/.test(lastAssistant) || /\?\s*$/.test(lastAssistant));
+    const asksConfirm = /(?:lo armo|armo|construyo|creo|hago|te parece|de acuerdo|est[aá] bien|as[ií]\s*\?|listo para|confirm|shall i|should i|sound good|ready to|does this)/i.test(lastAssistant.slice(-220)) && /\?\s*$/.test(lastAssistant);
+    const affirmative = /^\s*(?:s[ií]|sip|dale|ok(?:ay|s)?|okey|perfecto|listo|de acuerdo|adelante|confirmo|va|bueno|genial|joya|exacto|correcto|yes|yep|yeah|sure|go|great|that works)\b/i.test(text) && text.length < 160;
+    const recentlyConfirmedPlan = planShown && asksConfirm && affirmative;
     const requestedToolkits = REQUESTED_TOOLKITS.filter(([slug, pattern]) => !!PRESETS[slug] && pattern.test(recentIntent)).map(([slug]) => slug);
     let connectionStatusContext = "No supported connection toolkit was mentioned in the recent user intent.";
     const connectionStatuses: Record<string, "connected" | "pending" | "needs_attention" | "not_connected" | "check_failed"> = {};
@@ -92,7 +104,7 @@ export async function POST(r: Request) {
     if (cm) { const slug = CONNECTOR_SLUG_ALIASES[cm[1].toLowerCase()] ?? cm[1].toLowerCase(); if (PRESETS[slug] && !["not_connected", "needs_attention"].includes(connectionStatuses[slug])) { connect = null; reply = connectionStatuses[slug] === "check_failed" ? "No pude verificar el estado de conexión de esa app. Reintentá en un momento; no hace falta conectarla otra vez todavía." : connectionStatuses[slug] === "pending" ? "La conexión de esa app todavía está terminando." : "La conexión de esa app ya está activa. Podemos seguir sin conectarla otra vez."; } }
     if (!cm && (explicitBuildIntent || recentlyConfirmedPlan)) {
       const instruction = [...past.filter(m => m.role === "assistant").slice(-4).map(m => m.content), text].join("\n").replace(/[\r\n]+/g, " ").slice(-550);
-      reply = `Voy a preparar el borrador en el lienzo.\n[[BUILD: ${instruction}]]`;
+      reply = `Armando el flujo en el lienzo.\n[[BUILD: ${instruction}]]`;
     }
     if (!cm && CONNECT_INTENT.test(reply)) {
       const unchecked = requestedToolkits.find(slug => ["check_failed", "pending"].includes(connectionStatuses[slug]) && REQUESTED_TOOLKITS.find(([id]) => id === slug)?.[1].test(reply));
@@ -108,8 +120,9 @@ export async function POST(r: Request) {
         reply = "La conexión de esa app ya está activa. Podemos seguir sin conectarla otra vez.";
       }
     }
-    if (/\b(?:on it|i(?:'|’)ll (?:do|create|build)\b|i am going to (?:create|build)|voy a (?:hacerlo|crearlo|armarlo|crear|armar|preparar|construir|hacer))\b/i.test(reply) && !/\[\[BUILD:/i.test(reply) && !connect) {
-      reply = "No pude iniciar el borrador todavía. Decime qué flujo querés que arme y lo intento de nuevo.";
+    const promisesAction = /\b(?:on it|i(?:'|’)ll|i will|i am going to|i'm going to|let me|voy a|vamos a|lo voy a|ya mismo|ahora mismo|en un momento|enseguida|en breve|me pongo a)\b[^.?!\n]{0,70}\b(?:crear|armar|preparar|construir|hacer|generar|agregar|a[nñ]adir|configurar|build|create|add|set up|make|prepare|configure|do it)/i.test(reply) || /^\s*(?:on it|ok,? on it)\W*$/i.test(reply);
+    if (promisesAction && !/\[\[BUILD:/i.test(reply) && !connect) {
+      reply = planShown && asksConfirm ? "Para armarlo necesito que me confirmes el plan. ¿Lo armo así?" : "Para armarlo me falta un dato. Contame qué app dispara el flujo y qué querés que pase, y lo armo.";
     }
     const m = reply.match(/\[\[BUILD:\s*([\s\S]{3,600}?)\]\]\s*$/);
     const build = m ? m[1].trim() : null;
