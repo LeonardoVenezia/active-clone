@@ -50,7 +50,7 @@ export async function POST(r: Request) {
     await append(id, b.workflowId, "user", text);
     const recentIntent = [...past.filter(m => m.role === "user").slice(-2).map(m => m.content), text].join("\n");
     const recentAssistantText = past.filter(m => m.role === "assistant").slice(-4).map(m => m.content).join("\n");
-    const explicitBuildIntent = /^\s*(?:(?:please|por favor)\s+)?(?:build|create|make it|put it on (?:the )?canvas|do it|go ahead|create it|arm[aá]lo|crea(?:lo|la|r)|hacelo|hazlo)\b/i.test(text);
+    const explicitBuildIntent = /^\s*(?:(?:please|por favor)\s+)?(?:build|create|make it|put it on (?:the )?canvas|do it|go ahead|create it|arm[aá]lo|crea(?:lo|la|r)|hacelo|hazlo)\b/i.test(text) || /\b(?:por favor|please)\s+(?:cre[aá]|arm[aá]|constru[ií]|hac[eé]|build|create|make)/i.test(text) || /\bno\s+(?:veo|ves|est[aá]s|estas)\b[^.?!]{0,60}\b(?:cre|constru|arm|lienzo|canvas)/i.test(text) || /\b(?:cre[aá]lo|cre[aá]la|arm[aá]lo|hacelo|hazlo)\b/i.test(text);
     const recentlyConfirmedPlan = /\b(?:plan|flow|workflow|flujo|borrador)\b/i.test(recentAssistantText) && /\b(?:yes|yeah|correct|perfect|exactly|that works|sí|si|perfecto|exacto|dale|así)\b/i.test(text);
     const requestedToolkits = REQUESTED_TOOLKITS.filter(([slug, pattern]) => !!PRESETS[slug] && pattern.test(recentIntent)).map(([slug]) => slug);
     let connectionStatusContext = "No supported connection toolkit was mentioned in the recent user intent.";
@@ -108,7 +108,7 @@ export async function POST(r: Request) {
         reply = "La conexión de esa app ya está activa. Podemos seguir sin conectarla otra vez.";
       }
     }
-    if (/\b(?:on it|i(?:'|’)ll do (?:that|it)|voy a (?:hacerlo|crearlo|armarlo))\b/i.test(reply) && !/\[\[BUILD:/i.test(reply) && !connect) {
+    if (/\b(?:on it|i(?:'|’)ll (?:do|create|build)\b|i am going to (?:create|build)|voy a (?:hacerlo|crearlo|armarlo|crear|armar|preparar|construir|hacer))\b/i.test(reply) && !/\[\[BUILD:/i.test(reply) && !connect) {
       reply = "No pude iniciar el borrador todavía. Decime qué flujo querés que arme y lo intento de nuevo.";
     }
     const m = reply.match(/\[\[BUILD:\s*([\s\S]{3,600}?)\]\]\s*$/);
