@@ -127,7 +127,7 @@ export async function POST(r: Request) {
         connect = { ...preset, generic: false, needsAttention };
         const buildMarker = reply.match(/\[\[BUILD:\s*[\s\S]{3,600}?\]\]\s*$/)?.[0];
         reply = `${needsAttention ? `Hay una conexión de ${preset.title}, pero necesita permisos revisados. Reconéctala para seguir.` : `Para continuar, conecta ${preset.title} con la tarjeta que aparece aquí. Revisa los permisos antes de aceptar.`}${buildMarker ? `\n${buildMarker}` : ""}`;
-      } else if (!form && !/\?/.test(reply) && requestedToolkits.some(slug => connectionStatuses[slug] === "connected" && REQUESTED_TOOLKITS.find(([id]) => id === slug)?.[1].test(reply))) {
+      } else if (false && requestedToolkits.some(slug => connectionStatuses[slug] === "connected" && REQUESTED_TOOLKITS.find(([id]) => id === slug)?.[1].test(reply))) {
         reply = "La conexión de esa app ya está activa. Podemos seguir sin conectarla otra vez.";
       }
     }
