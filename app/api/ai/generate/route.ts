@@ -155,11 +155,20 @@ export async function POST(request: Request) {
     if (!prompt) return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     if (!llmRoutes().length) return NextResponse.json({ error: "AI API key not configured on server." }, { status: 500 });
     let composioCatalog = "";
-    const requestedToolkits = ["outlook", "gmail", "slack", "notion", "airtable", "google_sheets", "google_drive", "github", "linear", "stripe", "hubspot", "jira", "hackernews"];
-    if (/\b(composio|outlook|gmail|email|mail|slack|notion|airtable|sheets|drive|github|linear|stripe|hubspot|jira|hacker\s*news)\b/i.test(String(prompt))) {
+    const toolkitPatterns: Record<string, RegExp> = { outlook: /outlook|hotmail|microsoft/i, gmail: /gmail|e-?mail|mail/i, slack: /slack/i, notion: /notion/i, airtable: /airtable/i, googlesheets: /sheets|spreadsheet|planilla/i, googledrive: /drive/i, github: /github/i, linear: /linear/i, stripe: /stripe/i, hubspot: /hubspot/i, jira: /jira/i, hackernews: /hacker\s*news/i };
+    const promptText = String(prompt);
+    const requestedToolkits = Object.keys(toolkitPatterns).filter(k => toolkitPatterns[k].test(promptText)).slice(0, 4);
+    if (requestedToolkits.length) {
       const results = await Promise.all(requestedToolkits.map(async toolkit => { try { return { toolkit, result: await discoverComposio({ catalog: "tools", toolkit }) }; } catch (error) { console.error("[ai-generate] Composio catalog lookup failed", toolkit, error instanceof Error ? error.message : "unknown"); return null; } }));
-      const actions = results.flatMap(entry => entry?.result?.items?.map((tool: Record<string, unknown>) => ({ toolkit: entry.toolkit, slug: tool.slug, name: tool.name, description: tool.description, input_parameters: tool.input_parameters })) ?? []);
-      composioCatalog = actions.length ? `LIVE COMPOSIO ACTION CATALOG (exact names and schemas):\n${JSON.stringify(actions)}` : "No live Composio action catalog was available. Do not invent Composio actions.";
+      const compact = (tool: Record<string, unknown>, toolkit: string) => {
+        const params = (tool.input_parameters ?? {}) as { properties?: Record<string, unknown>; required?: string[] };
+        return { toolkit, slug: tool.slug, name: tool.name, description: String(tool.description ?? "").slice(0, 120), required: params.required ?? [], params: Object.keys(params.properties ?? {}).slice(0, 12) };
+      };
+      let actions = results.flatMap(entry => entry?.result?.items?.map((tool: Record<string, unknown>) => compact(tool, entry.toolkit)) ?? []);
+      let json = JSON.stringify(actions);
+      while (json.length > 40000 && actions.length > 1) { actions = actions.slice(0, Math.floor(actions.length * 0.8)); json = JSON.stringify(actions); }
+      console.info("[ai-generate] catalog size", { toolkits: requestedToolkits, actions: actions.length, chars: json.length });
+      composioCatalog = actions.length ? `LIVE COMPOSIO ACTION CATALOG (exact slugs; use only these):\n${json}` : "No live Composio action catalog was available. Do not invent Composio actions.";
     }
     let userPrompt = prompt;
     if (existingWorkflow) {
