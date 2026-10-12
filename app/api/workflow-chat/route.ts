@@ -118,3 +118,6 @@ export async function POST(r: Request) {
     return NextResponse.json({ reply: shown, build, connect });
   } catch { return NextResponse.json({ error: "Something went wrong. Your message was kept; try again." }, { status: 503 }); }
 }
+
+
+// email addresses are stripped before app detection
