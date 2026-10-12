@@ -48,7 +48,7 @@ export async function POST(r: Request) {
     if ((await recentUserMessages(id)) >= 60) return NextResponse.json({ error: "You've sent a lot of messages this hour. Try again in a bit." }, { status: 429 });
     const past = await history(id, b.workflowId, 20);
     await append(id, b.workflowId, "user", text);
-    const recentIntent = [...past.filter(m => m.role === "user").slice(-2).map(m => m.content), text].join("\n");
+    const recentIntent = [...past.filter(m => m.role === "user").slice(-2).map(m => m.content), text].join("\n").replace(/\S+@\S+/g, " ");
     const recentAssistantText = past.filter(m => m.role === "assistant").slice(-4).map(m => m.content).join("\n");
     const explicitBuildIntent = /^\s*(?:(?:please|por favor)\s+)?(?:build|create|make it|put it on (?:the )?canvas|do it|go ahead|create it|arm[aá]lo|crea(?:lo|la|r)|hacelo|hazlo)\b/i.test(text) || /\b(?:por favor|please)\s+(?:cre[aá]|arm[aá]|constru[ií]|hac[eé]|build|create|make)/i.test(text) || /\bno\s+(?:veo|ves|est[aá]s|estas)\b[^.?!]{0,60}\b(?:cre|constru|arm|lienzo|canvas)/i.test(text) || /\b(?:cre[aá]lo|cre[aá]la|arm[aá]lo|hacelo|hazlo)\b/i.test(text);
     const recentlyConfirmedPlan = /\b(?:plan|flow|workflow|flujo|borrador)\b/i.test(recentAssistantText) && /\b(?:yes|yeah|correct|perfect|exactly|that works|sí|si|perfecto|exacto|dale|así)\b/i.test(text);
