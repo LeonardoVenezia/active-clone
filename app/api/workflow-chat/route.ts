@@ -31,6 +31,8 @@ GUIDED PROTOCOL - always drive the conversation through these steps, one at a ti
 3. PLAN: when everything is connected and every detail is known, show the plan as a short numbered list that includes the collected details, and end with a yes/no question like "Lo armo asi?".
 4. BUILD: as soon as the user confirms (any form of yes, ok, dale, listo, de acuerdo, or a direct command like creá/armá), end your reply with the exact marker [[BUILD: one plain sentence with the full requested canvas change including the collected details]]. Do not ask again, do not repeat the plan.
 5. AFTER BUILD or for edits ("sacá ese nodo", "cambiá la hoja"): describe the change in one sentence and, when the user asked for a canvas change, end with [[BUILD: ...]] describing exactly that change. You may add, change and remove steps yourself. The user stays the final owner and can undo.
+DETAIL FORMS: when you need 1 to 4 concrete setup details (spreadsheet name or link, Notion page, Slack channel, folder), do not ask in plain text. Write one short sentence of context and end with the marker [[FORM: short title | field label | field label | create]] where each field label is what the user must fill in; add the final token "create" only when the app can create that resource for them (for example a new spreadsheet), which gives the user a "create it for me" option. Never combine FORM with BUILD or CONNECT in the same reply.
+EDITS: when the user asks to remove, rename, move or change a step ("sacá ese nodo", "cambiá la hoja"), end with [[BUILD: ...]] describing exactly that edit. If it is unclear which step they mean, ask which one by its name. You are in charge of the board: act on it, the user can undo.
 STRICT RULES:
 - Never announce an intention without acting. Forbidden: "voy a crear", "voy a preparar", "on it", "lo voy a hacer", "I'll build". Either include the [[BUILD: ...]] marker in the same reply, or ask the specific question you still need. Never write a reply that only promises.
 - Never claim the change is done before the build succeeds. Never mention or promise a link, button, or click in prose; only the app shows connection cards.
@@ -90,6 +92,15 @@ export async function POST(r: Request) {
     if (!reply) return NextResponse.json({ error: "The free AI model didn't answer (it may be busy). Your message was kept; send it again in a moment." }, { status: 502 });
     if (/\[\[BUILD:\s*one plain sentence|Composio toolkit slug in lowercase|one extra final line/i.test(reply)) reply = "I got confused there. Could you say that again in one sentence?";
     reply = reply.replace(/<\|[^|>]{1,40}\|>(\s*\[\s*\])?/g, "").trim();
+    let form: { title: string; fields: { key: string; label: string }[]; offerCreate: boolean } | null = null;
+    const fm = reply.match(/\[\[FORM:\s*([^\]]{3,400})\]\]/i);
+    if (fm) {
+      const parts = fm[1].split("|").map(p => p.trim()).filter(Boolean);
+      const offerCreate = parts.length > 2 && /^create$/i.test(parts[parts.length - 1]);
+      const labels = (offerCreate ? parts.slice(1, -1) : parts.slice(1)).slice(0, 4);
+      if (parts.length >= 2 && labels.length) form = { title: parts[0].slice(0, 80), fields: labels.map((l, i) => ({ key: `f${i}`, label: l.slice(0, 80) })), offerCreate };
+      reply = reply.replace(/\s*\[\[FORM:[^\]]*\]\]\s*/gi, "\n").trim() || (form ? form.title : "Necesito un dato.");
+    }
     const cm = reply.match(/\[{1,2}CONNECT\s*[:(=]?\s*(?:slug\s*=\s*)?['"]?([a-z0-9_]{1,40})['"]?\s*\)?\s*\]{1,2}/i);
     let connect: Record<string, unknown> | null = null;
     if (cm) {
@@ -128,7 +139,7 @@ export async function POST(r: Request) {
     const build = m ? m[1].trim() : null;
     const shown = m ? reply.slice(0, m.index).trim() || "Armando el flujo en el lienzo." : reply;
     await append(id, b.workflowId, "assistant", shown);
-    return NextResponse.json({ reply: shown, build, connect, autoBuild: !!build && !connect && (explicitBuildIntent || recentlyConfirmedPlan) });
+    return NextResponse.json({ reply: shown, build, connect, form: connect || build ? null : form, autoBuild: !!build && !connect && (explicitBuildIntent || recentlyConfirmedPlan) });
   } catch { return NextResponse.json({ error: "Something went wrong. Your message was kept; try again." }, { status: 503 }); }
 }
 
