@@ -11,7 +11,6 @@ export function llmRoutes(): LlmRoute[] {
   return [
     ...gm,
     ...o("google/gemma-4-31b-it:free"),
-    ...g("llama-3.3-70b-versatile"),
     ...g("openai/gpt-oss-120b"),
     ...o("nvidia/nemotron-3-super-120b-a12b:free"),
     ...o("openrouter/free"),
