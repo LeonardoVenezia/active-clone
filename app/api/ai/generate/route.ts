@@ -158,7 +158,7 @@ export async function POST(request: Request) {
     const toolkitPatterns: Record<string, RegExp> = { outlook: /outlook|hotmail|microsoft/i, gmail: /gmail|e-?mail|mail/i, slack: /slack/i, notion: /notion/i, airtable: /airtable/i, googlesheets: /sheets|spreadsheet|planilla/i, googledrive: /drive/i, github: /github/i, linear: /linear/i, stripe: /stripe/i, hubspot: /hubspot/i, jira: /jira/i, hackernews: /hacker\s*news/i };
     const promptText = String(prompt);
     const requestedToolkits = Object.keys(toolkitPatterns).filter(k => toolkitPatterns[k].test(promptText)).slice(0, 4);
-    if (requestedToolkits.length) {
+    if (requestedToolkits.length && !/REAL COMPOSIO ACTIONS/.test(promptText)) {
       const results = await Promise.all(requestedToolkits.map(async toolkit => { try { return { toolkit, result: await discoverComposio({ catalog: "tools", toolkit }) }; } catch (error) { console.error("[ai-generate] Composio catalog lookup failed", toolkit, error instanceof Error ? error.message : "unknown"); return null; } }));
       const compact = (tool: Record<string, unknown>, toolkit: string) => {
         const params = (tool.input_parameters ?? {}) as { properties?: Record<string, unknown>; required?: string[] };
