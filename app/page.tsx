@@ -97,9 +97,11 @@ const Home = () => {
           const existing = await api.workflow.getAll();
           const blank = existing.find(
             (w: { name: string; nodes?: unknown[]; edges?: unknown[] }) =>
-              w.name === "Untitled Workflow" &&
-              (w.nodes?.length ?? 0) <= 1 &&
-              (w.edges?.length ?? 0) === 0
+              /^Untitled( Workflow| \d+)?$/.test(w.name) &&
+              Array.isArray(w.nodes) &&
+              w.nodes.length === 1 &&
+              Array.isArray(w.edges) &&
+              w.edges.length === 0
           );
           if (blank) {
             sessionStorage.setItem("animate-sidebar", "true");
