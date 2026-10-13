@@ -33,7 +33,7 @@ function createDefaultTriggerNode() {
 
 const Home = () => {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, isPending } = useSession();
   const nodes = useAtomValue(nodesAtom);
   const edges = useAtomValue(edgesAtom);
   const setNodes = useSetAtom(nodesAtom);
@@ -75,6 +75,11 @@ const Home = () => {
   // Create workflow when first real node is added
   useEffect(() => {
     const createWorkflowAndRedirect = async () => {
+      // Wait for the session to load so we never replace a real login
+      // with an anonymous one.
+      if (isPending) {
+        return;
+      }
       // Filter out the placeholder "add" node
       const realNodes = nodes.filter((node) => node.type !== "add");
 
@@ -128,7 +133,7 @@ const Home = () => {
     };
 
     createWorkflowAndRedirect();
-  }, [nodes, edges, router, ensureSession, setIsTransitioningFromHomepage]);
+  }, [nodes, edges, router, ensureSession, setIsTransitioningFromHomepage, isPending]);
 
   // Canvas and toolbar are rendered by PersistentCanvas in the layout
   return null;
