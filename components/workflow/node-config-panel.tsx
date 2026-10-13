@@ -44,7 +44,7 @@ import {
   propertiesPanelActiveTabAtom,
   selectedEdgeAtom,
   selectedNodeAtom,
-  showClearDialogAtom,
+  clearWorkflowAtom,
   updateNodeDataAtom,
 } from "@/lib/workflow-store";
 import { findActionById } from "@/plugins";
@@ -158,7 +158,8 @@ export const PanelInner = () => {
   const deleteNode = useSetAtom(deleteNodeAtom);
   const deleteEdge = useSetAtom(deleteEdgeAtom);
   const deleteSelectedItems = useSetAtom(deleteSelectedItemsAtom);
-  const setShowClearDialog = useSetAtom(showClearDialogAtom);
+  const clearWorkflow = useSetAtom(clearWorkflowAtom);
+  const [showClearWorkflowAlert, setShowClearWorkflowAlert] = useState(false);
   const [showDeleteWorkflowAlert, setShowDeleteWorkflowAlert] =
     useState(false);
   const [isDeletingWorkflow, setIsDeletingWorkflow] = useState(false);
@@ -641,7 +642,7 @@ export const PanelInner = () => {
                 <div className="flex items-center gap-2 pt-4">
                   <Button
                     className="text-muted-foreground"
-                    onClick={() => setShowClearDialog(true)}
+                    onClick={() => setShowClearWorkflowAlert(true)}
                     size="sm"
                     variant="ghost"
                   >
@@ -786,6 +787,31 @@ export const PanelInner = () => {
               }}
             >
               {isDeletingWorkflow ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        onOpenChange={setShowClearWorkflowAlert}
+        open={showClearWorkflowAlert}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear workflow</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove all steps and connections from this workflow? This cannot
+              be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                clearWorkflow();
+                setShowClearWorkflowAlert(false);
+              }}
+            >
+              Clear
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
