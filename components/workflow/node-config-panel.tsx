@@ -479,6 +479,26 @@ export const PanelInner = () => {
     }
   };
 
+  const handleClearWorkflow = async () => {
+    setShowClearWorkflowAlert(false);
+    // Save the empty state first: the page reloads the saved workflow
+    // whenever the canvas becomes empty, which would undo the clear.
+    if (currentWorkflowId) {
+      try {
+        await api.workflow.update(currentWorkflowId, {
+          name: currentWorkflowName,
+          nodes: [],
+          edges: [],
+        });
+      } catch (error) {
+        console.error("Failed to clear workflow:", error);
+        toast.error("Failed to clear workflow. Please try again.");
+        return;
+      }
+    }
+    clearWorkflow();
+  };
+
   const handleRefreshRuns = async () => {
     setIsRefreshing(true);
     try {
@@ -806,10 +826,7 @@ export const PanelInner = () => {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                clearWorkflow();
-                setShowClearWorkflowAlert(false);
-              }}
+              onClick={handleClearWorkflow}
             >
               Clear
             </AlertDialogAction>
