@@ -45,7 +45,6 @@ import {
   selectedEdgeAtom,
   selectedNodeAtom,
   showClearDialogAtom,
-  showDeleteDialogAtom,
   updateNodeDataAtom,
 } from "@/lib/workflow-store";
 import { findActionById } from "@/plugins";
@@ -160,7 +159,9 @@ export const PanelInner = () => {
   const deleteEdge = useSetAtom(deleteEdgeAtom);
   const deleteSelectedItems = useSetAtom(deleteSelectedItemsAtom);
   const setShowClearDialog = useSetAtom(showClearDialogAtom);
-  const setShowDeleteDialog = useSetAtom(showDeleteDialogAtom);
+  const [showDeleteWorkflowAlert, setShowDeleteWorkflowAlert] =
+    useState(false);
+  const [isDeletingWorkflow, setIsDeletingWorkflow] = useState(false);
   const clearNodeStatuses = useSetAtom(clearNodeStatusesAtom);
   const setPendingIntegrationNodes = useSetAtom(pendingIntegrationNodesAtom);
   const [newlyCreatedNodeId, setNewlyCreatedNodeId] = useAtom(
@@ -458,6 +459,25 @@ export const PanelInner = () => {
     }
   };
 
+  const handleDeleteWorkflow = async () => {
+    if (!currentWorkflowId) {
+      return;
+    }
+    setIsDeletingWorkflow(true);
+    try {
+      // Runs reference the workflow, so remove them first
+      await api.workflow.deleteExecutions(currentWorkflowId);
+      await api.workflow.delete(currentWorkflowId);
+      toast.success("Workflow deleted");
+      window.location.href = "/flows";
+    } catch (error) {
+      console.error("Failed to delete workflow:", error);
+      toast.error("Failed to delete workflow. Please try again.");
+      setIsDeletingWorkflow(false);
+      setShowDeleteWorkflowAlert(false);
+    }
+  };
+
   const handleRefreshRuns = async () => {
     setIsRefreshing(true);
     try {
@@ -630,7 +650,7 @@ export const PanelInner = () => {
                   </Button>
                   <Button
                     className="text-muted-foreground"
-                    onClick={() => setShowDeleteDialog(true)}
+                    onClick={() => setShowDeleteWorkflowAlert(true)}
                     size="sm"
                     variant="ghost"
                   >
@@ -1060,6 +1080,34 @@ export const PanelInner = () => {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        onOpenChange={setShowDeleteWorkflowAlert}
+        open={showDeleteWorkflowAlert}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete workflow</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete "{currentWorkflowName}" and its run history? This cannot
+              be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingWorkflow}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeletingWorkflow}
+              onClick={(e) => {
+                e.preventDefault();
+                handleDeleteWorkflow();
+              }}
+            >
+              {isDeletingWorkflow ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
