@@ -76,6 +76,27 @@ export function PasswordRecovery({ reset = false }: { reset?: boolean }) {
     }
   }
 
+  const done = completed || (!reset && !!message);
+  if (done) {
+    return (
+      <main className="pointer-events-auto relative z-20 mx-auto mt-20 w-full max-w-md rounded-xl border bg-background p-6 shadow-lg">
+        <h1 className="text-2xl font-semibold">
+          {reset ? "Password updated" : "Check your email"}
+        </h1>
+        <p role="status" className="mt-2 text-sm text-muted-foreground">
+          {reset
+            ? "Your password was changed. Sign in with your new password."
+            : `If an account exists for ${email}, we sent a link to reset your password. It may take a minute to arrive.`}
+        </p>
+        <div className="mt-6">
+          <Link href="/" className="underline underline-offset-4">
+            {reset ? "Go to Active-clone and sign in" : "Back to Active-clone"}
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="pointer-events-auto relative z-20 mx-auto mt-20 w-full max-w-md rounded-xl border bg-background p-6 shadow-lg">
       <h1 className="text-2xl font-semibold">
