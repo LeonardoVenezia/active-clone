@@ -13,7 +13,6 @@ import {
   hasSidebarBeenShownAtom,
   isTransitioningFromHomepageAtom,
   nodesAtom,
-  type WorkflowNode,
 } from "@/lib/workflow-store";
 
 // Helper function to create a default trigger node
@@ -65,32 +64,13 @@ const Home = () => {
     }
   }, [session]);
 
-  // Handler to add the first node (replaces the "add" node)
-  const handleAddNode = useCallback(() => {
-    const newNode: WorkflowNode = createDefaultTriggerNode();
-    // Replace all nodes (removes the "add" node)
-    setNodes([newNode]);
-  }, [setNodes]);
-
-  // Initialize with a temporary "add" node on mount
+  // Initialize with a ready trigger node so no click is needed to start.
   useEffect(() => {
-    const addNodePlaceholder: WorkflowNode = {
-      id: "add-node-placeholder",
-      type: "add",
-      position: { x: 0, y: 0 },
-      data: {
-        label: "",
-        type: "add",
-        onClick: handleAddNode,
-      },
-      draggable: false,
-      selectable: false,
-    };
-    setNodes([addNodePlaceholder]);
+    setNodes([createDefaultTriggerNode()]);
     setEdges([]);
     setCurrentWorkflowName("New Workflow");
     hasCreatedWorkflowRef.current = false;
-  }, [setNodes, setEdges, setCurrentWorkflowName, handleAddNode]);
+  }, [setNodes, setEdges, setCurrentWorkflowName]);
 
   // Create workflow when first real node is added
   useEffect(() => {
@@ -106,6 +86,25 @@ const Home = () => {
 
       try {
         await ensureSession();
+
+        // Reuse an existing blank workflow instead of piling up new ones
+        try {
+          const existing = await api.workflow.getAll();
+          const blank = existing.find(
+            (w: { name: string; nodes?: unknown[]; edges?: unknown[] }) =>
+              w.name === "Untitled Workflow" &&
+              (w.nodes?.length ?? 0) <= 1 &&
+              (w.edges?.length ?? 0) === 0
+          );
+          if (blank) {
+            sessionStorage.setItem("animate-sidebar", "true");
+            setIsTransitioningFromHomepage(true);
+            router.replace(`/workflows/${blank.id}`);
+            return;
+          }
+        } catch {
+          // fall through and create a new workflow
+        }
 
         // Create workflow with all real nodes
         const newWorkflow = await api.workflow.create({
