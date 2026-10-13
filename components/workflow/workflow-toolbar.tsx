@@ -1393,6 +1393,77 @@ function DuplicateButton({
   );
 }
 
+// Inline-editable workflow title (click, type, Enter or click away to save)
+function InlineWorkflowName({
+  workflowId,
+  name,
+  editable,
+}: {
+  workflowId: string;
+  name: string;
+  editable: boolean;
+}) {
+  const [value, setValue] = useState(name);
+  const [focused, setFocused] = useState(false);
+  const nodes = useAtomValue(nodesAtom);
+  const edges = useAtomValue(edgesAtom);
+  const setWorkflowName = useSetAtom(currentWorkflowNameAtom);
+  const cancelRef = useRef(false);
+
+  useEffect(() => {
+    if (!focused) {
+      setValue(name);
+    }
+  }, [name, focused]);
+
+  const commit = async () => {
+    setFocused(false);
+    const next = value.trim();
+    if (cancelRef.current) {
+      cancelRef.current = false;
+      setValue(name);
+      return;
+    }
+    if (!next || next === name) {
+      setValue(name);
+      return;
+    }
+    setWorkflowName(next);
+    try {
+      await api.workflow.update(workflowId, { name: next, nodes, edges });
+    } catch (error) {
+      console.error("Failed to rename workflow:", error);
+      toast.error("Could not rename the workflow");
+    }
+  };
+
+  return (
+    <input
+      aria-label="Workflow name"
+      className="min-w-[6rem] max-w-[14rem] truncate rounded bg-transparent px-1 py-0.5 font-medium text-sm outline-none hover:bg-black/5 focus:bg-background focus:ring-1 focus:ring-ring disabled:cursor-default dark:hover:bg-white/5"
+      disabled={!editable}
+      maxLength={100}
+      onBlur={commit}
+      onChange={(e) => setValue(e.target.value)}
+      onFocus={(e) => {
+        setFocused(true);
+        e.currentTarget.select();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.currentTarget.blur();
+        } else if (e.key === "Escape") {
+          cancelRef.current = true;
+          e.currentTarget.blur();
+        }
+      }}
+      size={Math.max(value.length, 8)}
+      title="Click to rename"
+      value={value}
+    />
+  );
+}
+
 // Workflow Menu Component
 function WorkflowMenuComponent({
   workflowId,
@@ -1407,18 +1478,25 @@ function WorkflowMenuComponent({
     <div className="flex flex-col gap-1">
       <div className="flex h-9 max-w-[160px] items-center overflow-hidden rounded-md border bg-secondary text-secondary-foreground sm:max-w-none">
         <DropdownMenu onOpenChange={(open) => open && actions.loadWorkflows()}>
-          <DropdownMenuTrigger className="flex h-full cursor-pointer items-center gap-2 px-3 font-medium text-sm transition-all hover:bg-black/5 dark:hover:bg-white/5">
+          <div className="flex h-full items-center gap-2 pl-3">
             <WorkflowIcon className="size-4 shrink-0" />
-            <p className="truncate font-medium text-sm">
-              {workflowId ? (
-                state.workflowName
-              ) : (
-                <>
-                  <span className="sm:hidden">New</span>
-                  <span className="hidden sm:inline">New Workflow</span>
-                </>
-              )}
-            </p>
+            {workflowId ? (
+              <InlineWorkflowName
+                editable={state.isOwner}
+                name={state.workflowName}
+                workflowId={workflowId}
+              />
+            ) : (
+              <p className="truncate font-medium text-sm">
+                <span className="sm:hidden">New</span>
+                <span className="hidden sm:inline">New Workflow</span>
+              </p>
+            )}
+          </div>
+          <DropdownMenuTrigger
+            aria-label="Switch workflow"
+            className="flex h-full cursor-pointer items-center px-2 transition-all hover:bg-black/5 dark:hover:bg-white/5"
+          >
             <ChevronDown className="size-3 shrink-0 opacity-50" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-64">
