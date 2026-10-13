@@ -762,6 +762,34 @@ export const PanelInner = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+      <AlertDialog
+        onOpenChange={setShowDeleteWorkflowAlert}
+        open={showDeleteWorkflowAlert}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete workflow</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete "{currentWorkflowName}" and its run history? This cannot
+              be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingWorkflow}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeletingWorkflow}
+              onClick={(e) => {
+                e.preventDefault();
+                handleDeleteWorkflow();
+              }}
+            >
+              {isDeletingWorkflow ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </>
     );
   }
@@ -1080,34 +1108,6 @@ export const PanelInner = () => {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog
-        onOpenChange={setShowDeleteWorkflowAlert}
-        open={showDeleteWorkflowAlert}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete workflow</AlertDialogTitle>
-            <AlertDialogDescription>
-              Delete "{currentWorkflowName}" and its run history? This cannot
-              be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeletingWorkflow}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isDeletingWorkflow}
-              onClick={(e) => {
-                e.preventDefault();
-                handleDeleteWorkflow();
-              }}
-            >
-              {isDeletingWorkflow ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
