@@ -169,6 +169,11 @@ export const auth = betterAuth({
       await sendAccountVerificationEmail(user.email, url);
     },
   },
+  session: {
+    // 30 days, refreshed once a day while in use
+    expiresIn: 60 * 60 * 24 * 30,
+    updateAge: 60 * 60 * 24,
+  },
   socialProviders: {
     github: {
       clientId: process.env.GITHUB_CLIENT_ID || "",
