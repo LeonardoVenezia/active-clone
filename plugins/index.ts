@@ -31,6 +31,7 @@ import "./stripe";
 import "./superagent";
 import "./tiendanube";
 import "./v0";
+import "./vtex";
 import "./webflow";
 import "./whatsapp";
 
