@@ -522,7 +522,7 @@ export function WorkflowCanvas() {
 
   return (
     <div
-      className="relative flex h-full bg-background"
+      className="relative h-full bg-background"
       data-testid="workflow-canvas"
       style={{
         opacity: isCanvasReady ? 1 : 0,
@@ -532,8 +532,6 @@ export function WorkflowCanvas() {
           : "opacity 300ms",
       }}
     >
-      {currentWorkflowId && <ChatPanel workflowId={currentWorkflowId} />}
-      <div className="relative h-full min-w-0 flex-1">
       {/* Toolbar */}
       <div className="pointer-events-auto">
         <WorkflowToolbar workflowId={currentWorkflowId ?? undefined} />
@@ -575,12 +573,14 @@ export function WorkflowCanvas() {
         )}
       </Canvas>
 
+      {/* AI Prompt */}
+      {currentWorkflowId && <ChatPanel workflowId={currentWorkflowId} />}
+
       {/* Context Menu */}
       <WorkflowContextMenu
         menuState={contextMenuState}
         onClose={closeContextMenu}
       />
-      </div>
     </div>
   );
 }
