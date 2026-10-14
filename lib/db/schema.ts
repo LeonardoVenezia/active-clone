@@ -84,6 +84,9 @@ export const workflows = pgTable("workflows", {
     .notNull()
     .default("private")
     .$type<WorkflowVisibility>(),
+  // Listening for integration events (e.g. a Mercado Pago payment).
+  // Off by default; only workflows with this on are started by events.
+  active: boolean("active").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -190,7 +193,7 @@ export const integrationEvents = pgTable(
     // biome-ignore lint/suspicious/noExplicitAny: JSONB type - provider-normalized payload
     data: jsonb("data").notNull().$type<Record<string, any>>(),
     receivedAt: timestamp("received_at").notNull().defaultNow(),
-    // Set when a workflow run was started for this event (not used yet)
+    // Set when at least one workflow run was started for this event
     processedAt: timestamp("processed_at"),
   },
   (table) => [

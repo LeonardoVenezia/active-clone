@@ -114,6 +114,9 @@ function buildUpdateData(
   if (body.visibility !== undefined) {
     updateData.visibility = body.visibility;
   }
+  if (body.active !== undefined) {
+    updateData.active = body.active;
+  }
 
   return updateData;
 }
@@ -173,6 +176,35 @@ export async function PATCH(
         { error: "Invalid visibility value. Must be 'private' or 'public'" },
         { status: 400 }
       );
+    }
+
+    if (body.active !== undefined && typeof body.active !== "boolean") {
+      return NextResponse.json(
+        { error: "Invalid active value. Must be a boolean" },
+        { status: 400 }
+      );
+    }
+
+    // A workflow can only be turned on if it has a complete integration trigger.
+    if (body.active === true) {
+      const nodesToCheck = (
+        Array.isArray(body.nodes) ? body.nodes : existingWorkflow.nodes
+      ) as Array<{ data?: { type?: string; config?: Record<string, unknown> } }>;
+      const trigger = nodesToCheck.find((n) => n.data?.type === "trigger");
+      const config = trigger?.data?.config;
+      if (
+        config?.triggerType !== "Integration" ||
+        !config.integrationTrigger ||
+        !config.integrationId
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Choose an integration event and a connection in the trigger before turning the workflow on",
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const updateData = buildUpdateData(body);

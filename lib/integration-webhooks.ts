@@ -1,10 +1,21 @@
 import "server-only";
 
+import { and, eq } from "drizzle-orm";
+import { start } from "workflow/api";
 import { db } from "@/lib/db";
-import { getIntegrationById } from "@/lib/db/integrations";
-import { integrationEvents } from "@/lib/db/schema";
-import { getCredentialMapping, getIntegration } from "@/plugins";
+import {
+  getIntegrationById,
+  validateWorkflowIntegrations,
+} from "@/lib/db/integrations";
+import {
+  integrationEvents,
+  workflowExecutions,
+  workflows,
+} from "@/lib/db/schema";
 import type { IntegrationType } from "@/lib/types/integration";
+import { executeWorkflow } from "@/lib/workflow-executor.workflow";
+import type { WorkflowEdge, WorkflowNode } from "@/lib/workflow-store";
+import { getCredentialMapping, getIntegration } from "@/plugins";
 
 const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -14,13 +25,94 @@ export type IntegrationWebhookResult = {
 };
 
 /**
+ * Start every active workflow of the connection's owner whose trigger is
+ * this event from this exact connection. Returns how many runs were started.
+ */
+async function startWorkflowsForEvent(params: {
+  userId: string;
+  integrationId: string;
+  triggerId: string; // "{type}/{slug}"
+  data: Record<string, unknown>;
+}): Promise<number> {
+  const activeWorkflows = await db
+    .select()
+    .from(workflows)
+    .where(
+      and(eq(workflows.userId, params.userId), eq(workflows.active, true))
+    );
+
+  let started = 0;
+  for (const workflow of activeWorkflows) {
+    const nodes = workflow.nodes as WorkflowNode[];
+    const trigger = nodes.find((node) => node.data.type === "trigger");
+    const config = trigger?.data.config;
+    if (
+      config?.triggerType !== "Integration" ||
+      config.integrationTrigger !== params.triggerId ||
+      config.integrationId !== params.integrationId
+    ) {
+      continue;
+    }
+
+    const validation = await validateWorkflowIntegrations(
+      nodes,
+      workflow.userId
+    );
+    if (!validation.valid) {
+      console.error(
+        "[Integration Webhook] Workflow has invalid integration references:",
+        workflow.id
+      );
+      continue;
+    }
+
+    try {
+      const [execution] = await db
+        .insert(workflowExecutions)
+        .values({
+          workflowId: workflow.id,
+          userId: workflow.userId,
+          status: "running",
+          input: params.data,
+        })
+        .returning();
+
+      try {
+        start(executeWorkflow, [
+          {
+            nodes,
+            edges: workflow.edges as WorkflowEdge[],
+            triggerInput: params.data,
+            executionId: execution.id,
+            workflowId: workflow.id,
+          },
+        ]);
+        started += 1;
+      } catch (error) {
+        await db
+          .update(workflowExecutions)
+          .set({
+            status: "error",
+            error: error instanceof Error ? error.message : "Failed to start",
+            completedAt: new Date(),
+          })
+          .where(eq(workflowExecutions.id, execution.id));
+      }
+    } catch (error) {
+      console.error("[Integration Webhook] Could not start workflow:", error);
+    }
+  }
+  return started;
+}
+
+/**
  * Receive a webhook for one integration connection.
  *
  * Flow: find the connection -> verify the provider signature -> normalize the
  * payload into events -> store each event once (retries are dropped).
  *
- * This only records events. Starting workflows from them is a separate step
- * that needs the workflow "active" flag (not built yet), so nothing runs here.
+ * Each new event then starts the owner's workflows that are switched on
+ * ("active"), use this event as trigger, and point at this same connection.
  */
 export async function receiveIntegrationWebhook(
   type: string,
@@ -73,6 +165,7 @@ export async function receiveIntegrationWebhook(
   }
 
   let stored = 0;
+  let started = 0;
   for (const event of events) {
     const inserted = await db
       .insert(integrationEvents)
@@ -86,11 +179,27 @@ export async function receiveIntegrationWebhook(
       })
       .onConflictDoNothing()
       .returning({ id: integrationEvents.id });
-    stored += inserted.length;
+    if (inserted.length === 0) {
+      continue; // retried delivery, already handled
+    }
+    stored += 1;
+    const runs = await startWorkflowsForEvent({
+      userId: integration.userId,
+      integrationId: integration.id,
+      triggerId: `${type}/${event.trigger}`,
+      data: event.data,
+    });
+    started += runs;
+    if (runs > 0) {
+      await db
+        .update(integrationEvents)
+        .set({ processedAt: new Date() })
+        .where(eq(integrationEvents.id, inserted[0].id));
+    }
   }
 
   return {
     status: 200,
-    body: { received: events.length, stored },
+    body: { received: events.length, stored, started },
   };
 }
