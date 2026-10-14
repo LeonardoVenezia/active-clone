@@ -1046,28 +1046,19 @@ function ToolbarActions({
     position.x -= nodeWidth / 2;
     position.y -= nodeHeight / 2;
 
-    // Check if there's already a node at this position
-    const offset = 20; // Offset distance in pixels
-    const threshold = 20; // How close nodes need to be to be considered overlapping
-
+    // Find a free spot: shift right until no node box overlaps
     const finalPosition = { ...position };
-    let hasOverlap = true;
     let attempts = 0;
-    const maxAttempts = 20; // Prevent infinite loop
-
-    while (hasOverlap && attempts < maxAttempts) {
-      hasOverlap = state.nodes.some((node) => {
-        const dx = Math.abs(node.position.x - finalPosition.x);
-        const dy = Math.abs(node.position.y - finalPosition.y);
-        return dx < threshold && dy < threshold;
-      });
-
-      if (hasOverlap) {
-        // Offset diagonally down-right
-        finalPosition.x += offset;
-        finalPosition.y += offset;
-        attempts += 1;
-      }
+    while (
+      attempts < 30 &&
+      state.nodes.some(
+        (node) =>
+          Math.abs(node.position.x - finalPosition.x) < nodeWidth + 40 &&
+          Math.abs(node.position.y - finalPosition.y) < nodeHeight + 40
+      )
+    ) {
+      finalPosition.x += nodeWidth + 60;
+      attempts += 1;
     }
 
     // Create new action node
