@@ -156,6 +156,59 @@ export type PluginAction = {
 };
 
 /**
+ * Trigger Definition
+ * Describes an event an integration can emit (e.g. "payment updated").
+ * Triggers are fed by the integration's incoming webhook (see `webhook`).
+ */
+export type PluginTrigger = {
+  // Unique slug within the plugin. Full trigger ID: `{integration}/{slug}`
+  slug: string;
+  label: string;
+  description: string;
+  category: string;
+  // Optional filters configured on the trigger node
+  configFields: ActionConfigField[];
+  // Fields available to later nodes as {{Trigger.field}}
+  outputFields?: OutputField[];
+};
+
+/**
+ * Normalized event produced by a plugin's webhook handler.
+ */
+export type IntegrationWebhookEvent = {
+  // Stable id from the provider, used to drop retried deliveries
+  externalId: string;
+  // Slug of the PluginTrigger this event belongs to
+  trigger: string;
+  // Event payload exposed to workflows
+  data: Record<string, unknown>;
+};
+
+export type IntegrationWebhookRequest = {
+  headers: Headers;
+  // Exact body text as received (needed for signature checks)
+  rawBody: string;
+  query: URLSearchParams;
+};
+
+/**
+ * Server-side webhook handler for an integration.
+ * Lazy-loaded so it never reaches the client bundle.
+ */
+export type IntegrationWebhookHandler = {
+  // Return null when the request is authentic, or a short reason when not.
+  verify: (
+    request: IntegrationWebhookRequest,
+    credentials: Record<string, string | undefined>
+  ) => string | null;
+  // Turn the provider payload into zero or more normalized events.
+  parse: (
+    request: IntegrationWebhookRequest,
+    credentials: Record<string, string | undefined>
+  ) => IntegrationWebhookEvent[];
+};
+
+/**
  * Integration Plugin Definition
  * All information needed to register a new integration in one place
  */
@@ -197,6 +250,15 @@ export type IntegrationPlugin = {
 
   // Actions provided by this integration
   actions: PluginAction[];
+
+  // Events this integration can emit (optional)
+  triggers?: PluginTrigger[];
+
+  // Incoming webhook support (optional). Events are received at
+  // /api/integrations/webhooks/{type}/{integrationId}
+  webhook?: {
+    getHandler: () => Promise<IntegrationWebhookHandler>;
+  };
 };
 
 /**

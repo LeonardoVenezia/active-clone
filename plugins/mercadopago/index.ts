@@ -24,12 +24,49 @@ const mercadoPagoPlugin: IntegrationPlugin = {
         url: "https://www.mercadopago.com.ar/developers/panel/app",
       },
     },
+    {
+      id: "webhookSecret",
+      label: "Webhook Secret (optional)",
+      type: "password",
+      placeholder: "Clave secreta de Webhooks",
+      configKey: "webhookSecret",
+      envVar: "MERCADOPAGO_WEBHOOK_SECRET",
+      helpText:
+        "Needed to receive payment notifications. Copy it from Webhooks > Configure notifications in ",
+      helpLink: {
+        text: "mercadopago.com.ar/developers/panel/app",
+        url: "https://www.mercadopago.com.ar/developers/panel/app",
+      },
+    },
   ],
 
   testConfig: {
     getTestFunction: async () => {
       const { testMercadoPago } = await import("./test");
       return testMercadoPago;
+    },
+  },
+
+  triggers: [
+    {
+      slug: "payment-updated",
+      label: "Payment Created or Updated",
+      description:
+        "A payment was created or changed status. Use Get Payment with the paymentId to read it.",
+      category: "Mercado Pago",
+      configFields: [],
+      outputFields: [
+        { field: "paymentId", description: "Payment ID" },
+        { field: "action", description: "payment.created or payment.updated" },
+        { field: "liveMode", description: "true for real payments" },
+      ],
+    },
+  ],
+
+  webhook: {
+    getHandler: async () => {
+      const { mercadoPagoWebhook } = await import("./webhook");
+      return mercadoPagoWebhook;
     },
   },
 

@@ -43,6 +43,13 @@
       "when": 1791584627081,
       "tag": "0005_mail_flow",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791600000000,
+      "tag": "0006_integration_events",
+      "breakpoints": true
     }
   ]
 }

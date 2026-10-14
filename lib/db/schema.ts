@@ -1,5 +1,12 @@
 import { relations } from "drizzle-orm";
-import { boolean, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+} from "drizzle-orm/pg-core";
 import type { IntegrationType } from "../types/integration";
 import { generateId } from "../utils/id";
 
@@ -162,6 +169,37 @@ export const apiKeys = pgTable("api_keys", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   lastUsedAt: timestamp("last_used_at"),
 });
+
+// Events received from integration webhooks (payments, orders, messages, ...).
+// The unique (integration_id, external_id) pair drops retried deliveries.
+export const integrationEvents = pgTable(
+  "integration_events",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => integrations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    type: text("type").notNull(), // integration type, e.g. "mercadopago"
+    trigger: text("trigger").notNull(), // trigger slug, e.g. "payment-updated"
+    externalId: text("external_id").notNull(),
+    // biome-ignore lint/suspicious/noExplicitAny: JSONB type - provider-normalized payload
+    data: jsonb("data").notNull().$type<Record<string, any>>(),
+    receivedAt: timestamp("received_at").notNull().defaultNow(),
+    // Set when a workflow run was started for this event (not used yet)
+    processedAt: timestamp("processed_at"),
+  },
+  (table) => [
+    unique("integration_events_integration_external_unique").on(
+      table.integrationId,
+      table.externalId
+    ),
+  ]
+);
 
 // Relations
 export const workflowExecutionsRelations = relations(

@@ -17,6 +17,7 @@
 import "./ai-gateway";
 import "./blob";
 import "./clerk";
+import "./composio";
 import "./fal";
 import "./firecrawl";
 import "./github";
