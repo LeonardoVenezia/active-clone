@@ -25,7 +25,7 @@ function createDefaultTriggerNode() {
       label: "",
       description: "",
       type: "trigger" as const,
-      config: { triggerType: "Manual" },
+      config: { triggerType: "Manual", placeholder: true },
       status: "idle" as const,
     },
   };
