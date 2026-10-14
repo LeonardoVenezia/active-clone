@@ -129,15 +129,6 @@ export function WorkflowCanvas() {
       return;
     }
 
-    // Skip fitView for homepage -> workflow transition (viewport already set from homepage)
-    if (isTransitioningFromHomepage && viewportInitialized.current) {
-      fittedViewForWorkflowRef.current = currentWorkflowId;
-      setIsCanvasReady(true);
-      // Clear the flag after using it
-      setIsTransitioningFromHomepage(false);
-      return;
-    }
-
     // Wait for nodes to load and be measured, then fit once (no later re-shift).
     return fitWhenReady(
       rfInstance,

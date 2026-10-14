@@ -4,6 +4,10 @@ import type { ReactFlowInstance } from "@xyflow/react";
 // layout (not from animated positions) so every centering call agrees.
 export function getCanvasInsets(): { left: number; right: number } {
   if (typeof window === "undefined") return { left: 0, right: 0 };
+  // Chat and properties panel only exist on the workflow editor route.
+  if (!window.location.pathname.startsWith("/workflows/")) {
+    return { left: 0, right: 0 };
+  }
   const w = window.innerWidth;
   let chatOpen = true;
   try {
@@ -12,11 +16,15 @@ export function getCanvasInsets(): { left: number; right: number } {
     /* ignore */
   }
   const left = chatOpen && w >= 640 ? Math.min(352, w * 0.85) : 0;
-  const collapsed = document.cookie
-    .split("; ")
-    .some((r) => r === "sidebar-collapsed=true");
-  const panel = document.querySelector<HTMLElement>("[data-right-panel]");
-  const right = panel && !collapsed && w >= 768 ? panel.offsetWidth : 0;
+  const cookies = document.cookie.split("; ");
+  const collapsed = cookies.includes("sidebar-collapsed=true");
+  const widthCookie = cookies.find((r) => r.startsWith("sidebar-width="));
+  let pct = 30;
+  if (widthCookie) {
+    const v = Number.parseFloat(widthCookie.split("=")[1]);
+    if (!Number.isNaN(v) && v >= 20 && v <= 50) pct = v;
+  }
+  const right = !collapsed && w >= 768 ? (w * pct) / 100 : 0;
   return { left, right };
 }
 
