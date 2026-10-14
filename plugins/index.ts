@@ -21,6 +21,7 @@ import "./fal";
 import "./firecrawl";
 import "./github";
 import "./linear";
+import "./mercadopago";
 import "./perplexity";
 import "./resend";
 import "./slack";
