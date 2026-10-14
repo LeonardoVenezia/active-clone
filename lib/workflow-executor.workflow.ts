@@ -660,6 +660,22 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
             console.log(
               "[Workflow Executor] Condition is false, skipping next nodes"
             );
+            {
+              const seen = new Set<string>();
+              const walk = (id: string) => {
+                for (const t of edgesBySource.get(id) || []) {
+                  if (!seen.has(t)) {
+                    seen.add(t);
+                    walk(t);
+                  }
+                }
+              };
+              walk(nodeId);
+              for (const t of seen) skippedNodes.add(t);
+              skipReasons.push(
+                `Filtro no cumplido en "${getNodeName(node)}": ${seen.size} paso(s) no se ejecutaron`
+              );
+            }
           }
         } else {
           // For non-condition nodes, execute all next nodes in parallel
@@ -688,6 +704,8 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
     }
   }
 
+  const skippedNodes = new Set<string>();
+  const skipReasons: string[] = [];
   // Execute from each trigger node in parallel
   try {
     console.log("[Workflow Executor] Starting execution from trigger nodes");
@@ -712,7 +730,13 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           _workflowComplete: {
             executionId,
             status: finalSuccess ? "success" : "error",
-            output: Object.values(results).at(-1)?.data,
+            output: skipReasons.length
+              ? {
+                  skipped: true,
+                  message: skipReasons.join(". "),
+                  lastExecuted: Object.values(results).at(-1)?.data,
+                }
+              : Object.values(results).at(-1)?.data,
             error: Object.values(results).find((r) => !r.success)?.error,
             startTime: workflowStartTime,
           },
