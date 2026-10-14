@@ -846,6 +846,7 @@ export function WorkflowRuns({
                   <span className="font-semibold text-sm">
                     Run #{executions.length - index}
                   </span>
+                  {(() => { const o = (execution as { output?: unknown }).output as { skipped?: boolean; message?: string } | null | undefined; return o && typeof o === "object" && o.skipped ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800" title={o.message}>Filtro no cumplido: pasos omitidos</span> : null; })()}
                 </div>
                 <div className="flex items-center gap-2 font-mono text-muted-foreground text-xs">
                   <span>{getRelativeTime(execution.startedAt)}</span>
