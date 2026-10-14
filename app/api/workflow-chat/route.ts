@@ -2,7 +2,8 @@ import { llmRoutes } from "@/lib/free-models";
 import { describeToolkit } from "@/lib/connectors/generic";
 import { myConnections } from "@/lib/connectors";
 import { PRESETS } from "@/lib/connectors/presets";
-import OpenAI from "openai";
+import { generateText } from "ai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { append, history, recentUserMessages, validWorkflowId } from "@/lib/workflow-chat";
@@ -85,8 +86,8 @@ export async function POST(r: Request) {
     for (const r of llmRoutes()) {
       if (reply) break;
       try {
-        const client = new OpenAI({ apiKey: r.apiKey, baseURL: r.baseURL, maxRetries: 0, timeout: 10_000 });
-        reply = (await client.chat.completions.create({ model: r.model, max_tokens: r.maxTokens, messages })).choices[0]?.message?.content?.trim() || "";
+        const provider = createOpenAICompatible({ name: r.name, apiKey: r.apiKey, baseURL: r.baseURL });
+        reply = (await generateText({ model: provider(r.model), messages, maxOutputTokens: r.maxTokens, maxRetries: 0, abortSignal: AbortSignal.timeout(10_000) })).text.trim();
         if (!reply) console.error("[workflow-chat] empty reply from", r.name, r.model);
       } catch (e) { console.error("[workflow-chat] model failed", r.name, r.model, (e as { status?: number })?.status); }
     }
