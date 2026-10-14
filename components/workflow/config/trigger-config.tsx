@@ -48,8 +48,17 @@ export function TriggerConfig({
         </Label>
         <Select
           disabled={disabled}
-          onValueChange={(value) => onUpdateConfig("triggerType", value)}
-          value={(config?.triggerType as string) || "Manual"}
+          onValueChange={(value) => {
+            onUpdateConfig("triggerType", value);
+            if (config?.placeholder) {
+              onUpdateConfig("placeholder", "");
+            }
+          }}
+          value={
+            config?.placeholder
+              ? ""
+              : (config?.triggerType as string) || "Manual"
+          }
         >
           <SelectTrigger className="w-full" id="triggerType">
             <SelectValue placeholder="Select trigger type" />
