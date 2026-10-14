@@ -15,6 +15,7 @@
  */
 
 import "./ai-gateway";
+import "./arca";
 import "./blob";
 import "./clerk";
 import "./composio";
