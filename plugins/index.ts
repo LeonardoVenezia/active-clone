@@ -20,6 +20,7 @@ import "./arca";
 import "./blob";
 import "./clerk";
 import "./composio";
+import "./correoargentino";
 import "./fal";
 import "./firecrawl";
 import "./github";

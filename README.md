@@ -85,6 +85,7 @@ Visit [http://localhost:3000](http://localhost:3000) to get started.
 - **Blob**: Put Blob, List Blobs
 - **Clerk**: Get User, Create User, Update User, Delete User
 - **Composio**: Discover Composio Tools, Read Hacker News, Run Composio Action
+- **Correo Argentino**: Get Shipping Rates, List Branches
 - **fal.ai**: Generate Image, Generate Video, Upscale Image, Remove Background, Image to Image
 - **Firecrawl**: Scrape URL, Search Web
 - **GitHub**: Create Issue, List Issues, Get Issue, Update Issue
