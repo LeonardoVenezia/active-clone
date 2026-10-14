@@ -80,7 +80,7 @@ export const Node = ({ handles, className, status, ...props }: NodeProps) => {
     setActiveTab("properties");
     setHasUnsavedChanges(true);
     triggerAutosave({ immediate: true });
-    setTimeout(() => fitView({ duration: 300, padding: 0.3, maxZoom: 1 }), 400);
+    setTimeout(() => fitView({ duration: 300, padding: 0.3, maxZoom: 1, minZoom: 0.2 }), 400);
   };
 
   return (
