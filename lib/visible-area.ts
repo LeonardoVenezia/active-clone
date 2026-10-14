@@ -45,7 +45,15 @@ export function fitInVisibleArea(
   const { maxZoom = 1, minZoom = 0.2, padding = 0.2, duration = 0 } = opts;
   const nodes = rf.getNodes();
   if (nodes.length === 0) return;
-  const b = rf.getNodesBounds(nodes);
+  // Unmeasured nodes (first paint) default to the real card size so the
+  // first and later calls agree.
+  const b = rf.getNodesBounds(
+    nodes.map((n) => ({
+      ...n,
+      width: n.measured?.width ?? n.width ?? 384,
+      height: n.measured?.height ?? n.height ?? 384,
+    }))
+  );
   const { left, right } = getCanvasInsets();
   const vw = Math.max(200, window.innerWidth - left - right);
   const vh = window.innerHeight;
