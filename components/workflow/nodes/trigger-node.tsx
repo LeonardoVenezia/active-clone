@@ -1,7 +1,7 @@
 "use client";
 
 import type { NodeProps } from "@xyflow/react";
-import { Check, Clock, Play, Webhook, XCircle } from "lucide-react";
+import { Check, Clock, Play, Plus, Webhook, XCircle } from "lucide-react";
 import { memo } from "react";
 import {
   Node,
@@ -21,13 +21,20 @@ export const TriggerNode = memo(({ data, selected }: TriggerNodeProps) => {
   }
 
   const triggerType = (data.config?.triggerType as string) || "Manual";
-  const displayTitle = data.label || triggerType;
-  const displayDescription = data.description || "Trigger";
+  const isPlaceholder = data.config?.placeholder === true;
+  const displayTitle = isPlaceholder
+    ? "Agregá tu primer paso"
+    : data.label || triggerType;
+  const displayDescription = isPlaceholder
+    ? "Elegí cómo arranca"
+    : data.description || "Trigger";
   const status = data.status;
 
   // Select icon based on trigger type
-  let TriggerIcon = Play;
-  if (triggerType === "Schedule") {
+  let TriggerIcon = isPlaceholder ? Plus : Play;
+  if (isPlaceholder) {
+    TriggerIcon = Plus;
+  } else if (triggerType === "Schedule") {
     TriggerIcon = Clock;
   } else if (triggerType === "Webhook") {
     TriggerIcon = Webhook;
@@ -37,6 +44,7 @@ export const TriggerNode = memo(({ data, selected }: TriggerNodeProps) => {
     <Node
       className={cn(
         "flex h-48 w-48 flex-col items-center justify-center shadow-none transition-all duration-150 ease-out",
+        isPlaceholder && "border-dashed",
         selected && "border-primary"
       )}
       handles={{ target: false, source: true }}
