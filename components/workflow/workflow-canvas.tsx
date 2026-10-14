@@ -97,7 +97,7 @@ export function WorkflowCanvas() {
   const setHasUnsavedChanges = useSetAtom(hasUnsavedChangesAtom);
   const triggerAutosave = useSetAtom(autosaveAtom);
   const setActiveTab = useSetAtom(propertiesPanelActiveTabAtom);
-  const { screenToFlowPosition, fitView, getViewport, setViewport } =
+  const { screenToFlowPosition, fitView, getViewport, setViewport, getNodes } =
     useReactFlow();
 
   const connectingNodeId = useRef<string | null>(null);
@@ -202,6 +202,23 @@ export function WorkflowCanvas() {
       hadRealNodesRef.current = false;
     }
   }, [currentWorkflowId, hasRealNodes, fitView]);
+
+  // Center a fresh (0-1 node) workflow in the area to the right of the floating chat,
+  // after the properties panel width animation has settled.
+  useEffect(() => {
+    if (!currentWorkflowId) {
+      return;
+    }
+    const t = setTimeout(() => {
+      if (getNodes().length <= 1) {
+        fitView({ maxZoom: 1, minZoom: 0.5, padding: 0.2, duration: 0 });
+        const v = getViewport();
+        const chatShift = window.innerWidth >= 900 ? 176 : 0;
+        setViewport({ ...v, x: v.x + chatShift }, { duration: 0 });
+      }
+    }, 700);
+    return () => clearTimeout(t);
+  }, [currentWorkflowId, fitView, getNodes, getViewport, setViewport]);
 
   // Keyboard shortcut for fit view (Cmd+/ or Ctrl+/)
   useEffect(() => {
