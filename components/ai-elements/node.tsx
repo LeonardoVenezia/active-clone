@@ -32,7 +32,16 @@ export const Node = ({ handles, className, status, ...props }: NodeProps) => (
   >
     {status === "running" && <AnimatedBorder />}
     {handles.target && <Handle position={Position.Left} type="target" />}
-    {handles.source && <Handle position={Position.Right} type="source" />}
+    {handles.source && (
+      <Handle
+        className="!size-6 !border-2 !border-primary !bg-primary !text-primary-foreground flex cursor-pointer items-center justify-center text-sm font-bold leading-none"
+        position={Position.Right}
+        title="Agregar un paso (clic o arrastrá)"
+        type="source"
+      >
+        +
+      </Handle>
+    )}
     {props.children}
   </Card>
 );
