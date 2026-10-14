@@ -22,6 +22,7 @@ import "./fal";
 import "./firecrawl";
 import "./github";
 import "./linear";
+import "./mercadolibre";
 import "./mercadopago";
 import "./perplexity";
 import "./resend";

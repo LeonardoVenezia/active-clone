@@ -331,3 +331,20 @@ export async function validateWorkflowIntegrations(
 
   return { valid: true };
 }
+
+/**
+ * All integrations of one type, across users (system use: routing webhooks
+ * that arrive on a single app-wide URL, like Mercado Libre's).
+ */
+export async function getIntegrationsByType(
+  type: IntegrationType
+): Promise<DecryptedIntegration[]> {
+  const rows = await db
+    .select()
+    .from(integrations)
+    .where(eq(integrations.type, type));
+  return rows.map((row) => ({
+    ...row,
+    config: decryptConfig(row.config as string) as IntegrationConfig,
+  }));
+}
