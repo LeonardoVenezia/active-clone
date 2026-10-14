@@ -212,9 +212,11 @@ export function WorkflowCanvas() {
     const t = setTimeout(() => {
       if (getNodes().length <= 1) {
         fitView({ maxZoom: 1, minZoom: 0.5, padding: 0.2, duration: 0 });
-        const v = getViewport();
-        const chatShift = window.innerWidth >= 900 ? 176 : 0;
-        setViewport({ ...v, x: v.x + chatShift }, { duration: 0 });
+        setTimeout(() => {
+          const v = getViewport();
+          const chatShift = window.innerWidth >= 900 ? 176 : 0;
+          setViewport({ ...v, x: v.x + chatShift }, { duration: 0 });
+        }, 120);
       }
     }, 700);
     return () => clearTimeout(t);
