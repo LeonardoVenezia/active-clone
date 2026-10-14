@@ -22,6 +22,7 @@ import { nanoid } from "nanoid";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { centerInVisibleArea } from "@/lib/visible-area";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -1000,7 +1001,8 @@ function ToolbarActions({
   const [edges] = useAtom(edgesAtom);
   const deleteNode = useSetAtom(deleteNodeAtom);
   const deleteEdge = useSetAtom(deleteEdgeAtom);
-  const { screenToFlowPosition, setCenter, getZoom } = useReactFlow();
+  const rf = useReactFlow();
+  const { screenToFlowPosition } = rf;
 
   const selectedNode = nodes.find((node) => node.id === selectedNodeId);
   const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId);
@@ -1091,7 +1093,7 @@ function ToolbarActions({
     state.setActiveTab("properties");
     const cx = finalPosition.x + 96;
     const cy = finalPosition.y + 96;
-    setTimeout(() => setCenter(cx, cy, { duration: 300, zoom: Math.max(getZoom(), 0.6) }), 150);
+    setTimeout(() => centerInVisibleArea(rf, cx, cy, Math.max(rf.getZoom(), 0.6), 300), 100);
   };
 
   return (

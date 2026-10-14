@@ -1,4 +1,5 @@
 "use client";
+import { fitInVisibleArea } from "@/lib/visible-area";
 
 import {
   ConnectionMode,
@@ -97,8 +98,8 @@ export function WorkflowCanvas() {
   const setHasUnsavedChanges = useSetAtom(hasUnsavedChangesAtom);
   const triggerAutosave = useSetAtom(autosaveAtom);
   const setActiveTab = useSetAtom(propertiesPanelActiveTabAtom);
-  const { screenToFlowPosition, fitView, getViewport, setViewport, getNodes } =
-    useReactFlow();
+  const rfInstance = useReactFlow();
+  const { screenToFlowPosition } = rfInstance;
 
   const connectingNodeId = useRef<string | null>(null);
   const connectingHandleType = useRef<"source" | "target" | null>(null);
@@ -121,35 +122,6 @@ export function WorkflowCanvas() {
   // Track if we have real nodes (not just placeholder "add" node)
   const hasRealNodes = nodes.some((n) => n.type !== "add");
   const hadRealNodesRef = useRef(false);
-  // Pre-shift viewport when transitioning from homepage (before sidebar animates)
-  const hasPreShiftedRef = useRef(false);
-  useEffect(() => {
-    if (isTransitioningFromHomepage && !hasPreShiftedRef.current) {
-      hasPreShiftedRef.current = true;
-
-      // Check if sidebar is collapsed from cookie (atom may not be initialized yet)
-      const collapsedCookie = document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("sidebar-collapsed="));
-      const isCollapsed = collapsedCookie?.split("=")[1] === "true";
-
-      // Skip if sidebar is collapsed - content should stay centered
-      if (isCollapsed) {
-        return;
-      }
-
-      // Shift viewport left to center content in the future visible area
-      // Default sidebar is 30%, so shift by 15% of window width
-      const viewport = getViewport();
-      const defaultSidebarPercent = 0.3;
-      const shiftPixels = (window.innerWidth * defaultSidebarPercent) / 2;
-      setViewport(
-        { ...viewport, x: viewport.x - shiftPixels },
-        { duration: 0 }
-      );
-    }
-  }, [isTransitioningFromHomepage, getViewport, setViewport]);
-
   // Fit view when workflow changes (only on initial load, not home -> workflow)
   useEffect(() => {
     // Skip if we've already fitted view for this workflow
@@ -168,7 +140,7 @@ export function WorkflowCanvas() {
 
     // Use fitView after a brief delay to ensure React Flow and nodes are ready
     setTimeout(() => {
-      fitView({ maxZoom: 1, minZoom: 0.5, padding: 0.2, duration: 0 });
+      fitInVisibleArea(rfInstance, { maxZoom: 1, minZoom: 0.5, padding: 0.2, duration: 0 });
       fittedViewForWorkflowRef.current = currentWorkflowId;
       viewportInitialized.current = true;
       // Show canvas immediately so width animation can be seen
@@ -178,7 +150,7 @@ export function WorkflowCanvas() {
     }, 0);
   }, [
     currentWorkflowId,
-    fitView,
+    rfInstance,
     isTransitioningFromHomepage,
     setIsTransitioningFromHomepage,
   ]);
@@ -193,7 +165,7 @@ export function WorkflowCanvas() {
       hadRealNodesRef.current = true;
       // Fit view to center the new node
       setTimeout(() => {
-        fitView({ maxZoom: 1, minZoom: 0.5, padding: 0.2, duration: 0 });
+        fitInVisibleArea(rfInstance, { maxZoom: 1, minZoom: 0.5, padding: 0.2, duration: 0 });
         viewportInitialized.current = true;
         setIsCanvasReady(true);
       }, 0);
@@ -201,27 +173,7 @@ export function WorkflowCanvas() {
       // Reset when back to placeholder only
       hadRealNodesRef.current = false;
     }
-  }, [currentWorkflowId, hasRealNodes, fitView]);
-
-  // Center a fresh (0-1 node) workflow in the area to the right of the floating chat,
-  // after the properties panel width animation has settled.
-  useEffect(() => {
-    if (!currentWorkflowId) {
-      return;
-    }
-    const t = setTimeout(() => {
-      if (getNodes().length <= 1) {
-        fitView({ maxZoom: 1, minZoom: 0.5, padding: 0.2, duration: 0 });
-        setTimeout(() => {
-          const v = getViewport();
-          const chatOpen = !!document.querySelector('aside[aria-label="Workflow chat"]');
-          const chatShift = chatOpen && window.innerWidth >= 900 ? 176 : 0;
-          setViewport({ ...v, x: v.x + chatShift }, { duration: 0 });
-        }, 120);
-      }
-    }, 1800);
-    return () => clearTimeout(t);
-  }, [currentWorkflowId, fitView, getNodes, getViewport, setViewport]);
+  }, [currentWorkflowId, hasRealNodes, rfInstance]);
 
   // Keyboard shortcut for fit view (Cmd+/ or Ctrl+/)
   useEffect(() => {
@@ -229,7 +181,7 @@ export function WorkflowCanvas() {
       // Check for Cmd+/ (Mac) or Ctrl+/ (Windows/Linux)
       if ((event.metaKey || event.ctrlKey) && event.key === "/") {
         event.preventDefault();
-        fitView({ padding: 0.2, duration: 300 });
+        fitInVisibleArea(rfInstance, { padding: 0.2, duration: 300 });
       }
     };
 
@@ -237,7 +189,7 @@ export function WorkflowCanvas() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [fitView]);
+  }, [rfInstance]);
 
   const nodeTypes = useMemo(
     () => ({

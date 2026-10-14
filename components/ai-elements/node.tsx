@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { centerInVisibleArea } from "@/lib/visible-area";
 import { useReactFlow, Handle, Position, useNodeId } from "@xyflow/react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { nanoid } from "nanoid";
@@ -34,7 +35,7 @@ export type NodeProps = ComponentProps<typeof Card> & {
 
 export const Node = ({ handles, className, status, ...props }: NodeProps) => {
   const nodeId = useNodeId();
-  const { setCenter, getZoom } = useReactFlow();
+  const rf = useReactFlow();
   const nodes = useAtomValue(nodesAtom);
   const [edges, setEdges] = useAtom(edgesAtom);
   const addNode = useSetAtom(addNodeAtom);
@@ -82,7 +83,7 @@ export const Node = ({ handles, className, status, ...props }: NodeProps) => {
     triggerAutosave({ immediate: true });
     const cx = position.x + 96;
     const cy = position.y + 96;
-    setTimeout(() => setCenter(cx, cy, { duration: 300, zoom: Math.max(getZoom(), 0.6) }), 150);
+    setTimeout(() => centerInVisibleArea(rf, cx, cy, Math.max(rf.getZoom(), 0.6), 300), 100);
   };
 
   return (

@@ -1,0 +1,60 @@
+import type { ReactFlowInstance } from "@xyflow/react";
+
+// Space covered by overlays on top of the canvas. Computed from the FINAL
+// layout (not from animated positions) so every centering call agrees.
+export function getCanvasInsets(): { left: number; right: number } {
+  if (typeof window === "undefined") return { left: 0, right: 0 };
+  const w = window.innerWidth;
+  let chatOpen = true;
+  try {
+    chatOpen = localStorage.getItem("chat-open") !== "0";
+  } catch {
+    /* ignore */
+  }
+  const left = chatOpen && w >= 640 ? Math.min(352, w * 0.85) : 0;
+  const collapsed = document.cookie
+    .split("; ")
+    .some((r) => r === "sidebar-collapsed=true");
+  const panel = document.querySelector<HTMLElement>("[data-right-panel]");
+  const right = panel && !collapsed && w >= 768 ? panel.offsetWidth : 0;
+  return { left, right };
+}
+
+// Center a point (flow coords) in the visible canvas area.
+export function centerInVisibleArea(
+  rf: Pick<ReactFlowInstance, "setViewport">,
+  cx: number,
+  cy: number,
+  zoom: number,
+  duration = 0
+) {
+  const { left, right } = getCanvasInsets();
+  const screenX = left + (window.innerWidth - left - right) / 2;
+  const screenY = window.innerHeight / 2;
+  rf.setViewport(
+    { x: screenX - cx * zoom, y: screenY - cy * zoom, zoom },
+    { duration }
+  );
+}
+
+// Fit all nodes inside the visible canvas area.
+export function fitInVisibleArea(
+  rf: Pick<ReactFlowInstance, "setViewport" | "getNodes" | "getNodesBounds">,
+  opts: { maxZoom?: number; minZoom?: number; padding?: number; duration?: number } = {}
+) {
+  const { maxZoom = 1, minZoom = 0.2, padding = 0.2, duration = 0 } = opts;
+  const nodes = rf.getNodes();
+  if (nodes.length === 0) return;
+  const b = rf.getNodesBounds(nodes);
+  const { left, right } = getCanvasInsets();
+  const vw = Math.max(200, window.innerWidth - left - right);
+  const vh = window.innerHeight;
+  const zoom = Math.min(
+    maxZoom,
+    Math.max(
+      minZoom,
+      Math.min(vw / (b.width * (1 + padding * 2) || 1), vh / (b.height * (1 + padding * 2) || 1))
+    )
+  );
+  centerInVisibleArea(rf, b.x + b.width / 2, b.y + b.height / 2, zoom, duration);
+}
