@@ -8,7 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Handle, Position, useNodeId } from "@xyflow/react";
+import { useReactFlow, Handle, Position, useNodeId } from "@xyflow/react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { nanoid } from "nanoid";
 import {
@@ -34,6 +34,7 @@ export type NodeProps = ComponentProps<typeof Card> & {
 
 export const Node = ({ handles, className, status, ...props }: NodeProps) => {
   const nodeId = useNodeId();
+  const { fitView } = useReactFlow();
   const nodes = useAtomValue(nodesAtom);
   const [edges, setEdges] = useAtom(edgesAtom);
   const addNode = useSetAtom(addNodeAtom);
@@ -79,6 +80,7 @@ export const Node = ({ handles, className, status, ...props }: NodeProps) => {
     setActiveTab("properties");
     setHasUnsavedChanges(true);
     triggerAutosave({ immediate: true });
+    setTimeout(() => fitView({ duration: 300, padding: 0.3, maxZoom: 1 }), 120);
   };
 
   return (
