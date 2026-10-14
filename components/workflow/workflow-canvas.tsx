@@ -1,5 +1,5 @@
 "use client";
-import { fitInVisibleArea } from "@/lib/visible-area";
+import { fitInVisibleArea, fitWhenReady } from "@/lib/visible-area";
 
 import {
   ConnectionMode,
@@ -138,16 +138,17 @@ export function WorkflowCanvas() {
       return;
     }
 
-    // Use fitView after a brief delay to ensure React Flow and nodes are ready
-    setTimeout(() => {
-      fitInVisibleArea(rfInstance, { maxZoom: 0.7, minZoom: 0.5, padding: 0.2, duration: 0 });
-      fittedViewForWorkflowRef.current = currentWorkflowId;
-      viewportInitialized.current = true;
-      // Show canvas immediately so width animation can be seen
-      setIsCanvasReady(true);
-      // Clear the flag
-      setIsTransitioningFromHomepage(false);
-    }, 0);
+    // Wait for nodes to load and be measured, then fit once (no later re-shift).
+    return fitWhenReady(
+      rfInstance,
+      { maxZoom: 0.7, minZoom: 0.3, padding: 0.2, duration: 0 },
+      () => {
+        fittedViewForWorkflowRef.current = currentWorkflowId;
+        viewportInitialized.current = true;
+        setIsCanvasReady(true);
+        setIsTransitioningFromHomepage(false);
+      }
+    );
   }, [
     currentWorkflowId,
     rfInstance,

@@ -66,3 +66,23 @@ export function fitInVisibleArea(
   );
   centerInVisibleArea(rf, b.x + b.width / 2, b.y + b.height / 2, zoom, duration);
 }
+
+// Wait until nodes exist and are measured, then fit once. Returns a cancel fn.
+export function fitWhenReady(
+  rf: Pick<ReactFlowInstance, "setViewport" | "getNodes" | "getNodesBounds">,
+  opts: Parameters<typeof fitInVisibleArea>[1],
+  done?: () => void,
+  maxWaitMs = 4000
+) {
+  const start = Date.now();
+  const timer = setInterval(() => {
+    const nodes = rf.getNodes();
+    const measured = nodes.length > 0 && nodes.every((n) => n.measured?.width);
+    if (measured || Date.now() - start > maxWaitMs) {
+      clearInterval(timer);
+      fitInVisibleArea(rf, opts);
+      done?.();
+    }
+  }, 50);
+  return () => clearInterval(timer);
+}
