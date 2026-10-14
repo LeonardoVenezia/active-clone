@@ -46,6 +46,15 @@ const vtexPlugin: IntegrationPlugin = {
       envVar: "VTEX_APP_TOKEN",
       helpText: "Se muestra una sola vez al crear la clave.",
     },
+    {
+      id: "hookSecret",
+      label: "Hook Secret",
+      type: "password",
+      placeholder: "Cualquier texto secreto largo",
+      configKey: "hookSecret",
+      envVar: "VTEX_HOOK_SECRET",
+      helpText: "Solo para el trigger de pedidos: VTEX lo envía en cada aviso para comprobar que viene de tu tienda.",
+    },
   ],
 
   testConfig: {
@@ -55,7 +64,55 @@ const vtexPlugin: IntegrationPlugin = {
     },
   },
 
+  triggers: [
+    {
+      slug: "order-status-changed",
+      label: "Order Status Changed",
+      description: "An order changed status (Order Hook). Set it up with the Setup Order Hook action.",
+      category: "VTEX",
+      configFields: [],
+      outputFields: [
+        { field: "orderId", description: "Order ID (use Get Order to read it)" },
+        { field: "state", description: "New order status, e.g. payment-approved" },
+        { field: "lastChange", description: "When it changed" },
+      ],
+    },
+  ],
+
+  webhook: {
+    getHandler: async () => {
+      const { vtexWebhook } = await import("./webhook");
+      return vtexWebhook;
+    },
+  },
+
   actions: [
+    {
+      slug: "setup-order-hook",
+      label: "Setup Order Hook",
+      description: "Register VTEX's Order Hook so order status changes trigger workflows (run once)",
+      category: "VTEX",
+      stepFunction: "setupOrderHookStep",
+      stepImportPath: "setup-order-hook",
+      outputFields: [{ field: "url", description: "Registered URL" }],
+      configFields: [
+        {
+          key: "notificationUrl",
+          label: "Notification URL",
+          type: "template-input",
+          placeholder: "Copy it from the trigger panel",
+          example: "https://active-clone.vercel.app/api/integrations/webhooks/vtex/CONNECTION_ID",
+          required: true,
+        },
+        {
+          key: "statuses",
+          label: "Only these statuses (comma separated)",
+          type: "template-input",
+          placeholder: "Empty = every status change",
+          example: "payment-approved,ready-for-handling",
+        },
+      ],
+    },
     {
       slug: "get-order",
       label: "Get Order",
