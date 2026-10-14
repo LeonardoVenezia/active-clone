@@ -28,6 +28,7 @@ import "./resend";
 import "./slack";
 import "./stripe";
 import "./superagent";
+import "./tiendanube";
 import "./v0";
 import "./webflow";
 

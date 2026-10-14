@@ -93,6 +93,7 @@ Visit [http://localhost:3000](http://localhost:3000) to get started.
 - **Slack**: Send Slack Message
 - **Stripe**: Create Customer, Get Customer, Create Invoice
 - **Superagent**: Guard, Redact
+- **Tiendanube**: Get Order, Search Orders, Get Product, Update Stock
 - **v0**: Create Chat, Send Message
 - **Webflow**: List Sites, Get Site, Publish Site
 <!-- PLUGINS:END -->
