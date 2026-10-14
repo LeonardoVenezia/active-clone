@@ -35,6 +35,7 @@ import "./v0";
 import "./vtex";
 import "./webflow";
 import "./whatsapp";
+import "./xubio";
 
 export type {
   ActionConfigField,

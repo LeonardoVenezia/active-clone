@@ -100,6 +100,7 @@ Visit [http://localhost:3000](http://localhost:3000) to get started.
 - **VTEX**: Setup Order Hook, Get Order, List Orders, Start Handling
 - **Webflow**: List Sites, Get Site, Publish Site
 - **WhatsApp Business**: Send Message, Send Template, List Templates, Mark as Read
+- **Xubio**: Get Company, List Customers, List Sales Invoices, Get Sales Invoice
 <!-- PLUGINS:END -->
 
 ## Code Generation
