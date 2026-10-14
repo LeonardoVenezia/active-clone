@@ -1,5 +1,6 @@
 "use client";
 
+import { LAST_WORKFLOW_KEY } from "@/lib/last-workflow";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
@@ -104,6 +105,13 @@ function checkNodeIntegration(
 
 const WorkflowEditor = ({ params }: WorkflowPageProps) => {
   const { workflowId } = use(params);
+  useEffect(() => {
+    try {
+      localStorage.setItem(LAST_WORKFLOW_KEY, workflowId);
+    } catch {
+      /* ignore */
+    }
+  }, [workflowId]);
   const searchParams = useSearchParams();
   const isMobile = useIsMobile();
   const [isGenerating, setIsGenerating] = useAtom(isGeneratingAtom);

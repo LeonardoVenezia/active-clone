@@ -9,8 +9,8 @@ export default function MailFlowRedirect() {
       try {
         const d = await (await fetch("/api/flows", { cache: "no-store" })).json();
         const f = d.flows?.find((x: { kind: string }) => x.kind === "mail-sheets");
-        router.replace(f ? `/flows/${f.id}${window.location.search}` : "/flows");
-      } catch { router.replace("/flows"); }
+        router.replace(f ? `/workflows/mail/${f.id}${window.location.search}` : "/workflows");
+      } catch { router.replace("/workflows"); }
     })();
   }, [router]);
   return <main className="p-6">Opening your flow...</main>;

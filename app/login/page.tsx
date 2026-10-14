@@ -9,7 +9,7 @@ function Login() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/";
-  const safeNext = next.startsWith("/workflows/") && !next.includes("\\") ? next : "/";
+  const safeNext = (next === "/workflows" || next.startsWith("/workflows/")) && !next.includes("\\") ? next : "/";
   useEffect(() => {
     document.title = "Sign in | Active-clone";
     if (session?.user && !session.user.isAnonymous) router.replace(safeNext);

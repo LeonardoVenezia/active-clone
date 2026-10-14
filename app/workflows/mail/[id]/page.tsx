@@ -20,9 +20,9 @@ export default function FlowPage() {
     })();
   }, [id, router]);
   if (state === "mail") return <MailFlowView />;
-  return <main className="pointer-events-auto fixed inset-0 z-20 overflow-auto bg-background p-6"><div className="mx-auto max-w-3xl space-y-4"><Link href="/flows" className="underline text-sm">Back to flows</Link>
+  return <main className="pointer-events-auto fixed inset-0 z-20 overflow-auto bg-background p-6"><div className="mx-auto max-w-3xl space-y-4"><Link href="/workflows" className="underline text-sm">Back to flows</Link>
     {state === "loading" && <p>Loading flow...</p>}
-    {state === "signin" && <p>Sign in to open this flow. <Link href="/flows" className="underline">Go to flows</Link></p>}
+    {state === "signin" && <p>Sign in to open this flow. <Link href="/workflows" className="underline">Go to flows</Link></p>}
     {state === "error" && <p role="alert" className="text-destructive">Could not load this flow. Refresh to try again.</p>}
   </div></main>;
 }

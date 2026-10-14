@@ -14,6 +14,7 @@ import {
   isTransitioningFromHomepageAtom,
   nodesAtom,
 } from "@/lib/workflow-store";
+import { LAST_WORKFLOW_KEY } from "@/lib/last-workflow";
 
 // Helper function to create a default trigger node
 function createDefaultTriggerNode() {
@@ -92,22 +93,30 @@ const Home = () => {
       try {
         await ensureSession();
 
-        // Reuse an existing blank workflow instead of piling up new ones
+        // Returning users go to the last workflow they visited; only users
+        // with no workflows get a fresh blank one.
         try {
           if (new URLSearchParams(window.location.search).get("new") === "1") throw new Error("force-new");
-          const existing = await api.workflow.getAll();
-          const blank = existing.find(
-            (w: { name: string; nodes?: unknown[]; edges?: unknown[] }) =>
-              /^Untitled( Workflow| \d+)?$/.test(w.name) &&
-              Array.isArray(w.nodes) &&
-              w.nodes.length === 1 &&
-              Array.isArray(w.edges) &&
-              w.edges.length === 0
+          const existing = (await api.workflow.getAll()).filter(
+            (w: { name: string }) => w.name !== "__current__"
           );
-          if (blank) {
+          if (existing.length > 0) {
+            let target: { id: string } | undefined;
+            try {
+              const lastId = localStorage.getItem(LAST_WORKFLOW_KEY);
+              target = existing.find((w: { id: string }) => w.id === lastId);
+            } catch {
+              /* ignore */
+            }
+            if (!target) {
+              target = [...existing].sort(
+                (a: { updatedAt?: string }, b: { updatedAt?: string }) =>
+                  new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime()
+              )[0];
+            }
             sessionStorage.setItem("animate-sidebar", "true");
             setIsTransitioningFromHomepage(true);
-            router.replace(`/workflows/${blank.id}`);
+            router.replace(`/workflows/${target.id}`);
             return;
           }
         } catch {
