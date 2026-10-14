@@ -34,7 +34,7 @@ export type NodeProps = ComponentProps<typeof Card> & {
 
 export const Node = ({ handles, className, status, ...props }: NodeProps) => {
   const nodeId = useNodeId();
-  const { fitView } = useReactFlow();
+  const { setCenter, getZoom } = useReactFlow();
   const nodes = useAtomValue(nodesAtom);
   const [edges, setEdges] = useAtom(edgesAtom);
   const addNode = useSetAtom(addNodeAtom);
@@ -80,7 +80,9 @@ export const Node = ({ handles, className, status, ...props }: NodeProps) => {
     setActiveTab("properties");
     setHasUnsavedChanges(true);
     triggerAutosave({ immediate: true });
-    setTimeout(() => fitView({ duration: 300, padding: 0.3, maxZoom: 1, minZoom: 0.2 }), 400);
+    const cx = position.x + 96;
+    const cy = position.y + 96;
+    setTimeout(() => setCenter(cx, cy, { duration: 300, zoom: Math.max(getZoom(), 0.6) }), 150);
   };
 
   return (
