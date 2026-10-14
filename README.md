@@ -86,6 +86,7 @@ Visit [http://localhost:3000](http://localhost:3000) to get started.
 - **Clerk**: Get User, Create User, Update User, Delete User
 - **Composio**: Discover Composio Tools, Read Hacker News, Run Composio Action
 - **Correo Argentino**: Get Shipping Rates, List Branches
+- **Envíopack**: Get Shipping Rates
 - **fal.ai**: Generate Image, Generate Video, Upscale Image, Remove Background, Image to Image
 - **Firecrawl**: Scrape URL, Search Web
 - **GitHub**: Create Issue, List Issues, Get Issue, Update Issue
@@ -103,6 +104,7 @@ Visit [http://localhost:3000](http://localhost:3000) to get started.
 - **Webflow**: List Sites, Get Site, Publish Site
 - **WhatsApp Business**: Send Message, Send Template, List Templates, Mark as Read
 - **Xubio**: Get Company, List Customers, List Sales Invoices, Get Sales Invoice
+- **Zipnova**: Get Shipping Rates
 <!-- PLUGINS:END -->
 
 ## Code Generation

@@ -21,6 +21,7 @@ import "./blob";
 import "./clerk";
 import "./composio";
 import "./correoargentino";
+import "./enviopack";
 import "./fal";
 import "./firecrawl";
 import "./github";
@@ -38,6 +39,7 @@ import "./vtex";
 import "./webflow";
 import "./whatsapp";
 import "./xubio";
+import "./zipnova";
 
 export type {
   ActionConfigField,
