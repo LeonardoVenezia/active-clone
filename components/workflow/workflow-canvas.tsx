@@ -214,11 +214,12 @@ export function WorkflowCanvas() {
         fitView({ maxZoom: 1, minZoom: 0.5, padding: 0.2, duration: 0 });
         setTimeout(() => {
           const v = getViewport();
-          const chatShift = window.innerWidth >= 900 ? 176 : 0;
+          const chatOpen = !!document.querySelector('aside[aria-label="Workflow chat"]');
+          const chatShift = chatOpen && window.innerWidth >= 900 ? 176 : 0;
           setViewport({ ...v, x: v.x + chatShift }, { duration: 0 });
         }, 120);
       }
-    }, 700);
+    }, 1800);
     return () => clearTimeout(t);
   }, [currentWorkflowId, fitView, getNodes, getViewport, setViewport]);
 
