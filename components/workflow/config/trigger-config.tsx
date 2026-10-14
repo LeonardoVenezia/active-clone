@@ -148,9 +148,13 @@ export function TriggerConfig({
   const selectedIntegrationTrigger = integrationTriggerOptions.find(
     (option) => option.id === config?.integrationTrigger
   );
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  // Mercado Libre has one notification URL per app, shared by all sellers.
   const integrationWebhookUrl =
     selectedIntegrationTrigger && config?.integrationId
-      ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/integrations/webhooks/${selectedIntegrationTrigger.type}/${config.integrationId as string}`
+      ? selectedIntegrationTrigger.type === "mercadolibre"
+        ? `${origin}/api/integrations/mercadolibre/notifications`
+        : `${origin}/api/integrations/webhooks/${selectedIntegrationTrigger.type}/${config.integrationId as string}`
       : "";
 
   return (
