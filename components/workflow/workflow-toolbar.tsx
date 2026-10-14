@@ -1549,7 +1549,7 @@ export const WorkflowToolbar = ({ workflowId }: WorkflowToolbarProps) => {
   return (
     <>
       <Panel
-        className="!mt-14 flex flex-col gap-2 rounded-none border-none bg-transparent p-0 lg:flex-row lg:items-center"
+        className="hidden"
         position="top-left"
       >
         <div className="flex items-center gap-2">
