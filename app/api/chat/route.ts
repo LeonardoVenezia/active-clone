@@ -1,4 +1,5 @@
-import OpenAI from "openai";
+import { generateText } from "ai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { myConnections } from "@/lib/connectors";
@@ -33,10 +34,10 @@ export async function POST(r: Request) {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return NextResponse.json({ reply: "The chat model is not configured yet.", cards });
   try {
-    const client = new OpenAI({ apiKey: key, baseURL: "https://openrouter.ai/api/v1" });
+    const provider = createOpenAICompatible({ name: "openrouter", apiKey: key, baseURL: "https://openrouter.ai/api/v1" });
     const extra = `${cards.length ? ` The app is showing the user a card for: ${cards.map(c => `${c.title} (${c.connected ? "already connected" : "not connected yet"})`).join(", ")}. Mention it briefly.` : ""}${nativeInfo ? `\n\n${nativeInfo}` : ""}`;
-    const res = await client.chat.completions.create({ model: "openrouter/free", max_tokens: 300, messages: [{ role: "system", content: SYSTEM + extra }, ...messages] });
-    const reply = res.choices[0]?.message?.content?.trim() || "I could not answer that. Try again.";
+    const res = await generateText({ model: provider("openrouter/free"), maxOutputTokens: 300, system: SYSTEM + extra, messages });
+    const reply = res.text.trim() || "I could not answer that. Try again.";
     return NextResponse.json({ reply, cards });
   } catch {
     return NextResponse.json({ reply: "The assistant is busy right now. Try again in a moment.", cards });
