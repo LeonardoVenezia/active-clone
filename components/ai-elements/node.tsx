@@ -8,8 +8,20 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Handle, Position } from "@xyflow/react";
-import type { ComponentProps } from "react";
+import { Handle, Position, useNodeId } from "@xyflow/react";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { nanoid } from "nanoid";
+import {
+  addNodeAtom,
+  autosaveAtom,
+  edgesAtom,
+  hasUnsavedChangesAtom,
+  nodesAtom,
+  propertiesPanelActiveTabAtom,
+  selectedNodeAtom,
+  type WorkflowNode,
+} from "@/lib/workflow-store";
+import type { ComponentProps, MouseEvent as ReactMouseEvent } from "react";
 import { AnimatedBorder } from "@/components/ui/animated-border";
 
 export type NodeProps = ComponentProps<typeof Card> & {
@@ -20,7 +32,56 @@ export type NodeProps = ComponentProps<typeof Card> & {
   status?: "idle" | "running" | "success" | "error";
 };
 
-export const Node = ({ handles, className, status, ...props }: NodeProps) => (
+export const Node = ({ handles, className, status, ...props }: NodeProps) => {
+  const nodeId = useNodeId();
+  const nodes = useAtomValue(nodesAtom);
+  const [edges, setEdges] = useAtom(edgesAtom);
+  const addNode = useSetAtom(addNodeAtom);
+  const setSelectedNode = useSetAtom(selectedNodeAtom);
+  const setActiveTab = useSetAtom(propertiesPanelActiveTabAtom);
+  const setHasUnsavedChanges = useSetAtom(hasUnsavedChangesAtom);
+  const triggerAutosave = useSetAtom(autosaveAtom);
+
+  const addStepAfter = (event: ReactMouseEvent) => {
+    event.stopPropagation();
+    const source = nodes.find((n) => n.id === nodeId);
+    if (!source) {
+      return;
+    }
+    const position = { x: source.position.x + 300, y: source.position.y };
+    while (
+      nodes.some(
+        (n) =>
+          Math.abs(n.position.x - position.x) < 40 &&
+          Math.abs(n.position.y - position.y) < 40
+      )
+    ) {
+      position.y += 220;
+    }
+    const newNode: WorkflowNode = {
+      id: nanoid(),
+      type: "action",
+      position,
+      data: {
+        label: "",
+        description: "",
+        type: "action",
+        config: {},
+        status: "idle",
+      },
+    };
+    addNode(newNode);
+    setEdges([
+      ...edges,
+      { id: nanoid(), source: source.id, target: newNode.id, type: "animated" },
+    ]);
+    setSelectedNode(newNode.id);
+    setActiveTab("properties");
+    setHasUnsavedChanges(true);
+    triggerAutosave({ immediate: true });
+  };
+
+  return (
   <Card
     className={cn(
       "node-container relative size-full h-auto w-sm gap-0 rounded-md bg-card p-0 transition-all duration-200",
@@ -35,6 +96,7 @@ export const Node = ({ handles, className, status, ...props }: NodeProps) => (
     {handles.source && (
       <Handle
         className="!size-6 !border-2 !border-primary !bg-primary !text-primary-foreground flex cursor-pointer items-center justify-center text-sm font-bold leading-none"
+        onClick={addStepAfter}
         position={Position.Right}
         title="Agregar un paso (clic o arrastrá)"
         type="source"
@@ -44,7 +106,8 @@ export const Node = ({ handles, className, status, ...props }: NodeProps) => (
     )}
     {props.children}
   </Card>
-);
+  );
+};
 
 export type NodeHeaderProps = ComponentProps<typeof CardHeader>;
 
