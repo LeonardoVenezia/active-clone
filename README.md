@@ -97,6 +97,7 @@ Visit [http://localhost:3000](http://localhost:3000) to get started.
 - **Tiendanube**: Get Order, Search Orders, Get Product, Update Stock
 - **v0**: Create Chat, Send Message
 - **Webflow**: List Sites, Get Site, Publish Site
+- **WhatsApp Business**: Send Message, Send Template, List Templates, Mark as Read
 <!-- PLUGINS:END -->
 
 ## Code Generation

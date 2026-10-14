@@ -206,6 +206,12 @@ export type IntegrationWebhookHandler = {
     request: IntegrationWebhookRequest,
     credentials: Record<string, string | undefined>
   ) => IntegrationWebhookEvent[];
+  // Optional GET handshake (Meta/WhatsApp style challenge). Return the
+  // response to send, or null when the query is not a handshake.
+  handshake?: (
+    query: URLSearchParams,
+    credentials: Record<string, string | undefined>
+  ) => { status: number; body: string } | null;
 };
 
 /**

@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { receiveIntegrationWebhook } from "@/lib/integration-webhooks";
+import {
+  answerWebhookHandshake,
+  receiveIntegrationWebhook,
+} from "@/lib/integration-webhooks";
 
 export const maxDuration = 60;
 
@@ -20,4 +23,17 @@ export async function POST(
     // 5xx makes the provider retry later.
     return NextResponse.json({ error: "Processing failed" }, { status: 503 });
   }
+}
+
+// Some providers (WhatsApp) verify the URL with a GET + challenge first.
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ type: string; integrationId: string }> }
+) {
+  const { type, integrationId } = await context.params;
+  const answer = await answerWebhookHandshake(type, integrationId, request);
+  return new Response(answer.body, {
+    status: answer.status,
+    headers: { "Content-Type": "text/plain" },
+  });
 }

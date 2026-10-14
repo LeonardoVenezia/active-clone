@@ -203,3 +203,32 @@ export async function receiveIntegrationWebhook(
     body: { received: events.length, stored, started },
   };
 }
+
+/**
+ * Answer a provider's GET handshake for one connection (for example WhatsApp's
+ * hub.challenge). Same 404 for unknown connections as the POST route.
+ */
+export async function answerWebhookHandshake(
+  type: string,
+  integrationId: string,
+  request: Request
+): Promise<{ status: number; body: string }> {
+  const plugin = getIntegration(type as IntegrationType);
+  if (!plugin?.webhook) {
+    return { status: 404, body: "Not found" };
+  }
+  const integration = await getIntegrationById(integrationId);
+  if (!integration || integration.type !== type) {
+    return { status: 404, body: "Not found" };
+  }
+  const handler = await plugin.webhook.getHandler();
+  const credentials = getCredentialMapping(
+    plugin,
+    integration.config as Record<string, unknown>
+  );
+  const answer = handler.handshake?.(
+    new URL(request.url).searchParams,
+    credentials
+  );
+  return answer ?? { status: 404, body: "Not found" };
+}

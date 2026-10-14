@@ -32,6 +32,7 @@ import "./superagent";
 import "./tiendanube";
 import "./v0";
 import "./webflow";
+import "./whatsapp";
 
 export type {
   ActionConfigField,
