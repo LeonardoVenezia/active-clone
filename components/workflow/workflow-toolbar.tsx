@@ -1078,7 +1078,7 @@ function ToolbarActions({
     state.addNode(newNode);
     state.setSelectedNodeId(newNode.id);
     state.setActiveTab("properties");
-    setTimeout(() => fitView({ duration: 300, padding: 0.3, maxZoom: 1 }), 400);
+    setTimeout(() => fitView({ duration: 300, padding: 0.3, maxZoom: 1, minZoom: 0.2 }), 400);
   };
 
   return (
