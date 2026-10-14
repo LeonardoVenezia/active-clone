@@ -141,6 +141,8 @@ export async function POST(r: Request) {
       else if (/\bnotion\b/i.test(reply) && /\b(?:cu[aá]l|qu[eé]|d[oó]nde|en qu[eé]|which|where)\b/i.test(reply)) form = { title: "Notion", fields: [{ key: "f0", label: "Página o base de datos de Notion" }], offerCreate: false };
       else if (/\bslack\b/i.test(reply) && /\b(?:canal|channel)\b/i.test(reply)) form = { title: "Slack", fields: [{ key: "f0", label: "Canal de Slack" }], offerCreate: false };
     }
+    { const bm = reply.match(/\[\[BUILD:\s*([\s\S]{3,600}?)\]\]\s*$/); const arrival = /\b(?:lleg\w*|recib\w*|arrive\w*|receiv\w*|entr\w*)\s+(?:(?:un|una|el|los|nuevo|nueva|nuevos|any|a|an|new|alg[uú]n)\s+){0,3}(?:mails?|correos?|e-?mails?)\b|\b(?:mails?|correos?|e-?mails?)\s+(?:nuevo|new|entrante|incoming)\b/i;
+      if (bm && arrival.test(`${bm[1]} ${text}`)) { connect = null; form = null; reply = "Para mails que llegan, la app ya tiene un flujo real listo: \"Email to sheet\", en la página Flows (menú Flows). Reacciona a mails reales de verdad. El lienzo todavía no puede arrancar desde un mail nuevo, y no quiero armarte algo que parezca funcionar y no lo haga. ¿Querés usar ese flujo?"; } }
     const m = reply.match(/\[\[BUILD:\s*([\s\S]{3,600}?)\]\]\s*$/);
     const build = m ? m[1].trim() : null;
     const shown = m ? reply.slice(0, m.index).trim() || "Armando el flujo en el lienzo." : reply;
