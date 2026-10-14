@@ -617,6 +617,17 @@ function useWorkflowHandlers({
       return;
     }
 
+    if (
+      nodes.some(
+        (n) =>
+          n.data?.type === "trigger" &&
+          (n.data?.config as { placeholder?: boolean } | undefined)?.placeholder === true
+      )
+    ) {
+      toast.error("Elegí cómo arranca el workflow antes de ejecutarlo.");
+      return;
+    }
+
     // Collect all workflow issues at once
     const brokenRefs = getBrokenTemplateReferences(nodes);
     const missingFields = getMissingRequiredFields(nodes);
