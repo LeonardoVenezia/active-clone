@@ -94,6 +94,7 @@ const Home = () => {
 
         // Reuse an existing blank workflow instead of piling up new ones
         try {
+          if (new URLSearchParams(window.location.search).get("new") === "1") throw new Error("force-new");
           const existing = await api.workflow.getAll();
           const blank = existing.find(
             (w: { name: string; nodes?: unknown[]; edges?: unknown[] }) =>
