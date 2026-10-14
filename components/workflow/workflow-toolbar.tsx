@@ -989,7 +989,7 @@ function ToolbarActions({
   const [edges] = useAtom(edgesAtom);
   const deleteNode = useSetAtom(deleteNodeAtom);
   const deleteEdge = useSetAtom(deleteEdgeAtom);
-  const { screenToFlowPosition, fitView } = useReactFlow();
+  const { screenToFlowPosition, setCenter, getZoom } = useReactFlow();
 
   const selectedNode = nodes.find((node) => node.id === selectedNodeId);
   const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId);
@@ -1078,7 +1078,9 @@ function ToolbarActions({
     state.addNode(newNode);
     state.setSelectedNodeId(newNode.id);
     state.setActiveTab("properties");
-    setTimeout(() => fitView({ duration: 300, padding: 0.3, maxZoom: 1, minZoom: 0.2 }), 400);
+    const cx = finalPosition.x + 96;
+    const cy = finalPosition.y + 96;
+    setTimeout(() => setCenter(cx, cy, { duration: 300, zoom: Math.max(getZoom(), 0.6) }), 150);
   };
 
   return (
