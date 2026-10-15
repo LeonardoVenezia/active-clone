@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { SERVER_PLUGIN_TESTS } from "@/lib/server-plugin-tests";
 import postgres from "postgres";
 import { auth } from "@/lib/auth";
 import { getIntegration as getIntegrationFromDb } from "@/lib/db/integrations";
@@ -69,7 +70,8 @@ export async function POST(
 
     const credentials = getCredentialMapping(plugin, integration.config);
 
-    const testFn = await plugin.testConfig.getTestFunction();
+    const serverTest = SERVER_PLUGIN_TESTS[plugin.type];
+    const testFn = serverTest ? await serverTest() : await plugin.testConfig.getTestFunction();
     const testResult = await testFn(credentials);
 
     const result: TestConnectionResult = {

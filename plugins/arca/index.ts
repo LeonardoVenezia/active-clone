@@ -52,8 +52,8 @@ const arcaPlugin: IntegrationPlugin = {
 
   testConfig: {
     getTestFunction: async () => {
-      const { testArca } = await import("./test");
-      return testArca;
+      // The real test runs server-side via lib/server-plugin-tests.ts (it needs server-only code).
+      return async () => ({ success: false, error: "ARCA connection test runs on the server" });
     },
   },
 
