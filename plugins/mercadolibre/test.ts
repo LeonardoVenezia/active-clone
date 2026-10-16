@@ -18,7 +18,17 @@ export async function testMercadoLibre(credentials: Record<string, string>) {
           error: "Invalid or expired Mercado Libre access token",
         };
       }
-      return { success: false, error: `API error: HTTP ${response.status}` };
+      let detail = "";
+      try {
+        const body = (await response.json()) as { message?: string };
+        detail = body.message ? `: ${body.message}` : "";
+      } catch {
+        // body was not JSON; keep the status only
+      }
+      return {
+        success: false,
+        error: `API error: HTTP ${response.status}${detail}`,
+      };
     }
     return { success: true };
   } catch (error) {

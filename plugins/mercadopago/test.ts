@@ -21,7 +21,17 @@ export async function testMercadoPago(credentials: Record<string, string>) {
       if (response.status === 401 || response.status === 403) {
         return { success: false, error: "Invalid Mercado Pago access token" };
       }
-      return { success: false, error: `API error: HTTP ${response.status}` };
+      let detail = "";
+      try {
+        const body = (await response.json()) as { message?: string };
+        detail = body.message ? `: ${body.message}` : "";
+      } catch {
+        // body was not JSON; keep the status only
+      }
+      return {
+        success: false,
+        error: `API error: HTTP ${response.status}${detail}`,
+      };
     }
 
     return { success: true };

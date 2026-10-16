@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Copy, Pencil, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -42,7 +42,9 @@ function SecretField({
   helpLink,
   value,
   onChange,
+  configured = true,
 }: {
+  configured?: boolean;
   fieldId: string;
   label: string;
   configKey: string;
@@ -57,7 +59,7 @@ function SecretField({
   const hasNewValue = value.length > 0;
 
   // Show "Configured" state until user clicks Change
-  if (!(isEditing || hasNewValue)) {
+  if (configured && !(isEditing || hasNewValue)) {
     return (
       <div className="space-y-2">
         <Label htmlFor={fieldId}>{label}</Label>
@@ -92,7 +94,7 @@ function SecretField({
           type="password"
           value={value}
         />
-        {(isEditing || hasNewValue) && (
+        {configured && (isEditing || hasNewValue) && (
           <Button
             onClick={() => {
               onChange(configKey, "");
@@ -143,6 +145,27 @@ export function EditConnectionOverlay({
   } | null>(null);
   const [name, setName] = useState(integration.name);
   const [config, setConfig] = useState<Record<string, string>>({});
+  // Which secret fields already have a saved value (values are never shown).
+  const [savedKeys, setSavedKeys] = useState<Set<string> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.integration
+      .get(integration.id)
+      .then((full) => {
+        if (cancelled) {
+          return;
+        }
+        const keys = Object.entries(full.config ?? {})
+          .filter(([, value]) => typeof value === "string" && value.length > 0)
+          .map(([key]) => key);
+        setSavedKeys(new Set(keys));
+      })
+      .catch(() => setSavedKeys(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [integration.id]);
 
   const updateConfig = (key: string, value: string) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
@@ -295,6 +318,7 @@ export function EditConnectionOverlay({
         return (
           <SecretField
             configKey={field.configKey}
+            configured={savedKeys ? savedKeys.has(field.configKey) : true}
             fieldId={field.id}
             helpLink={field.helpLink}
             helpText={field.helpText}
