@@ -444,6 +444,24 @@ export function ConfigureConnectionOverlay({
       </p>
 
       <div className="space-y-4">
+        {type === "mercadolibre" && (
+          <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+            <p className="text-sm">
+              Easiest way: connect your account from Mercado Libre. Tokens are
+              filled in automatically.
+            </p>
+            <a
+              className="inline-flex h-9 items-center rounded-md bg-primary px-3 font-medium text-primary-foreground text-sm"
+              href="/api/integrations/mercadolibre/install"
+            >
+              Conectar con Mercado Libre
+            </a>
+            <p className="text-muted-foreground text-xs">
+              Needs the app to be configured on the server. Or paste the tokens
+              below by hand.
+            </p>
+          </div>
+        )}
         {renderConfigFields()}
 
         <div className="space-y-2">

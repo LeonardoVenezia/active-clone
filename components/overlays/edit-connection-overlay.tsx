@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Pencil, X } from "lucide-react";
+import { Check, Copy, Pencil, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -265,6 +265,13 @@ export function EditConnectionOverlay({
   const plugin = getIntegration(integration.type);
   const formFields = plugin?.formFields;
 
+  // Incoming webhook URL (only for plugins that receive notifications)
+  const notificationUrl = plugin?.webhook
+    ? integration.type === "mercadolibre"
+      ? `${window.location.origin}/api/integrations/mercadolibre/notifications`
+      : `${window.location.origin}/api/integrations/webhooks/${integration.type}/${integration.id}`
+    : "";
+
   // Render config fields
   const renderConfigFields = () => {
     if (integration.type === "database") {
@@ -357,6 +364,34 @@ export function EditConnectionOverlay({
 
       <div className="space-y-4">
         {renderConfigFields()}
+
+        {notificationUrl && (
+          <div className="space-y-2">
+            <Label>Notification URL</Label>
+            <div className="flex gap-2">
+              <Input
+                className="font-mono text-xs"
+                readOnly
+                value={notificationUrl}
+              />
+              <Button
+                onClick={() => {
+                  navigator.clipboard.writeText(notificationUrl);
+                  toast.success("URL copied to clipboard");
+                }}
+                size="icon"
+                type="button"
+                variant="outline"
+              >
+                <Copy className="size-4" />
+              </Button>
+            </div>
+            <p className="text-muted-foreground text-xs">
+              Paste this URL in the provider&apos;s notification (webhook)
+              settings.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="name">Label (Optional)</Label>
