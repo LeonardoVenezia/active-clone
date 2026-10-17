@@ -10,6 +10,8 @@ async function api(path: string, body?: Row): Promise<Row> {
   return r.json();
 }
 const SLUG = /^[a-z0-9_]{1,60}$/;
+// Composio tool slugs are uppercase (e.g. NOTION_CREATE_PAGE); toolkit slugs stay lowercase.
+const TOOL_SLUG = /^[A-Za-z0-9_]{1,80}$/;
 export type GenericToolkit = { id: string; name: string; description: string; logoUrl: string | null; oauth: boolean; managed: boolean; keyScheme: string | null };
 export async function describeToolkit(slug: string): Promise<GenericToolkit | null> {
   if (!SLUG.test(slug)) return null;
@@ -62,5 +64,5 @@ export async function listToolkitTools(slug: string): Promise<ToolkitTool[]> {
       name: String(t.name ?? t.meta?.name ?? t.slug ?? ""),
       description: String(t.description ?? t.meta?.description ?? "").slice(0, 200),
     }))
-    .filter((t: ToolkitTool) => SLUG.test(t.slug));
+    .filter((t: ToolkitTool) => TOOL_SLUG.test(t.slug));
 }
