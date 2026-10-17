@@ -136,6 +136,9 @@ export async function GET(request: Request) {
         accessToken: token.access_token,
         refreshToken: token.refresh_token,
         userId,
+        expiresAt: new Date(
+          Date.now() + (token.expires_in ?? 21600) * 1000
+        ).toISOString(),
       }
     );
     return redirectWithResult(request, "connected");

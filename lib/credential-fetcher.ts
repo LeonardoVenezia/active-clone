@@ -16,6 +16,7 @@
 import "server-only";
 
 import { getCredentialMapping, getIntegration } from "@/plugins";
+import { withFreshMercadoPagoToken } from "@/plugins/mercadopago/refresh";
 import { getIntegrationById } from "./db/integrations";
 import type { IntegrationConfig, IntegrationType } from "./types/integration";
 
@@ -80,10 +81,13 @@ export async function fetchCredentials(
 
   console.log("[Credential Fetcher] Found integration:", integration.type);
 
-  const credentials = mapIntegrationConfig(
-    integration.type,
-    integration.config
-  );
+  // OAuth connections whose access token expires get a fresh token here.
+  const fresh =
+    integration.type === "mercadopago"
+      ? await withFreshMercadoPagoToken(integration)
+      : integration;
+
+  const credentials = mapIntegrationConfig(fresh.type, fresh.config);
 
   console.log(
     "[Credential Fetcher] Returning credentials for type:",
