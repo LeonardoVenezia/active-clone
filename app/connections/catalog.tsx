@@ -7,7 +7,7 @@ type Verification = { ok: boolean; checked: boolean; missing: { id: string; labe
 type Connection = { id: string; toolkitId: string; status: "pending" | "active" | "needs_attention" | "failed"; label: string; verification: Verification | null; recovery: string | null; usedBy: string[] };
 type TestResult = { ok: boolean; message: string; checkedAt: string };
 type Toolkit = { id: string; name: string; description: string; logoUrl: string | null; categories: string[]; authKind: string; reviewed: boolean };
-type NativeApp = { id: string; name: string; description: string; source: "native"; connect: { kind: "oauth"; path: string } | { kind: "manual" }; actions: string[]; triggers: string[] };
+type NativeApp = { id: string; name: string; description: string; source: "native"; group: "app" | "platform"; connect: { kind: "oauth"; path: string } | { kind: "manual" }; actions: string[]; triggers: string[] };
 type NativeConnection = { id: string; appId: string; source: "native"; label: string; status: "active"; createdAt: string };
 type Data = { items: Toolkit[]; nextCursor: string | null; total: number | null; connections: Record<string, Connection[]>; featured: Preset[]; native?: { apps: NativeApp[]; connections: NativeConnection[] } };
 const BADGE: Record<string, string> = { active: "Connected and verified", needs_attention: "Connected, permissions need attention", pending: "Waiting for consent", failed: "Not usable" };
@@ -76,12 +76,19 @@ export function Catalog({ signedIn }: { signedIn: boolean }) {
   const featuredIds = new Set((data?.featured ?? []).map(f => f.toolkitId));
   return <div className="space-y-6">
     {(data?.native?.apps.length ?? 0) > 0 && <section className="space-y-3"><h2 className="text-lg font-bold">Apps del proyecto</h2><p className="text-sm text-muted-foreground">Integraciones nativas de Active-clone, sin intermediarios. Es la misma lista que leen el chat y el editor.</p>
-      <div className="grid gap-3 sm:grid-cols-2">{data?.native?.apps.map(a => { const conns = (data?.native?.connections ?? []).filter(c => c.appId === a.id); return <article key={a.id} className="rounded-xl border p-4 space-y-2">
+      <div className="grid gap-3 sm:grid-cols-2">{data?.native?.apps.filter(a => a.group !== "platform").map(a => { const conns = (data?.native?.connections ?? []).filter(c => c.appId === a.id); return <article key={a.id} className="rounded-xl border p-4 space-y-2">
         <h3 className="font-semibold">{a.name}</h3>
         <p className="text-xs text-muted-foreground line-clamp-2">{a.description}</p>
         {conns.map(c => <p key={c.id} className="text-sm"><span className="font-semibold text-green-700">Conectada</span> · {c.label}</p>)}
         {a.connect.kind === "oauth" ? <a className="inline-flex h-8 items-center rounded-md bg-primary px-3 font-medium text-primary-foreground text-sm" href={a.connect.path}>{conns.length ? "Conectar otra cuenta" : "Conectar"}</a> : <p className="text-xs text-muted-foreground">Se conecta con credenciales desde el editor (agregá un paso de esta app y cargá la conexión ahí).</p>}
       </article>; })}</div>
+      {(data?.native?.apps.some(a => a.group === "platform")) && <details className="rounded-xl border p-4"><summary className="cursor-pointer font-semibold text-sm">Plataforma (componentes internos de la app)</summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">{data?.native?.apps.filter(a => a.group === "platform").map(a => { const conns = (data?.native?.connections ?? []).filter(c => c.appId === a.id); return <article key={a.id} className="rounded-lg border p-3 space-y-1">
+          <h3 className="font-semibold text-sm">{a.name}</h3>
+          <p className="text-xs text-muted-foreground line-clamp-2">{a.description}</p>
+          {conns.map(c => <p key={c.id} className="text-xs"><span className="font-semibold text-green-700">Conectada</span> · {c.label}</p>)}
+        </article>; })}</div>
+      </details>}
     </section>}
     {busy && <p role="status" className="rounded-lg border border-primary p-4 animate-pulse">{busy}</p>}
     {notice && <p role="status" className="rounded-lg border border-green-600 p-4 text-sm">{notice}</p>}

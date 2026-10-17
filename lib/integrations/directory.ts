@@ -22,6 +22,7 @@ export type DirectoryApp = {
   name: string;
   description: string;
   source: "native";
+  group: "app" | "platform";
   connect: NativeConnect;
   actions: string[]; // action labels, same registry the editor shows
   triggers: string[]; // trigger labels
@@ -46,6 +47,20 @@ const OAUTH_INSTALL: Partial<Record<IntegrationType, string>> = {
 // Composio apps are listed through the lib/connectors provider, not here.
 const EXCLUDED: ReadonlySet<string> = new Set(["composio"]);
 
+// Platform/infra plugins: real plugins, but building blocks of the app itself,
+// not apps a user connects for their business. Shown collapsed under
+// "Plataforma" on /connections (agreed with the owner).
+const PLATFORM: ReadonlySet<string> = new Set([
+  "ai-gateway",
+  "blob",
+  "clerk",
+  "fal",
+  "firecrawl",
+  "perplexity",
+  "superagent",
+  "v0",
+]);
+
 export function listNativeApps(): DirectoryApp[] {
   return getAllIntegrations()
     .filter((plugin) => !EXCLUDED.has(plugin.type))
@@ -56,6 +71,7 @@ export function listNativeApps(): DirectoryApp[] {
         name: plugin.label,
         description: plugin.description,
         source: "native" as const,
+        group: PLATFORM.has(plugin.type) ? ("platform" as const) : ("app" as const),
         connect: install
           ? ({ kind: "oauth", path: install } as const)
           : ({ kind: "manual" } as const),
@@ -91,7 +107,7 @@ export async function nativeChatContext(userId: string): Promise<string> {
     .filter((a) => connectedIds.has(a.id))
     .map((a) => a.name);
   const available = apps
-    .filter((a) => !connectedIds.has(a.id))
+    .filter((a) => a.group === "app" && !connectedIds.has(a.id))
     .map((a) => a.name);
   return [
     "Native apps from the same integration registry shown on /connections (these connect outside the chat; never ask the user for keys in chat):",
