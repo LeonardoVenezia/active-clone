@@ -462,6 +462,24 @@ export function ConfigureConnectionOverlay({
             </p>
           </div>
         )}
+        {type === "mercadopago" && (
+          <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+            <p className="text-sm">
+              Easiest way: connect your Mercado Pago account. Tokens are
+              filled in automatically.
+            </p>
+            <a
+              className="inline-flex h-9 items-center rounded-md bg-primary px-3 font-medium text-primary-foreground text-sm"
+              href="/api/integrations/mercadopago/install"
+            >
+              Conectar con Mercado Pago
+            </a>
+            <p className="text-muted-foreground text-xs">
+              Needs the app to be configured on the server. Or paste the
+              tokens below by hand.
+            </p>
+          </div>
+        )}
         {renderConfigFields()}
 
         <div className="space-y-2">
