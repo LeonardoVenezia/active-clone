@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/code-editor";
 import { IntegrationIcon } from "@/components/ui/integration-icon";
 import { IntegrationSelector } from "@/components/ui/integration-selector";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -219,6 +220,69 @@ function ConditionFields({
   );
 }
 
+// Loop fields component
+function LoopFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  const innerSteps = Array.isArray(config?.steps)
+    ? (config.steps as Array<{ id?: string; actionType?: string }>)
+    : [];
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="loop-source">List to repeat over</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="loop-source"
+          onChange={(value) => onUpdateConfig("source", value)}
+          placeholder="e.g., {{@search-orders:Search Orders.orders}}"
+          value={(config?.source as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Reference an array field from a previous step. Inside the repeated
+          steps, use @item for the current item and @index for its position.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="loop-max">Max items (up to 50)</Label>
+        <Input
+          disabled={disabled}
+          id="loop-max"
+          max={50}
+          min={1}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onUpdateConfig("maxItems", e.target.value)}
+          type="number"
+          value={String(config?.maxItems ?? 50)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Steps repeated per item</Label>
+        {innerSteps.length ? (
+          <ol className="list-decimal space-y-1 pl-5 text-sm">
+            {innerSteps.map((step, i) => (
+              <li key={step.id || i}>{step.actionType || "Unconfigured step"}</li>
+            ))}
+          </ol>
+        ) : (
+          <p className="text-muted-foreground text-xs">
+            No inner steps yet. Ask the chat to build the loop for you.
+          </p>
+        )}
+        <p className="text-muted-foreground text-xs">
+          Items that fail are marked and the run continues with the next one.
+          The output includes results, failed, count and failedCount.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // System action fields wrapper - extracts conditional rendering to reduce complexity
 function SystemActionFields({
   actionType,
@@ -256,6 +320,14 @@ function SystemActionFields({
           onUpdateConfig={onUpdateConfig}
         />
       );
+    case "Loop":
+      return (
+        <LoopFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
     default:
       return null;
   }
@@ -266,6 +338,7 @@ const SYSTEM_ACTIONS: Array<{ id: string; label: string }> = [
   { id: "HTTP Request", label: "HTTP Request" },
   { id: "Database Query", label: "Database Query" },
   { id: "Condition", label: "Condition" },
+  { id: "Loop", label: "Loop" },
 ];
 
 const SYSTEM_ACTION_IDS = SYSTEM_ACTIONS.map((a) => a.id);

@@ -59,6 +59,12 @@ const SYSTEM_ACTIONS: ActionType[] = [
     description: "Branch based on a condition",
     category: "System",
   },
+  {
+    id: "Loop",
+    label: "Loop",
+    description: "Repeat steps for each item of a list (up to 50)",
+    category: "System",
+  },
 ];
 
 // Combine System actions with plugin actions

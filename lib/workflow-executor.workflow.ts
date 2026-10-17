@@ -417,6 +417,169 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
     return node.data.type;
   }
 
+  /**
+   * Execute a Loop node: resolves its source array from an earlier step's
+   * output, then runs a linear chain of inner steps once per item.
+   * Per-item templates: {{@item:Item.field}} and {{@index:Index.number}}.
+   * Inner steps can reference earlier inner steps by their id.
+   * Failed items are marked and the run continues (continue-and-mark-failed).
+   */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Loop execution requires nested iteration and error handling
+  async function executeLoopNode(
+    node: WorkflowNode,
+    config: Record<string, unknown>,
+    baseOutputs: NodeOutputs
+  ): Promise<ExecutionResult> {
+    const label = node.data.label || node.id;
+    const source = typeof config.source === "string" ? config.source : "";
+    let list: unknown;
+    const sourceMatch = source.match(/^\s*\{\{@([^:]+):([^}]+)\}\}\s*$/);
+    if (sourceMatch) {
+      const sanitizedSourceId = sourceMatch[1].replace(/[^a-zA-Z0-9]/g, "_");
+      const sourceOutput = baseOutputs[sanitizedSourceId];
+      if (!sourceOutput) {
+        return {
+          success: false,
+          error: `Loop "${label}": the step "${sourceMatch[1]}" that produces the list was not found or did not run.`,
+        };
+      }
+      const dotIndex = sourceMatch[2].indexOf(".");
+      list =
+        dotIndex === -1
+          ? sourceOutput.data
+          : resolveFieldValue(
+              sourceOutput.data,
+              sourceMatch[2].substring(dotIndex + 1)
+            );
+    } else {
+      try {
+        list = JSON.parse(source);
+      } catch {
+        list = undefined;
+      }
+    }
+    if (typeof list === "string") {
+      try {
+        list = JSON.parse(list);
+      } catch {
+        // keep as string; validation below rejects it
+      }
+    }
+    if (!Array.isArray(list)) {
+      return {
+        success: false,
+        error: `Loop "${label}": the source is not a list (got ${list === null || list === undefined ? String(list) : typeof list}). Point it to an array field, e.g. {{@search-orders:Search Orders.orders}}.`,
+      };
+    }
+    const rawSteps = Array.isArray(config.steps) ? config.steps : [];
+    if (rawSteps.length === 0) {
+      return {
+        success: false,
+        error: `Loop "${label}": has no inner steps configured.`,
+      };
+    }
+    const maxItems = Math.min(Math.max(Number(config.maxItems) || 50, 1), 50);
+    const items = list.slice(0, maxItems);
+    const loopResults: unknown[] = [];
+    const failed: { index: number; step?: string; error: string }[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const itemOutputs: NodeOutputs = {
+        ...baseOutputs,
+        item: { label: "Item", data: item },
+        index: { label: "Index", data: { number: i } },
+      };
+      let itemResult: unknown = null;
+      let itemFailed = false;
+      for (let s = 0; s < rawSteps.length; s++) {
+        const bodyStep = rawSteps[s] as {
+          id?: string;
+          actionType?: string;
+          config?: Record<string, unknown>;
+        };
+        const stepId = (bodyStep.id || `step-${s + 1}`).replace(
+          /[^a-zA-Z0-9]/g,
+          "_"
+        );
+        const stepAction = bodyStep.actionType;
+        if (!stepAction) {
+          failed.push({ index: i, error: "inner step has no actionType" });
+          itemFailed = true;
+          break;
+        }
+        const processedBodyConfig = processTemplates(
+          { ...(bodyStep.config || {}) },
+          itemOutputs
+        );
+        try {
+          const bodyResult = await executeActionStep({
+            actionType: stepAction,
+            config: processedBodyConfig,
+            outputs: itemOutputs,
+            context: {
+              executionId,
+              nodeId: `${node.id}#${i + 1}.${stepId}`,
+              nodeName: `${getNodeName(node)} item ${i + 1} - ${stepAction}`,
+              nodeType: stepAction,
+            },
+          });
+          if (
+            bodyResult &&
+            typeof bodyResult === "object" &&
+            "success" in bodyResult &&
+            (bodyResult as { success: boolean }).success === false
+          ) {
+            const bodyError = (bodyResult as { error?: unknown }).error;
+            failed.push({
+              index: i,
+              step: stepAction,
+              error:
+                typeof bodyError === "string"
+                  ? bodyError
+                  : (bodyError as { message?: string })?.message ||
+                    `Inner step "${stepAction}" failed`,
+            });
+            itemFailed = true;
+            break;
+          }
+          itemResult = bodyResult;
+          itemOutputs[stepId] = { label: stepAction, data: bodyResult };
+        } catch (error) {
+          failed.push({
+            index: i,
+            step: stepAction,
+            error: await getErrorMessageAsync(error),
+          });
+          itemFailed = true;
+          break;
+        }
+      }
+      if (!itemFailed) {
+        loopResults.push(itemResult);
+      }
+    }
+
+    console.log("[Workflow Executor] Loop completed:", {
+      nodeId: node.id,
+      items: items.length,
+      completed: loopResults.length,
+      failed: failed.length,
+    });
+
+    return {
+      success: true,
+      data: {
+        results: loopResults,
+        failed,
+        count: items.length,
+        completed: loopResults.length,
+        failedCount: failed.length,
+        truncated: list.length > maxItems,
+      },
+    };
+  }
+
   // Helper to execute a single node
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Node execution requires type checking and error handling
   async function executeNode(nodeId: string, visited: Set<string> = new Set()) {
@@ -520,6 +683,24 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
             error: `Action node "${node.data.label || node.id}" has no action type configured`,
           };
           results[nodeId] = result;
+          return;
+        }
+
+        // Loop nodes resolve their own source and run inner steps per item
+        if (actionType === "Loop") {
+          result = await executeLoopNode(node, config, outputs);
+          results[nodeId] = result;
+          const sanitizedLoopNodeId = nodeId.replace(/[^a-zA-Z0-9]/g, "_");
+          outputs[sanitizedLoopNodeId] = {
+            label: node.data.label || nodeId,
+            data: result.data,
+          };
+          if (result.success) {
+            const nextNodes = edgesBySource.get(nodeId) || [];
+            await Promise.all(
+              nextNodes.map((nextNodeId) => executeNode(nextNodeId, visited))
+            );
+          }
           return;
         }
 
