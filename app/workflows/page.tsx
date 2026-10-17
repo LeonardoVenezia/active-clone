@@ -57,7 +57,7 @@ export default function FlowsPage() {
   }
 
   return <main className="pointer-events-auto fixed inset-0 z-20 overflow-auto bg-background p-6"><div className="mx-auto max-w-5xl space-y-6">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-bold">Workflows</h1><div className="flex items-center gap-3"><Link className="self-center text-sm underline" href="/connections">Connections</Link><Link className="self-center text-sm underline" href="/history">History</Link><Button asChild size="sm"><a href="/?new=1">+ Nuevo workflow</a></Button></div></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="flex items-center gap-2 text-2xl font-bold"><img alt="Active-clone" className="size-8 rounded-lg" src="/logo.png" />Workflows</h1><div className="flex items-center gap-3"><Link className="self-center text-sm underline" href="/connections">Connections</Link><Link className="self-center text-sm underline" href="/history">History</Link><Button asChild size="sm"><a href="/?new=1">+ Nuevo workflow</a></Button></div></div>
     {isPending ? <p>Cargando...</p> : !signedIn ? <div className="space-y-3 rounded-xl border p-5"><p className="font-semibold">Iniciá sesión para ver y crear workflows.</p><p className="text-sm text-muted-foreground">Se guardan en tu cuenta.</p><AuthDialog><Button>Sign In</Button></AuthDialog></div> : <>
       {error && <p role="alert" className="text-destructive">{error}</p>}
       {rows === null && <p>Cargando workflows...</p>}
