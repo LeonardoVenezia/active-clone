@@ -2,7 +2,7 @@ import { llmRoutes } from "@/lib/free-models";
 import { describeToolkit } from "@/lib/connectors/generic";
 import { myConnections } from "@/lib/connectors";
 import { PRESETS } from "@/lib/connectors/presets";
-import { nativeChatContext } from "@/lib/integrations/directory";
+import { listNativeConnections, nativeChatContext, nativeOAuthApp } from "@/lib/integrations/directory";
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
@@ -15,6 +15,8 @@ const REQUESTED_TOOLKITS: [string, RegExp][] = [
   ["outlook", /\b(?:microsoft\s+)?outlook\b/i],
   ["gmail", /\bgmail\b/i],
   ["googlesheets", /\b(?:google\s+)?sheets\b/i],
+  ["mercadopago", /\bmercado\s*pago\b/i],
+  ["mercadolibre", /\bmercado\s*libre\b/i],
 ];
 const CONNECT_INTENT = /\b(?:connect|link|sign\s*in|log\s*in|authorize|authenticate|conect\w*|vincul\w*|inici\w+\s+sesion)\b/i;
 const CONNECTOR_SLUG_ALIASES: Record<string, string> = { microsoft_outlook: "outlook", google_sheets: "googlesheets" };
@@ -39,7 +41,7 @@ STRICT RULES:
 - Never announce an intention without acting. Forbidden: "voy a crear", "voy a preparar", "on it", "lo voy a hacer", "I'll build". Either include the [[BUILD: ...]] marker in the same reply, or ask the specific question you still need. Never write a reply that only promises.
 - Never claim the change is done before the build succeeds. Never mention or promise a link, button, or click in prose; only the app shows connection cards.
 - When an app is required, use the connection-status block below: never ask the user whether they already connected an account. If status is not_connected, include [[CONNECT: toolkit_slug]] using the exact lowercase slug from the status block. If status is needs_attention, say the existing connection needs reviewed permissions and include [[CONNECT: toolkit_slug]]. If status is connected, do not ask to connect it. If status is pending, say it is still finishing. If status is check_failed, say you could not verify and offer to retry; never include CONNECT. If both connection and build are needed, put CONNECT first and do not include BUILD until the connection exists.
-- Distinguish a draft on the canvas from an activated workflow that really runs. Never tell users to log out. Never ask for passwords, API keys or verification codes in chat. Do not invent available apps, actions, permissions, run status or results. For Composio apps use only exact toolkit and action slugs supplied by the canvas builder from the live catalog; never guess one. If unsure whether something is possible, say so and offer the closest alternative.`;
+- Distinguish a draft on the canvas from an activated workflow that really runs. Never tell users to log out. Never ask for passwords, API keys or verification codes in chat. Do not invent available apps, actions, permissions, run status or results. Mercado Pago and Mercado Libre are native apps: when their status is not_connected, include [[CONNECT: mercadopago]] or [[CONNECT: mercadolibre]] exactly; the app shows a one-click connect card for them. For Composio apps use only exact toolkit and action slugs supplied by the canvas builder from the live catalog; never guess one. If unsure whether something is possible, say so and offer the closest alternative.`;
 export async function GET(r: Request) {
   const id = await user(r); if (!id) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   const w = new URL(r.url).searchParams.get("workflowId");
@@ -68,12 +70,18 @@ export async function POST(r: Request) {
     const asksConfirm = /(?:lo armo|armo|construyo|creo|hago|te parece|de acuerdo|est[aá] bien|as[ií]\s*\?|listo para|confirm|shall i|should i|sound good|ready to|does this)/i.test(lastAssistant.slice(-220)) && /\?\s*$/.test(lastAssistant);
     const affirmative = /^\s*(?:s[ií]|sip|dale|ok(?:ay|s)?|okey|perfecto|listo|de acuerdo|adelante|confirmo|va|bueno|genial|joya|exacto|correcto|yes|yep|yeah|sure|go|great|that works)\b/i.test(text) && text.length < 160;
     const recentlyConfirmedPlan = planShown && asksConfirm && affirmative;
-    const requestedToolkits = REQUESTED_TOOLKITS.filter(([slug, pattern]) => !!PRESETS[slug] && pattern.test(recentIntent)).map(([slug]) => slug);
+    const requestedToolkits = REQUESTED_TOOLKITS.filter(([slug, pattern]) => (!!PRESETS[slug] || !!nativeOAuthApp(slug)) && pattern.test(recentIntent)).map(([slug]) => slug);
     let connectionStatusContext = "No supported connection toolkit was mentioned in the recent user intent.";
     const connectionStatuses: Record<string, "connected" | "pending" | "needs_attention" | "not_connected" | "check_failed"> = {};
     if (requestedToolkits.length) {
       const results = await Promise.all(requestedToolkits.map(async slug => {
-        try { return { slug, entries: (await myConnections(id, [slug]))[slug] ?? [], error: null as unknown }; }
+        try {
+          if (nativeOAuthApp(slug)) {
+            const native = (await listNativeConnections(id)).filter(c => c.appId === slug);
+            return { slug, entries: native.map(() => ({ status: "active" })), error: null as unknown };
+          }
+          return { slug, entries: (await myConnections(id, [slug]))[slug] ?? [], error: null as unknown };
+        }
         catch (error) { console.error(`[workflow-chat] connection status lookup failed for ${slug}:`, error instanceof Error ? error.message : "unknown"); return { slug, entries: [], error }; }
       }));
       for (const { slug, entries, error } of results) {
@@ -113,10 +121,13 @@ export async function POST(r: Request) {
       if (PRESETS[slug]) {
         const status = connectionStatuses[slug];
         if (status === "not_connected" || status === "needs_attention") connect = { ...PRESETS[slug], generic: false, needsAttention: status === "needs_attention" };
+      } else if (nativeOAuthApp(slug)) {
+        const app = nativeOAuthApp(slug);
+        if (app && connectionStatuses[slug] === "not_connected") connect = { native: true, toolkitId: app.id, title: app.name, installPath: `${app.installPath}?popup=1`, grants: [], doesNotGrant: [], consentHint: "", generic: false };
       } else { const t = await describeToolkit(slug).catch(() => null); if (t && ((t.oauth && t.managed) || t.keyScheme)) connect = { toolkitId: t.id, title: t.name, grants: [], doesNotGrant: [], consentHint: "", generic: true, apiKey: !t.managed }; }
     }
     if (cm) reply = reply.replace(/\s*\[{1,2}CONNECT[^\]]*\]{1,2}\s*/gi, "\n").trim() || "To continue I need you to connect that account. Check the permissions below.";
-    if (cm) { const slug = CONNECTOR_SLUG_ALIASES[cm[1].toLowerCase()] ?? cm[1].toLowerCase(); if (PRESETS[slug] && !["not_connected", "needs_attention"].includes(connectionStatuses[slug])) { connect = null; if (connectionStatuses[slug] === "check_failed") reply = "No pude verificar el estado de conexión de esa app. Reintentá en un momento; no hace falta conectarla otra vez todavía."; else if (connectionStatuses[slug] === "pending") reply = "La conexión de esa app todavía está terminando."; else if (reply === "To continue I need you to connect that account. Check the permissions below.") reply = "Esa cuenta ya está conectada, así que sigo sin pedirte nada más. Contame qué querés que haga con ella."; } }
+    if (cm) { const slug = CONNECTOR_SLUG_ALIASES[cm[1].toLowerCase()] ?? cm[1].toLowerCase(); if (!PRESETS[slug] && nativeOAuthApp(slug) && connectionStatuses[slug] === "connected") connect = null; if (PRESETS[slug] && !["not_connected", "needs_attention"].includes(connectionStatuses[slug])) { connect = null; if (connectionStatuses[slug] === "check_failed") reply = "No pude verificar el estado de conexión de esa app. Reintentá en un momento; no hace falta conectarla otra vez todavía."; else if (connectionStatuses[slug] === "pending") reply = "La conexión de esa app todavía está terminando."; else if (reply === "To continue I need you to connect that account. Check the permissions below.") reply = "Esa cuenta ya está conectada, así que sigo sin pedirte nada más. Contame qué querés que haga con ella."; } }
     if (!cm && (explicitBuildIntent || recentlyConfirmedPlan)) {
       const instruction = [...past.filter(m => m.role === "assistant").slice(-4).map(m => m.content), text].join("\n").replace(/[\r\n]+/g, " ").slice(-550);
       reply = `Armando el flujo en el lienzo.\n[[BUILD: ${instruction}]]`;

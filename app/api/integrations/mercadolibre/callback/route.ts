@@ -5,6 +5,7 @@ import { createIntegration } from "@/lib/db/integrations";
 import { ML_API_URL } from "@/plugins/mercadolibre/api";
 
 const STATE_COOKIE = "mercadolibre_oauth_state";
+const POPUP_COOKIE = "mercadolibre_oauth_popup";
 
 type TokenResponse = {
   access_token?: string;
@@ -18,12 +19,30 @@ function sameState(a: string, b: string): boolean {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+function readCookie(request: Request, name: string): string | undefined {
+  return request.headers
+    .get("cookie")
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
+}
+
 function redirectWithResult(request: Request, result: string) {
   const url = new URL("/connections", request.url);
   url.searchParams.set("mercadolibre", result);
+  if (readCookie(request, POPUP_COOKIE) === "1") {
+    // Chat connect-card flow: /connections posts back to the opener and closes.
+    url.searchParams.set("popup", "1");
+    url.searchParams.set("returned", "mercadolibre");
+  }
   const response = NextResponse.redirect(url);
   response.cookies.delete({
     name: STATE_COOKIE,
+    path: "/api/integrations/mercadolibre",
+  });
+  response.cookies.delete({
+    name: POPUP_COOKIE,
     path: "/api/integrations/mercadolibre",
   });
   return response;

@@ -6,6 +6,7 @@ import { MP_TOKEN_URL } from "@/plugins/mercadopago/api";
 
 const STATE_COOKIE = "mercadopago_oauth_state";
 const VERIFIER_COOKIE = "mercadopago_oauth_verifier";
+const POPUP_COOKIE = "mercadopago_oauth_popup";
 
 type TokenResponse = {
   access_token?: string;
@@ -32,6 +33,11 @@ function readCookie(request: Request, name: string): string | undefined {
 function redirectWithResult(request: Request, result: string) {
   const url = new URL("/connections", request.url);
   url.searchParams.set("mercadopago", result);
+  if (readCookie(request, POPUP_COOKIE) === "1") {
+    // Chat connect-card flow: /connections posts back to the opener and closes.
+    url.searchParams.set("popup", "1");
+    url.searchParams.set("returned", "mercadopago");
+  }
   const response = NextResponse.redirect(url);
   response.cookies.delete({
     name: STATE_COOKIE,
@@ -39,6 +45,10 @@ function redirectWithResult(request: Request, result: string) {
   });
   response.cookies.delete({
     name: VERIFIER_COOKIE,
+    path: "/api/integrations/mercadopago",
+  });
+  response.cookies.delete({
+    name: POPUP_COOKIE,
     path: "/api/integrations/mercadopago",
   });
   return response;

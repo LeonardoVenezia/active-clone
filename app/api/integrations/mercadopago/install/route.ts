@@ -5,6 +5,7 @@ import { MP_AUTH_URL } from "@/plugins/mercadopago/api";
 
 const STATE_COOKIE = "mercadopago_oauth_state";
 const VERIFIER_COOKIE = "mercadopago_oauth_verifier";
+const POPUP_COOKIE = "mercadopago_oauth_popup";
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: true,
@@ -56,5 +57,8 @@ export async function GET(request: Request) {
   const response = NextResponse.redirect(authorizeUrl.toString());
   response.cookies.set(STATE_COOKIE, state, COOKIE_OPTIONS);
   response.cookies.set(VERIFIER_COOKIE, codeVerifier, COOKIE_OPTIONS);
+  if (new URL(request.url).searchParams.get("popup") === "1") {
+    response.cookies.set(POPUP_COOKIE, "1", COOKIE_OPTIONS);
+  }
   return response;
 }

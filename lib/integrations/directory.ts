@@ -72,6 +72,20 @@ const PLATFORM: ReadonlySet<string> = new Set([
   "v0",
 ]);
 
+// Native apps with a one-click OAuth connect, for the chat's connect cards.
+export function nativeOAuthApp(
+  id: string
+): { id: IntegrationType; name: string; installPath: string } | null {
+  const path = OAUTH_INSTALL[id as IntegrationType];
+  if (!path) {
+    return null;
+  }
+  const plugin = getAllIntegrations().find((p) => p.type === id);
+  return plugin
+    ? { id: plugin.type, name: plugin.label, installPath: path }
+    : null;
+}
+
 export function listNativeApps(): DirectoryApp[] {
   return getAllIntegrations()
     .filter((plugin) => !EXCLUDED.has(plugin.type))
