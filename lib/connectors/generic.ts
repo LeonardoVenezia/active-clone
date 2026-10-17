@@ -53,6 +53,14 @@ export async function genericActive(userId: string, slug: string): Promise<boole
   return (r.items ?? []).some((a: Row) => a.user_id === userId && a.status === "ACTIVE" && !a.is_disabled && String(a.toolkit?.slug).toLowerCase() === slug);
 }
 
+export type GenericConnection = { toolkitId: string; createdAt: string | null };
+export async function genericConnections(userId: string): Promise<GenericConnection[]> {
+  const r = await api(`/connected_accounts?user_ids=${encodeURIComponent(userId)}&limit=100`);
+  return (r.items ?? [])
+    .filter((a: Row) => a.user_id === userId && a.status === "ACTIVE" && !a.is_disabled && a.toolkit?.slug)
+    .map((a: Row) => ({ toolkitId: String(a.toolkit.slug).toLowerCase(), createdAt: typeof a.created_at === "string" ? a.created_at : null }));
+}
+
 export type ToolkitTool = { slug: string; name: string; description: string };
 export async function listToolkitTools(slug: string): Promise<ToolkitTool[]> {
   if (!SLUG.test(slug)) return [];

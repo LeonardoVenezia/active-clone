@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 type Permission = { id: string; label: string; risk: string };
 type Preset = { id: string; toolkitId: string; title: string; grants: Permission[]; doesNotGrant: string[]; consentHint: string; notes?: string };
@@ -10,7 +10,8 @@ type Toolkit = { id: string; name: string; description: string; logoUrl: string 
 type NativeFormField = { id: string; label: string; type: "text" | "password" | "url"; placeholder?: string; helpText?: string; helpLink?: { text: string; url: string }; configKey: string };
 type NativeApp = { id: string; name: string; description: string; source: "native"; group: "app" | "platform"; connect: { kind: "oauth"; path: string } | { kind: "manual" }; formFields: NativeFormField[]; actions: string[]; triggers: string[] };
 type NativeConnection = { id: string; appId: string; source: "native"; label: string; status: "active"; createdAt: string };
-type Data = { items: Toolkit[]; nextCursor: string | null; total: number | null; connections: Record<string, Connection[]>; featured: Preset[]; native?: { apps: NativeApp[]; connections: NativeConnection[] } };
+type GenericConnection = { toolkitId: string; createdAt: string | null };
+type Data = { items: Toolkit[]; nextCursor: string | null; total: number | null; connections: Record<string, Connection[]>; featured: Preset[]; native?: { apps: NativeApp[]; connections: NativeConnection[] }; genericConnections?: GenericConnection[] };
 const BADGE: Record<string, string> = { active: "Connected and verified", needs_attention: "Connected, permissions need attention", pending: "Waiting for consent", failed: "Not usable" };
 const BADGE_CLASS: Record<string, string> = { active: "text-green-700", needs_attention: "text-destructive", pending: "text-muted-foreground", failed: "text-destructive" };
 async function call(path: string, init?: RequestInit) {
@@ -50,7 +51,7 @@ function NativeAppCard({ app, conns, onSaved }: { app: NativeApp; conns: NativeC
     } catch (e) { setResult({ ok: false, message: e instanceof Error ? e.message : "No se pudo guardar." }); }
     finally { setBusy(false); }
   }
-  return <article className="rounded-xl border p-4 space-y-2">
+  return <article className={"rounded-xl border p-4 space-y-2 " + (conns.length ? "border-green-600" : "")}>
     <h3 className="font-semibold">{app.name}</h3>
     <p className="text-xs text-muted-foreground line-clamp-2">{app.description}</p>
     {conns.map(c => <p key={c.id} className="text-sm"><span className="font-semibold text-green-700">Conectada</span> · {c.label}</p>)}
@@ -68,6 +69,30 @@ function NativeAppCard({ app, conns, onSaved }: { app: NativeApp; conns: NativeC
           {result && <p role={result.ok ? "status" : "alert"} className={"text-sm " + (result.ok ? "text-green-700" : "text-destructive")}>{result.message}</p>}
         </div>}
       </>}
+  </article>;
+}
+function GenericToolkitCard({ toolkit, connected }: { toolkit: Toolkit; connected: boolean }) {
+  const [ack, setAck] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function connect() {
+    setBusy(true); setError("");
+    try {
+      const d = await call("/api/connectors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "connect_generic", toolkitId: toolkit.id, acknowledged: true }) });
+      window.location.assign(d.redirectUrl);
+    } catch (e) { setError(e instanceof Error ? e.message : "No se pudo conectar."); setBusy(false); }
+  }
+  return <article className={"rounded-xl border p-4 space-y-2 " + (connected ? "border-green-600" : "")}>
+    <div className="flex items-center gap-3">{toolkit.logoUrl && <img src={toolkit.logoUrl} alt="" className="h-6 w-6 object-contain" />}<h3 className="font-semibold">{toolkit.name}</h3></div>
+    <p className="text-xs text-muted-foreground line-clamp-3">{toolkit.description}</p>
+    {connected && <p className="text-sm"><span className="font-semibold text-green-700">Conectada</span></p>}
+    {ack
+      ? <div className="space-y-2 rounded-lg bg-muted p-3">
+        <p className="text-xs">Esta conexión la gestiona Composio con los permisos estándar de {toolkit.name}; no están limitados a un mínimo revisado. Conectala solo si estás de acuerdo.</p>
+        <div className="flex gap-2"><Button size="sm" disabled={busy} onClick={() => void connect()}>Continuar</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => { setAck(false); setError(""); }}>Cancelar</Button></div>
+      </div>
+      : <Button size="sm" variant={connected ? "outline" : "default"} onClick={() => setAck(true)}>{connected ? "Conectar otra cuenta" : "Conectar"}</Button>}
+    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
   </article>;
 }
 export function Catalog({ signedIn }: { signedIn: boolean }) {
@@ -122,32 +147,55 @@ export function Catalog({ signedIn }: { signedIn: boolean }) {
     </div>;
   }
   if (!signedIn) return null;
+
+  // ONE list, ordered: connected first (green border), then native apps, then the rest.
+  const qlc = q.trim().toLowerCase();
+  const match = (s: string) => s.toLowerCase().includes(qlc);
+  const nativeConns = data?.native?.connections ?? [];
+  const visibleNative = (data?.native?.apps ?? []).filter(a => a.group !== "platform" && (!qlc || match(a.name) || match(a.description)));
+  const visiblePresets = (data?.featured ?? []).filter(f => !qlc || match(f.title) || match(f.toolkitId));
   const featuredIds = new Set((data?.featured ?? []).map(f => f.toolkitId));
+  const genericConnectedIds = new Set((data?.genericConnections ?? []).map(g => g.toolkitId));
+  const visibleToolkits = items.filter(t => !featuredIds.has(t.id));
+  type Entry = { key: string; name: string; node: React.ReactNode };
+  const connectedEntries: Entry[] = [];
+  const nativeEntries: Entry[] = [];
+  const presetEntries: Entry[] = [];
+  const genericEntries: Entry[] = [];
+  for (const a of visibleNative) {
+    const conns = nativeConns.filter(c => c.appId === a.id);
+    const node = <NativeAppCard app={a} conns={conns} onSaved={() => void load(q)} />;
+    (conns.length ? connectedEntries : nativeEntries).push({ key: `n-${a.id}`, name: a.name, node });
+  }
+  for (const f of visiblePresets) {
+    const conns = data?.connections[f.toolkitId] ?? [];
+    const node = <article className={"rounded-xl border p-4 space-y-3 " + (conns.some(c => c.status === "active") ? "border-green-600" : "")}><h3 className="font-bold">{f.title}</h3>
+      {conns.map(c => <ConnectionRow key={c.id} c={c} preset={f} />)}
+      {confirm === f.toolkitId ? <div className="space-y-3 rounded-lg bg-muted p-3"><Grants preset={f} /><div className="flex gap-2"><Button disabled={!!busy} onClick={() => void connect(f.toolkitId)}>Continue to consent</Button><Button variant="outline" onClick={() => setConfirm("")}>Cancel</Button></div></div> : <Button size="sm" variant={conns.length ? "outline" : "default"} disabled={!!busy} onClick={() => setConfirm(f.toolkitId)}>{conns.length ? "Connect another account" : "Connect"}</Button>}
+    </article>;
+    (conns.some(c => c.status === "active") ? connectedEntries : presetEntries).push({ key: `p-${f.id}`, name: f.title, node });
+  }
+  for (const t of visibleToolkits) {
+    const node = <GenericToolkitCard toolkit={t} connected={genericConnectedIds.has(t.id)} />;
+    (genericConnectedIds.has(t.id) ? connectedEntries : genericEntries).push({ key: `g-${t.id}`, name: t.name, node });
+  }
+  connectedEntries.sort((a, b) => a.name.localeCompare(b.name));
+  const entries = [...connectedEntries, ...nativeEntries, ...presetEntries, ...genericEntries];
+
   return <div className="space-y-6">
-    {(data?.native?.apps.length ?? 0) > 0 && <section className="space-y-3"><h2 className="text-lg font-bold">Apps del proyecto</h2><p className="text-sm text-muted-foreground">Integraciones nativas de Active-clone, sin intermediarios. Es la misma lista que leen el chat y el editor.</p>
-      <div className="grid gap-3 sm:grid-cols-2">{data?.native?.apps.filter(a => a.group !== "platform").map(a => <NativeAppCard key={a.id} app={a} conns={(data?.native?.connections ?? []).filter(c => c.appId === a.id)} onSaved={() => void load(q)} />)}</div>
-      {(data?.native?.apps.some(a => a.group === "platform")) && <details className="rounded-xl border p-4"><summary className="cursor-pointer font-semibold text-sm">Plataforma (componentes internos de la app)</summary>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">{data?.native?.apps.filter(a => a.group === "platform").map(a => { const conns = (data?.native?.connections ?? []).filter(c => c.appId === a.id); return <article key={a.id} className="rounded-lg border p-3 space-y-1">
-          <h3 className="font-semibold text-sm">{a.name}</h3>
-          <p className="text-xs text-muted-foreground line-clamp-2">{a.description}</p>
-          {conns.map(c => <p key={c.id} className="text-xs"><span className="font-semibold text-green-700">Conectada</span> · {c.label}</p>)}
-        </article>; })}</div>
-      </details>}
-    </section>}
     {busy && <p role="status" className="rounded-lg border border-primary p-4 animate-pulse">{busy}</p>}
     {notice && <p role="status" className="rounded-lg border border-green-600 p-4 text-sm">{notice}</p>}
     {error && <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">{error}</p>}
-    <section className="space-y-3"><h2 className="text-lg font-bold">Ready to connect</h2><p className="text-sm text-muted-foreground">Each of these has a reviewed, minimal permission setup. After you approve, we check what was actually granted and tell you exactly what to fix if something is missing.</p>
-      {(data?.featured ?? []).map(f => { const conns = data?.connections[f.toolkitId] ?? []; return <article key={f.id} className="rounded-xl border p-4 space-y-3"><h3 className="font-bold">{f.title}</h3>
-        {conns.map(c => <ConnectionRow key={c.id} c={c} preset={f} />)}
-        {confirm === f.toolkitId ? <div className="space-y-3 rounded-lg bg-muted p-3"><Grants preset={f} /><div className="flex gap-2"><Button disabled={!!busy} onClick={() => void connect(f.toolkitId)}>Continue to consent</Button><Button variant="outline" onClick={() => setConfirm("")}>Cancel</Button></div></div> : <Button variant={conns.length ? "outline" : "default"} disabled={!!busy} onClick={() => setConfirm(f.toolkitId)}>{conns.length ? "Connect another account" : "Connect"}</Button>}
-      </article>; })}
-    </section>
-    <section className="space-y-3"><h2 className="text-lg font-bold">All apps</h2><p className="text-sm text-muted-foreground">The full catalog{data?.total ? ` (${data.total} apps)` : ""}. Apps without a reviewed permission setup cannot be connected yet, so nothing gets broader access than intended.</p>
-      <input aria-label="Search apps" className="w-full rounded-lg border bg-background p-3 text-sm" placeholder="Search apps, for example Slack or Notion" value={q} onChange={e => setQ(e.target.value)} />
-      <div className="grid gap-3 sm:grid-cols-2">{items.filter(t => !featuredIds.has(t.id)).map(t => <article key={t.id} className="rounded-xl border p-4 space-y-2"><div className="flex items-center gap-3">{t.logoUrl && <img src={t.logoUrl} alt="" className="h-6 w-6 object-contain" />}<h3 className="font-semibold">{t.name}</h3></div><p className="text-xs text-muted-foreground line-clamp-3">{t.description}</p><Button size="sm" variant="outline" disabled>Permissions not reviewed yet</Button></article>)}</div>
-      {!items.length && !busy && <p className="text-sm">No apps found.</p>}
-      {cursor && <Button variant="outline" disabled={!!busy} onClick={() => void load(q, cursor)}>Load more</Button>}
-    </section>
+    <input aria-label="Search apps" className="w-full rounded-lg border bg-background p-3 text-sm" placeholder="Search apps, for example Slack or Notion" value={q} onChange={e => setQ(e.target.value)} />
+    <div className="grid gap-3 sm:grid-cols-2">{entries.map(e => <Fragment key={e.key}>{e.node}</Fragment>)}</div>
+    {!entries.length && !busy && <p className="text-sm">No apps found.</p>}
+    {cursor && <Button variant="outline" disabled={!!busy} onClick={() => void load(q, cursor)}>Load more</Button>}
+    {(data?.native?.apps.some(a => a.group === "platform")) && <details className="rounded-xl border p-4"><summary className="cursor-pointer font-semibold text-sm">Plataforma (componentes internos de la app)</summary>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">{data?.native?.apps.filter(a => a.group === "platform").map(a => { const conns = (data?.native?.connections ?? []).filter(c => c.appId === a.id); return <article key={a.id} className="rounded-lg border p-3 space-y-1">
+        <h3 className="font-semibold text-sm">{a.name}</h3>
+        <p className="text-xs text-muted-foreground line-clamp-2">{a.description}</p>
+        {conns.map(c => <p key={c.id} className="text-xs"><span className="font-semibold text-green-700">Conectada</span> · {c.label}</p>)}
+      </article>; })}</div>
+    </details>}
   </div>;
 }

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { workflowExecutionLogs, workflowExecutions } from "@/lib/db/schema";
 import { type StepInput, withStepLogging } from "@/lib/steps/step-handler";
 
-// Generic: runs ANY Composio tool as the workflow OWNER's own connected account. Reads and writes are both allowed (owner decision).
+// Generic: runs ANY Composio tool as the workflow owner's own connected account. Note: this can both read and write.
 // Safety kept: owner resolved from the execution record, owner's PRIVATE account only, no retries, per-run cap, errors never echo provider bodies.
 const BASE = "https://backend.composio.dev/api/v3";
 const SLUG = /^[A-Za-z0-9_]{1,80}$/;

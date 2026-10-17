@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { catalog, connect, myConnections, verifyConnection, testConnection } from "@/lib/connectors";
 import { flowUsage } from "@/lib/mail-flow";
-import { describeToolkit, genericConnect, genericActive } from "@/lib/connectors/generic";
+import { describeToolkit, genericConnect, genericActive, genericConnections } from "@/lib/connectors/generic";
 import { PRESETS } from "@/lib/connectors/presets";
 import { listNativeApps, listNativeConnections } from "@/lib/integrations/directory";
 const ORIGINS = ["https://active-clone.vercel.app", "https://active-clone-leonardo-venezias-projects.vercel.app"];
@@ -22,7 +22,8 @@ export async function GET(r: Request) {
     // A native app overrides the same app in the Composio catalog (agreed with the owner).
     const nativeIds = new Set<string>(native.apps.map((a) => a.id as string));
     const items = page.items.filter((t) => !nativeIds.has(t.id));
-    return NextResponse.json({ ...page, items, connections, featured: Object.values(PRESETS), native });
+    const generic = await genericConnections(id).catch(() => []);
+    return NextResponse.json({ ...page, items, connections, featured: Object.values(PRESETS), native, genericConnections: generic });
   } catch (e) { return fail(e); }
 }
 export async function POST(r: Request) {
