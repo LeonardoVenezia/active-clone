@@ -17,6 +17,16 @@ export type NativeConnect =
   | { kind: "oauth"; path: string } // GET starts the provider consent flow
   | { kind: "manual" }; // credential form (lives in the editor today)
 
+export type DirectoryFormField = {
+  id: string;
+  label: string;
+  type: "text" | "password" | "url";
+  placeholder?: string;
+  helpText?: string;
+  helpLink?: { text: string; url: string };
+  configKey: string;
+};
+
 export type DirectoryApp = {
   id: IntegrationType;
   name: string;
@@ -24,6 +34,7 @@ export type DirectoryApp = {
   source: "native";
   group: "app" | "platform";
   connect: NativeConnect;
+  formFields: DirectoryFormField[]; // same fields the editor form renders
   actions: string[]; // action labels, same registry the editor shows
   triggers: string[]; // trigger labels
 };
@@ -75,6 +86,15 @@ export function listNativeApps(): DirectoryApp[] {
         connect: install
           ? ({ kind: "oauth", path: install } as const)
           : ({ kind: "manual" } as const),
+        formFields: plugin.formFields.map((field) => ({
+          id: field.id,
+          label: field.label,
+          type: field.type,
+          placeholder: field.placeholder,
+          helpText: field.helpText,
+          helpLink: field.helpLink,
+          configKey: field.configKey,
+        })),
         actions: plugin.actions.map((action) => action.label),
         triggers: (plugin.triggers ?? []).map((trigger) => trigger.label),
       };

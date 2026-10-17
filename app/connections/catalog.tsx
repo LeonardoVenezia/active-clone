@@ -7,7 +7,8 @@ type Verification = { ok: boolean; checked: boolean; missing: { id: string; labe
 type Connection = { id: string; toolkitId: string; status: "pending" | "active" | "needs_attention" | "failed"; label: string; verification: Verification | null; recovery: string | null; usedBy: string[] };
 type TestResult = { ok: boolean; message: string; checkedAt: string };
 type Toolkit = { id: string; name: string; description: string; logoUrl: string | null; categories: string[]; authKind: string; reviewed: boolean };
-type NativeApp = { id: string; name: string; description: string; source: "native"; group: "app" | "platform"; connect: { kind: "oauth"; path: string } | { kind: "manual" }; actions: string[]; triggers: string[] };
+type NativeFormField = { id: string; label: string; type: "text" | "password" | "url"; placeholder?: string; helpText?: string; helpLink?: { text: string; url: string }; configKey: string };
+type NativeApp = { id: string; name: string; description: string; source: "native"; group: "app" | "platform"; connect: { kind: "oauth"; path: string } | { kind: "manual" }; formFields: NativeFormField[]; actions: string[]; triggers: string[] };
 type NativeConnection = { id: string; appId: string; source: "native"; label: string; status: "active"; createdAt: string };
 type Data = { items: Toolkit[]; nextCursor: string | null; total: number | null; connections: Record<string, Connection[]>; featured: Preset[]; native?: { apps: NativeApp[]; connections: NativeConnection[] } };
 const BADGE: Record<string, string> = { active: "Connected and verified", needs_attention: "Connected, permissions need attention", pending: "Waiting for consent", failed: "Not usable" };
@@ -20,6 +21,54 @@ async function call(path: string, init?: RequestInit) {
 }
 function Grants({ preset }: { preset: Preset }) {
   return <div className="space-y-2 text-sm"><div><p className="font-semibold">This connection allows</p><ul className="list-disc pl-5">{preset.grants.map(g => <li key={g.id}>{g.label}</li>)}</ul></div><div><p className="font-semibold">It does not allow</p><ul className="list-disc pl-5">{preset.doesNotGrant.map(x => <li key={x}>{x}</li>)}</ul></div>{preset.notes && <p className="text-muted-foreground">{preset.notes}</p>}<p className="text-muted-foreground">On the provider's screen: {preset.consentHint}</p></div>;
+}
+function NativeAppCard({ app, conns, onSaved }: { app: NativeApp; conns: NativeConnection[]; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const firstKey = app.formFields[0]?.configKey ?? "";
+  const config = Object.fromEntries(app.formFields.map(f => [f.configKey, (values[f.configKey] ?? "").trim()]).filter(([, v]) => v !== ""));
+  const disabled = busy || !(values[firstKey] ?? "").trim();
+  async function test() {
+    setBusy(true); setResult(null);
+    try {
+      const r = await fetch("/api/integrations/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: app.id, config }) });
+      const d = await r.json();
+      setResult({ ok: r.ok && d.status === "success", message: d.message || (r.ok ? "Conexión correcta." : "No se pudo probar.") });
+    } catch { setResult({ ok: false, message: "No se pudo probar la conexión." }); }
+    finally { setBusy(false); }
+  }
+  async function save() {
+    setBusy(true); setResult(null);
+    try {
+      const r = await fetch("/api/integrations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: app.id, name: app.name, config }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "No se pudo guardar.");
+      setResult(null); setOpen(false); setValues({});
+      onSaved();
+    } catch (e) { setResult({ ok: false, message: e instanceof Error ? e.message : "No se pudo guardar." }); }
+    finally { setBusy(false); }
+  }
+  return <article className="rounded-xl border p-4 space-y-2">
+    <h3 className="font-semibold">{app.name}</h3>
+    <p className="text-xs text-muted-foreground line-clamp-2">{app.description}</p>
+    {conns.map(c => <p key={c.id} className="text-sm"><span className="font-semibold text-green-700">Conectada</span> · {c.label}</p>)}
+    {app.connect.kind === "oauth"
+      ? <a className="inline-flex h-8 items-center rounded-md bg-primary px-3 font-medium text-primary-foreground text-sm" href={app.connect.path}>{conns.length ? "Conectar otra cuenta" : "Conectar"}</a>
+      : <>
+        <Button size="sm" variant={conns.length ? "outline" : "default"} disabled={busy} onClick={() => { setOpen(!open); setResult(null); }}>{open ? "Cancelar" : conns.length ? "Conectar otra cuenta" : "Conectar"}</Button>
+        {open && <div className="space-y-3 rounded-lg bg-muted p-3">
+          {app.formFields.map(f => <div key={f.id} className="space-y-1">
+            <label className="text-xs font-medium" htmlFor={`nf-${app.id}-${f.id}`}>{f.label}</label>
+            <input id={`nf-${app.id}-${f.id}`} className="w-full rounded-md border bg-background p-2 text-sm" type={f.type === "password" ? "password" : "text"} placeholder={f.placeholder} value={values[f.configKey] ?? ""} onChange={e => setValues(v => ({ ...v, [f.configKey]: e.target.value }))} />
+            {f.helpText && <p className="text-xs text-muted-foreground">{f.helpText}{f.helpLink && <a className="underline" href={f.helpLink.url} target="_blank" rel="noreferrer">{f.helpLink.text}</a>}</p>}
+          </div>)}
+          <div className="flex gap-2"><Button size="sm" variant="outline" disabled={disabled} onClick={() => void test()}>Probar</Button><Button size="sm" disabled={disabled} onClick={() => void save()}>Guardar</Button></div>
+          {result && <p role={result.ok ? "status" : "alert"} className={"text-sm " + (result.ok ? "text-green-700" : "text-destructive")}>{result.message}</p>}
+        </div>}
+      </>}
+  </article>;
 }
 export function Catalog({ signedIn }: { signedIn: boolean }) {
   const [data, setData] = useState<Data | null>(null);
@@ -76,12 +125,7 @@ export function Catalog({ signedIn }: { signedIn: boolean }) {
   const featuredIds = new Set((data?.featured ?? []).map(f => f.toolkitId));
   return <div className="space-y-6">
     {(data?.native?.apps.length ?? 0) > 0 && <section className="space-y-3"><h2 className="text-lg font-bold">Apps del proyecto</h2><p className="text-sm text-muted-foreground">Integraciones nativas de Active-clone, sin intermediarios. Es la misma lista que leen el chat y el editor.</p>
-      <div className="grid gap-3 sm:grid-cols-2">{data?.native?.apps.filter(a => a.group !== "platform").map(a => { const conns = (data?.native?.connections ?? []).filter(c => c.appId === a.id); return <article key={a.id} className="rounded-xl border p-4 space-y-2">
-        <h3 className="font-semibold">{a.name}</h3>
-        <p className="text-xs text-muted-foreground line-clamp-2">{a.description}</p>
-        {conns.map(c => <p key={c.id} className="text-sm"><span className="font-semibold text-green-700">Conectada</span> · {c.label}</p>)}
-        {a.connect.kind === "oauth" ? <a className="inline-flex h-8 items-center rounded-md bg-primary px-3 font-medium text-primary-foreground text-sm" href={a.connect.path}>{conns.length ? "Conectar otra cuenta" : "Conectar"}</a> : <p className="text-xs text-muted-foreground">Se conecta con credenciales desde el editor (agregá un paso de esta app y cargá la conexión ahí).</p>}
-      </article>; })}</div>
+      <div className="grid gap-3 sm:grid-cols-2">{data?.native?.apps.filter(a => a.group !== "platform").map(a => <NativeAppCard key={a.id} app={a} conns={(data?.native?.connections ?? []).filter(c => c.appId === a.id)} onSaved={() => void load(q)} />)}</div>
       {(data?.native?.apps.some(a => a.group === "platform")) && <details className="rounded-xl border p-4"><summary className="cursor-pointer font-semibold text-sm">Plataforma (componentes internos de la app)</summary>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">{data?.native?.apps.filter(a => a.group === "platform").map(a => { const conns = (data?.native?.connections ?? []).filter(c => c.appId === a.id); return <article key={a.id} className="rounded-lg border p-3 space-y-1">
           <h3 className="font-semibold text-sm">{a.name}</h3>
