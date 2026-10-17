@@ -465,6 +465,17 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
         // keep as string; validation below rejects it
       }
     }
+    // Unwrap a standard { success, data } step output when the source
+    // references the whole step (no field path)
+    if (
+      list &&
+      typeof list === "object" &&
+      !Array.isArray(list) &&
+      "success" in list &&
+      "data" in list
+    ) {
+      list = (list as { data: unknown }).data;
+    }
     if (!Array.isArray(list)) {
       return {
         success: false,
