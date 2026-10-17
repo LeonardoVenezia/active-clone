@@ -884,8 +884,24 @@ export const PanelInner = () => {
                 <ActionGrid
                   disabled={isGenerating}
                   isNewlyCreated={selectedNode?.id === newlyCreatedNodeId}
-                  onSelectAction={(actionType) => {
-                    handleUpdateConfig("actionType", actionType);
+                  onSelectAction={(actionType, extraConfig) => {
+                    if (extraConfig && selectedNode) {
+                      // Prefilled actions (e.g. a Composio tool): merge all
+                      // config in one update; sequential handleUpdateConfig
+                      // calls would overwrite each other.
+                      updateNodeData({
+                        id: selectedNode.id,
+                        data: {
+                          config: {
+                            ...selectedNode.data.config,
+                            ...extraConfig,
+                            actionType,
+                          },
+                        },
+                      });
+                    } else {
+                      handleUpdateConfig("actionType", actionType);
+                    }
                     // Clear newly created tracking once action is selected
                     if (selectedNode?.id === newlyCreatedNodeId) {
                       setNewlyCreatedNodeId(null);

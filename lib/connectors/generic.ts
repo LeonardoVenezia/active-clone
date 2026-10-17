@@ -50,3 +50,17 @@ export async function genericActive(userId: string, slug: string): Promise<boole
   const r = await api(`/connected_accounts?user_ids=${encodeURIComponent(userId)}&toolkit_slugs=${encodeURIComponent(slug)}&limit=20`);
   return (r.items ?? []).some((a: Row) => a.user_id === userId && a.status === "ACTIVE" && !a.is_disabled && String(a.toolkit?.slug).toLowerCase() === slug);
 }
+
+export type ToolkitTool = { slug: string; name: string; description: string };
+export async function listToolkitTools(slug: string): Promise<ToolkitTool[]> {
+  if (!SLUG.test(slug)) return [];
+  const r = await api(`/tools?${new URLSearchParams({ toolkit_slug: slug, toolkit_versions: "latest", limit: "100" })}`);
+  const items = Array.isArray(r.items) ? r.items : [];
+  return items
+    .map((t: Row) => ({
+      slug: String(t.slug ?? ""),
+      name: String(t.name ?? t.meta?.name ?? t.slug ?? ""),
+      description: String(t.description ?? t.meta?.description ?? "").slice(0, 200),
+    }))
+    .filter((t: ToolkitTool) => SLUG.test(t.slug));
+}

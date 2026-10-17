@@ -79,8 +79,11 @@ function useAllActions(): ActionType[] {
   }, []);
 }
 
+type ComposioApp = { id: string; name: string; description: string; logoUrl: string | null };
+type ComposioTool = { slug: string; name: string; description: string };
+
 type ActionGridProps = {
-  onSelectAction: (actionType: string) => void;
+  onSelectAction: (actionType: string, extraConfig?: Record<string, string>) => void;
   disabled?: boolean;
   isNewlyCreated?: boolean;
 };
@@ -168,6 +171,61 @@ export function ActionGrid({
   const actions = useAllActions();
   const inputRef = useRef<HTMLInputElement>(null);
   const isTouch = useIsTouch();
+
+  // Composio apps from the same source as /connections, searchable alongside
+  // the native actions. Picking a tool inserts the generic run-tool step
+  // prefilled with the app and action slugs.
+  const [remoteApps, setRemoteApps] = useState<ComposioApp[]>([]);
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const [expandedApp, setExpandedApp] = useState<string | null>(null);
+  const [toolsByApp, setToolsByApp] = useState<Record<string, ComposioTool[] | "loading">>({});
+
+  useEffect(() => {
+    const q = filter.trim();
+    if (q.length < 2) {
+      setRemoteApps([]);
+      setRemoteLoading(false);
+      setExpandedApp(null);
+      return;
+    }
+    let live = true;
+    setRemoteLoading(true);
+    const t = setTimeout(() => {
+      fetch(`/api/composio-tools?q=${encodeURIComponent(q)}`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : { items: [] }))
+        .then((d: { items?: ComposioApp[] }) => {
+          if (live) setRemoteApps(d.items ?? []);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (live) setRemoteLoading(false);
+        });
+    }, 350);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [filter]);
+
+  const toggleApp = (appId: string) => {
+    setExpandedApp((prev) => (prev === appId ? null : appId));
+    setToolsByApp((prev) => {
+      if (prev[appId]) return prev;
+      return { ...prev, [appId]: "loading" };
+    });
+    setToolsByApp((prev) => {
+      if (prev[appId] !== "loading" && prev[appId] !== undefined) return prev;
+      fetch(`/api/composio-tools?toolkit=${encodeURIComponent(appId)}`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : { items: [] }))
+        .then((d: { items?: ComposioTool[] }) => {
+          setToolsByApp((cur) => ({ ...cur, [appId]: d.items ?? [] }));
+        })
+        .catch(() => {
+          setToolsByApp((cur) => ({ ...cur, [appId]: [] }));
+        });
+      return prev;
+    });
+  };
 
   const toggleViewMode = () => {
     const newMode = viewMode === "list" ? "grid" : "list";
@@ -447,6 +505,94 @@ export function ActionGrid({
               </div>
             );
           })}
+
+        {/* Composio apps (same catalog as /connections), shown while searching */}
+        {filter.trim().length >= 2 && (
+          <div>
+            <div className="my-2 h-px bg-border" />
+            <div className="sticky top-0 z-10 mb-1 flex items-center gap-2 bg-background px-3 py-2 font-medium text-muted-foreground text-xs uppercase tracking-wider">
+              <Zap className="size-4" />
+              Composio apps
+            </div>
+            {remoteLoading && remoteApps.length === 0 && (
+              <p className="px-3 py-2 text-muted-foreground text-xs">Searching apps...</p>
+            )}
+            {!remoteLoading && remoteApps.length === 0 && (
+              <p className="px-3 py-2 text-muted-foreground text-xs">
+                No Composio apps match. Native actions are above.
+              </p>
+            )}
+            {remoteApps.map((app) => {
+              const expanded = expandedApp === app.id;
+              const tools = toolsByApp[app.id];
+              return (
+                <div key={app.id}>
+                  <button
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted",
+                      disabled && "pointer-events-none opacity-50"
+                    )}
+                    disabled={disabled}
+                    onClick={() => toggleApp(app.id)}
+                    type="button"
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "size-3.5 shrink-0 transition-transform",
+                        expanded && "rotate-90"
+                      )}
+                    />
+                    {app.logoUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img alt="" className="size-4 object-contain" src={app.logoUrl} />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="font-medium">{app.name}</span>
+                      {app.description && (
+                        <span className="text-muted-foreground text-xs"> - {app.description}</span>
+                      )}
+                    </span>
+                  </button>
+                  {expanded && (
+                    <div className="ml-6 border-l pl-2">
+                      {tools === "loading" || tools === undefined ? (
+                        <p className="px-3 py-2 text-muted-foreground text-xs">Loading actions...</p>
+                      ) : tools.length === 0 ? (
+                        <p className="px-3 py-2 text-muted-foreground text-xs">No actions listed for this app.</p>
+                      ) : (
+                        tools.map((tool) => (
+                          <button
+                            className={cn(
+                              "flex w-full items-center rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted",
+                              disabled && "pointer-events-none opacity-50"
+                            )}
+                            disabled={disabled}
+                            key={tool.slug}
+                            onClick={() =>
+                              onSelectAction("composio/run-tool", {
+                                toolkit: app.id,
+                                tool: tool.slug,
+                                arguments: "{}",
+                              })
+                            }
+                            type="button"
+                          >
+                            <span className="min-w-0 flex-1 truncate">
+                              <span className="font-medium">{tool.name}</span>
+                              {tool.description && (
+                                <span className="text-muted-foreground text-xs"> - {tool.description}</span>
+                              )}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
