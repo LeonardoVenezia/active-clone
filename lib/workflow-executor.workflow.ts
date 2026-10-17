@@ -492,6 +492,11 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
     const maxItems = Math.min(Math.max(Number(config.maxItems) || 50, 1), 50);
     const items = list.slice(0, maxItems);
     const loopResults: unknown[] = [];
+    const loopItems: {
+      index: number;
+      item: unknown;
+      steps: Record<string, unknown>;
+    }[] = [];
     const failed: { index: number; step?: string; error: string }[] = [];
 
     for (let i = 0; i < items.length; i++) {
@@ -503,6 +508,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
       };
       let itemResult: unknown = null;
       let itemFailed = false;
+      const stepOutputs: Record<string, unknown> = {};
       for (let s = 0; s < rawSteps.length; s++) {
         const bodyStep = rawSteps[s] as {
           id?: string;
@@ -558,6 +564,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
             break;
           }
           itemResult = bodyResult;
+          stepOutputs[stepId] = bodyResult;
           itemOutputs[stepId] = { label: stepAction, data: bodyResult };
         } catch (error) {
           failed.push({
@@ -571,6 +578,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
       }
       if (!itemFailed) {
         loopResults.push(itemResult);
+        loopItems.push({ index: i, item, steps: stepOutputs });
       }
     }
 
@@ -585,6 +593,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
       success: true,
       data: {
         results: loopResults,
+        items: loopItems,
         failed,
         count: items.length,
         completed: loopResults.length,
