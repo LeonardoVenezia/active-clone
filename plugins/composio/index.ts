@@ -36,7 +36,7 @@ const plugin: IntegrationPlugin = {
       configFields: [
         { key: "toolkit", label: "App (toolkit slug)", type: "template-input", placeholder: "slack" },
         { key: "tool", label: "Action (tool slug)", type: "template-input", placeholder: "SLACK_SEND_MESSAGE" },
-        { key: "arguments", label: "Arguments (JSON)", type: "template-input", placeholder: "{\"channel\": \"#general\", \"text\": \"hi\"}" },
+        { key: "arguments", label: "Parameters", type: "composio-args" },
       ],
       outputFields: [{ field: "data", description: "Result returned by the tool" }],
     },

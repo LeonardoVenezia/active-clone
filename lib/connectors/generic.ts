@@ -66,3 +66,18 @@ export async function listToolkitTools(slug: string): Promise<ToolkitTool[]> {
     }))
     .filter((t: ToolkitTool) => TOOL_SLUG.test(t.slug));
 }
+
+export type ToolkitToolSchema = { slug: string; name: string; description: string; inputParameters: Row | null };
+export async function getToolkitTool(toolkit: string, tool: string): Promise<ToolkitToolSchema | null> {
+  if (!SLUG.test(toolkit) || !TOOL_SLUG.test(tool)) return null;
+  const r = await api(`/tools?${new URLSearchParams({ tool_slugs: tool, toolkit_versions: "latest", limit: "5" })}`);
+  const items = Array.isArray(r.items) ? r.items : [];
+  const t = items.find((i: Row) => String(i.slug ?? "").toUpperCase() === tool.toUpperCase() && String(i.toolkit?.slug ?? "").toLowerCase() === toolkit);
+  if (!t) return null;
+  return {
+    slug: String(t.slug ?? ""),
+    name: String(t.name ?? t.slug ?? ""),
+    description: String(t.description ?? "").slice(0, 300),
+    inputParameters: t.input_parameters && typeof t.input_parameters === "object" ? (t.input_parameters as Row) : null,
+  };
+}

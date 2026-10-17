@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { catalog } from "@/lib/connectors";
-import { listToolkitTools } from "@/lib/connectors/generic";
+import { getToolkitTool, listToolkitTools } from "@/lib/connectors/generic";
 import { listNativeApps } from "@/lib/integrations/directory";
 
 /**
  * GET /api/composio-tools?q=...        search Composio apps for the step picker
  * GET /api/composio-tools?toolkit=...  list one app's actions
+ * GET /api/composio-tools?toolkit=...&tool=...  one action with its input schema
  * Same source as /connections (the lib/connectors provider); apps with a
  * native plugin are hidden here too, because native actions already cover them.
  */
@@ -21,6 +22,17 @@ export async function GET(request: Request) {
     if (toolkit) {
       if (!/^[a-z0-9_]{1,60}$/.test(toolkit)) {
         return NextResponse.json({ error: "Bad toolkit." }, { status: 400 });
+      }
+      const tool = params.get("tool");
+      if (tool) {
+        if (!/^[A-Za-z0-9_]{1,80}$/.test(tool)) {
+          return NextResponse.json({ error: "Bad tool." }, { status: 400 });
+        }
+        const item = await getToolkitTool(toolkit, tool);
+        if (!item) {
+          return NextResponse.json({ error: "Unknown action." }, { status: 404 });
+        }
+        return NextResponse.json({ item });
       }
       return NextResponse.json({ items: await listToolkitTools(toolkit) });
     }

@@ -18,6 +18,7 @@ import {
   type ActionConfigFieldBase,
   isFieldGroup,
 } from "@/plugins";
+import { ComposioArgsField } from "./composio-args-field";
 import { SchemaBuilder, type SchemaField } from "./schema-builder";
 
 type FieldProps = {
@@ -115,7 +116,7 @@ function SchemaBuilderField(props: FieldProps) {
 }
 
 const FIELD_RENDERERS: Record<
-  ActionConfigFieldBase["type"],
+  Exclude<ActionConfigFieldBase["type"], "composio-args">,
   React.ComponentType<FieldProps>
 > = {
   "template-input": TemplateInputField,
@@ -141,6 +142,21 @@ function renderField(
     if (dependentValue !== field.showWhen.equals) {
       return null;
     }
+  }
+
+  if (field.type === "composio-args") {
+    return (
+      <div className="space-y-2" key={field.key}>
+        <Label className="ml-1">{field.label}</Label>
+        <ComposioArgsField
+          disabled={disabled}
+          onChange={(val) => onUpdateConfig(field.key, val)}
+          tool={String(config.tool ?? "")}
+          toolkit={String(config.toolkit ?? "")}
+          value={(config[field.key] as string | undefined) || ""}
+        />
+      </div>
+    );
   }
 
   const value =
