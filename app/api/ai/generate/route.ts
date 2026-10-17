@@ -97,6 +97,13 @@ System action types (built-in):
 Plugin action types (from integrations):
 ${pluginActionPrompts}
 
+WIRING DATA BETWEEN STEPS (CRITICAL):
+- When a step needs a value produced by an earlier step (an ID, a reference, a status, a name, a total), NEVER invent a value, NEVER use a placeholder, and NEVER leave it for the user to fill. Reference the earlier step's output with a template: {{@node-id:Node Label.field.path}} where node-id is the exact id you gave that node and field.path walks its output fields (standard outputs unwrap automatically, so use the field names from the action's output list, e.g. {{@search-orders:Search Orders.orders}}).
+- Arrays: a specific element can be referenced with [index], e.g. {{@search-orders:Search Orders.orders[0].id}}.
+- NO LOOPS: the canvas cannot repeat steps per item and there is no "for each". When the user asks to process every item of a list, do NOT fake a loop and do NOT chain one step per item. Build the whole-list version instead (for example, pass the full list into an AI text step's prompt through a template) and mention in the workflow description that per-item processing is not supported.
+- Conditions MUST compare template references or fixed values only (e.g. {{@get-order:Get Order.status}} === 'paid'). Invented variables like orderResult.status are invalid.
+- When a text or prompt field needs an object or array, reference the whole output or field; it is inserted as JSON.
+
 CRITICAL ABOUT CONDITION NODES:
 - Condition nodes evaluate a boolean expression
 - When TRUE: ALL connected nodes execute

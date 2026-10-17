@@ -21,7 +21,8 @@ function findPlaceholders(nodes: { id: string; data?: unknown }[]): string[] {
     if (typeof raw === "string") { try { args = JSON.parse(raw); } catch { /* ignore */ } } else if (raw && typeof raw === "object") args = raw as Record<string, unknown>;
     const scan: Record<string, unknown> = { ...args };
     for (const [k, v] of Object.entries(cfg)) if (!["arguments", "actionArguments", "actionType", "triggerType", "toolkit", "slug", "integrationId", "condition"].includes(k) && typeof v === "string") scan[k] = v;
-    for (const [k, v] of Object.entries(scan)) if (typeof v === "string" && bad.test(v)) out.push(`${d.label ?? "paso"}: ${k}`);
+    const validTemplate = /^\s*\{\{@[^}]+\}\}\s*$/;
+  for (const [k, v] of Object.entries(scan)) if (typeof v === "string" && bad.test(v) && !validTemplate.test(v)) out.push(`${d.label ?? "paso"}: ${k}`);
   }
   return out.slice(0, 5);
 }
@@ -49,7 +50,7 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
     let realTools = catalogs.flatMap(({ toolkit, tools }) => tools.map(tool => compactTool(toolkit, tool)));
     while (JSON.stringify(realTools).length > 40000 && realTools.length > 1) realTools = realTools.slice(0, Math.floor(realTools.length * 0.8));
     const catalogInstruction = realTools.length ? `\n\nREAL COMPOSIO ACTIONS (use only exact toolkit/slug pairs below; copy the input schema and do not invent actions):\n${JSON.stringify(realTools)}` : `\n\nNo Composio action catalog has been loaded. Do not create a Composio action or invent a tool slug. Use built-in actions where possible; otherwise ask which app/action is needed.`;
-    const prompt = `Conversation so far:\n${convo.slice(-6).map(m => `${m.role}: ${m.content}`).join("\n")}\n\nWhat to do on the canvas now: ${instruction}\n\nUse built-in actions when they fit. For another app, use Run Composio Action only with the exact toolkit/slug pair from the real catalog below. Set arguments as a JSON string matching that action's input schema. If there is no matching listed action, do not guess; ask or explain what is missing.${catalogInstruction}`;
+    const prompt = `Conversation so far:\n${convo.slice(-6).map(m => `${m.role}: ${m.content}`).join("\n")}\n\nWhat to do on the canvas now: ${instruction}\n\nUse built-in actions when they fit. For another app, use Run Composio Action only with the exact toolkit/slug pair from the real catalog below. Set arguments as a JSON string matching that action's input schema. Wire every value an earlier step produces with a template ({{@node-id:Step Label.field.path}}); never ask the user for data that earlier steps produce. If there is no matching listed action, do not guess; ask or explain what is missing.${catalogInstruction}`;
     try {
       const data = await api.ai.generateStream(prompt, partial => { const triggers = (partial.nodes || []).filter(n => n.data?.type === "trigger"); const keep = triggers.length > 1 ? (partial.nodes || []).filter(n => n.data?.type !== "trigger" || n.id === triggers[0].id) : partial.nodes || []; const ids = new Set(keep.map(n => n.id)); setNodes(keep); setEdges((partial.edges || []).filter(e => ids.has(e.source) && ids.has(e.target)).map(e => ({ ...e, type: "animated" }))); if (partial.name) setName(partial.name); }, existing ? { nodes: real, edges, name: undefined } : undefined);
       const wasThere = new Set(real.map(n => n.id)); const bad = (data.nodes || []).filter(n => !wasThere.has(n.id) && ((n.data?.type === "trigger" && !(n.data?.config as { triggerType?: string })?.triggerType) || (n.data?.type === "action" && !(n.data?.config as { actionType?: string })?.actionType)));

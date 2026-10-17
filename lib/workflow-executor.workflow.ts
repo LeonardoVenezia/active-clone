@@ -53,6 +53,42 @@ export type WorkflowExecutionInput = {
 };
 
 /**
+ * Resolve a dotted field path against a step output, with array index support
+ * (e.g. "orders[0].id"). Standard { success, data, error } outputs unwrap
+ * automatically unless success/data/error is accessed explicitly.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: Dynamic output data traversal
+function resolveFieldValue(data: unknown, fieldPath: string): any {
+  const fields = fieldPath.split(".");
+  let current: any = data;
+  const firstField = fields[0];
+  if (
+    current &&
+    typeof current === "object" &&
+    "success" in current &&
+    "data" in current &&
+    firstField !== "success" &&
+    firstField !== "data" &&
+    firstField !== "error"
+  ) {
+    current = current.data;
+  }
+  for (const field of fields) {
+    if (!(current && typeof current === "object")) {
+      return undefined;
+    }
+    const indexed = /^([^[]+)\[(\d+)\]$/.exec(field);
+    if (indexed) {
+      const list = current[indexed[1]];
+      current = Array.isArray(list) ? list[Number(indexed[2])] : undefined;
+    } else {
+      current = current[field];
+    }
+  }
+  return current;
+}
+
+/**
  * Helper to replace template variables in conditions
  */
 // biome-ignore lint/nursery/useMaxParams: Helper function needs all parameters for template replacement
@@ -82,37 +118,11 @@ function replaceTemplateVariable(
     value = undefined;
   } else {
     const fieldPath = rest.substring(dotIndex + 1);
-    const fields = fieldPath.split(".");
-    // biome-ignore lint/suspicious/noExplicitAny: Dynamic data traversal
-    let current: any = output.data;
-
-    // For standardized outputs { success, data, error }, automatically look inside data
-    // unless explicitly accessing success/data/error
-    const firstField = fields[0];
-    if (
-      current &&
-      typeof current === "object" &&
-      "success" in current &&
-      "data" in current &&
-      firstField !== "success" &&
-      firstField !== "data" &&
-      firstField !== "error"
-    ) {
-      current = current.data;
+    const resolved = resolveFieldValue(output.data, fieldPath);
+    if (resolved === undefined) {
+      console.log("[Condition] Field access failed:", fieldPath);
     }
-
-    for (const field of fields) {
-      if (current && typeof current === "object") {
-        current = current[field];
-      } else {
-        console.log("[Condition] Field access failed:", fieldPath);
-        value = undefined;
-        break;
-      }
-    }
-    if (value === undefined && current !== undefined) {
-      value = current;
-    }
+    value = resolved;
   }
 
   const varName = `__v${varCounter.value}`;
@@ -322,33 +332,7 @@ function processTemplates(
           }
 
           const fieldPath = rest.substring(dotIndex + 1);
-          const fields = fieldPath.split(".");
-          // biome-ignore lint/suspicious/noExplicitAny: Dynamic output data traversal
-          let current: any = output.data;
-
-          // For standardized outputs { success, data, error }, automatically look inside data
-          // unless explicitly accessing success/data/error
-          const firstField = fields[0];
-          if (
-            current &&
-            typeof current === "object" &&
-            "success" in current &&
-            "data" in current &&
-            firstField !== "success" &&
-            firstField !== "data" &&
-            firstField !== "error"
-          ) {
-            current = current.data;
-          }
-
-          for (const field of fields) {
-            if (current && typeof current === "object") {
-              current = current[field];
-            } else {
-              // Field access failed, return empty string
-              return "";
-            }
-          }
+          const current = resolveFieldValue(output.data, fieldPath);
 
           // Convert value to string, using JSON.stringify for objects/arrays
           if (current === null || current === undefined) {
