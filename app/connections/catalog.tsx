@@ -1,6 +1,7 @@
 "use client";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { IntegrationIcon } from "@/components/ui/integration-icon";
 type Permission = { id: string; label: string; risk: string };
 type Preset = { id: string; toolkitId: string; title: string; grants: Permission[]; doesNotGrant: string[]; consentHint: string; notes?: string };
 type Verification = { ok: boolean; checked: boolean; missing: { id: string; label: string }[]; unexpected: string[] };
@@ -14,6 +15,12 @@ type GenericConnection = { toolkitId: string; createdAt: string | null };
 type Data = { items: Toolkit[]; nextCursor: string | null; total: number | null; connections: Record<string, Connection[]>; featured: Preset[]; native?: { apps: NativeApp[]; connections: NativeConnection[] }; genericConnections?: GenericConnection[] };
 const BADGE: Record<string, string> = { active: "Connected and verified", needs_attention: "Connected, permissions need attention", pending: "Waiting for consent", failed: "Not usable" };
 const BADGE_CLASS: Record<string, string> = { active: "text-green-700", needs_attention: "text-destructive", pending: "text-muted-foreground", failed: "text-destructive" };
+function Monogram({ name }: { name: string }) {
+  const letter = (name || "?").trim().charAt(0).toUpperCase() || "?";
+  return (
+    <span aria-hidden className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted font-semibold text-muted-foreground text-xs">{letter}</span>
+  );
+}
 async function call(path: string, init?: RequestInit) {
   const r = await fetch(path, { cache: "no-store", ...init, signal: AbortSignal.timeout(60000) });
   const d = await r.json();
@@ -52,7 +59,7 @@ function NativeAppCard({ app, conns, onSaved }: { app: NativeApp; conns: NativeC
     finally { setBusy(false); }
   }
   return <article className={"rounded-xl border p-4 space-y-2 " + (conns.length ? "border-green-600" : "")}>
-    <h3 className="font-semibold">{app.name}</h3>
+    <div className="flex items-center gap-3"><IntegrationIcon integration={app.id} className="h-6 w-6" /><h3 className="font-semibold">{app.name}</h3></div>
     <p className="text-xs text-muted-foreground line-clamp-2">{app.description}</p>
     {conns.map(c => <p key={c.id} className="text-sm"><span className="font-semibold text-green-700">Conectada</span> · {c.label}</p>)}
     {app.connect.kind === "oauth"
@@ -83,7 +90,7 @@ function GenericToolkitCard({ toolkit, connected }: { toolkit: Toolkit; connecte
     } catch (e) { setError(e instanceof Error ? e.message : "No se pudo conectar."); setBusy(false); }
   }
   return <article className={"rounded-xl border p-4 space-y-2 " + (connected ? "border-green-600" : "")}>
-    <div className="flex items-center gap-3">{toolkit.logoUrl && <img src={toolkit.logoUrl} alt="" className="h-6 w-6 object-contain" />}<h3 className="font-semibold">{toolkit.name}</h3></div>
+    <div className="flex items-center gap-3">{toolkit.logoUrl ? <img src={toolkit.logoUrl} alt="" className="h-6 w-6 object-contain" /> : <Monogram name={toolkit.name} />}<h3 className="font-semibold">{toolkit.name}</h3></div>
     <p className="text-xs text-muted-foreground line-clamp-3">{toolkit.description}</p>
     {connected && <p className="text-sm"><span className="font-semibold text-green-700">Conectada</span></p>}
     {ack
