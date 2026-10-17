@@ -176,7 +176,8 @@ export function Catalog({ signedIn }: { signedIn: boolean }) {
   }
   for (const f of visiblePresets) {
     const conns = data?.connections[f.toolkitId] ?? [];
-    const node = <article className={"rounded-xl border p-4 space-y-3 " + (conns.some(c => c.status === "active") ? "border-green-600" : "")}><h3 className="font-bold">{f.title}</h3>
+    const presetLogo = items.find(t => t.id === f.toolkitId)?.logoUrl;
+    const node = <article className={"rounded-xl border p-4 space-y-3 " + (conns.some(c => c.status === "active") ? "border-green-600" : "")}><div className="flex items-center gap-3">{presetLogo ? <img src={presetLogo} alt="" className="h-6 w-6 object-contain" /> : <Monogram name={f.title} />}<h3 className="font-bold">{f.title}</h3></div>
       {conns.map(c => <ConnectionRow key={c.id} c={c} preset={f} />)}
       {confirm === f.toolkitId ? <div className="space-y-3 rounded-lg bg-muted p-3"><Grants preset={f} /><div className="flex gap-2"><Button disabled={!!busy} onClick={() => void connect(f.toolkitId)}>Continue to consent</Button><Button variant="outline" onClick={() => setConfirm("")}>Cancel</Button></div></div> : <Button size="sm" variant={conns.length ? "outline" : "default"} disabled={!!busy} onClick={() => setConfirm(f.toolkitId)}>{conns.length ? "Connect another account" : "Connect"}</Button>}
     </article>;
@@ -199,7 +200,7 @@ export function Catalog({ signedIn }: { signedIn: boolean }) {
     {cursor && <Button variant="outline" disabled={!!busy} onClick={() => void load(q, cursor)}>Load more</Button>}
     {(data?.native?.apps.some(a => a.group === "platform")) && <details className="rounded-xl border p-4"><summary className="cursor-pointer font-semibold text-sm">Plataforma (componentes internos de la app)</summary>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">{data?.native?.apps.filter(a => a.group === "platform").map(a => { const conns = (data?.native?.connections ?? []).filter(c => c.appId === a.id); return <article key={a.id} className="rounded-lg border p-3 space-y-1">
-        <h3 className="font-semibold text-sm">{a.name}</h3>
+        <div className="flex items-center gap-2"><IntegrationIcon integration={a.id} className="h-5 w-5" /><h3 className="font-semibold text-sm">{a.name}</h3></div>
         <p className="text-xs text-muted-foreground line-clamp-2">{a.description}</p>
         {conns.map(c => <p key={c.id} className="text-xs"><span className="font-semibold text-green-700">Conectada</span> · {c.label}</p>)}
       </article>; })}</div>
