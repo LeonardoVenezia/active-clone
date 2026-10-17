@@ -508,7 +508,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           id?: string;
           actionType?: string;
           config?: Record<string, unknown>;
-        };
+        } & Record<string, unknown>;
         const stepId = (bodyStep.id || `step-${s + 1}`).replace(
           /[^a-zA-Z0-9]/g,
           "_"
@@ -519,8 +519,11 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           itemFailed = true;
           break;
         }
+        // Accept parameters both nested under config and (as the AI
+        // builder sometimes emits them) at the step's top level
+        const { id: _bodyId, actionType: _bodyAction, steps: _bodySteps, config: bodyConfig, ...topLevelParams } = bodyStep;
         const processedBodyConfig = processTemplates(
-          { ...(bodyStep.config || {}) },
+          { ...topLevelParams, ...(bodyConfig || {}) },
           itemOutputs
         );
         try {
