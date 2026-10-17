@@ -4,6 +4,7 @@ import { catalog, connect, myConnections, verifyConnection, testConnection } fro
 import { flowUsage } from "@/lib/mail-flow";
 import { describeToolkit, genericConnect, genericActive } from "@/lib/connectors/generic";
 import { PRESETS } from "@/lib/connectors/presets";
+import { listNativeApps, listNativeConnections } from "@/lib/integrations/directory";
 const ORIGINS = ["https://active-clone.vercel.app", "https://active-clone-leonardo-venezias-projects.vercel.app"];
 async function user(r: Request) { const s = await auth.api.getSession({ headers: r.headers }); return s?.user && !s.user.isAnonymous ? s.user.id : null; }
 function fail(e: unknown, status = 503) { return NextResponse.json({ error: e instanceof Error ? e.message.slice(0, 500) : "Request failed." }, { status }); }
@@ -16,7 +17,9 @@ export async function GET(r: Request) {
     const connections = await myConnections(id, Object.keys(PRESETS));
     const usage = await flowUsage(id).catch(() => ({} as Record<string, string>));
     for (const list of Object.values(connections)) for (const c of list) if (usage[c.id]) c.usedBy = [usage[c.id]];
-    return NextResponse.json({ ...page, connections, featured: Object.values(PRESETS) });
+    // Native apps come from the same directory the chats read.
+    const native = { apps: listNativeApps(), connections: await listNativeConnections(id).catch(() => []) };
+    return NextResponse.json({ ...page, connections, featured: Object.values(PRESETS), native });
   } catch (e) { return fail(e); }
 }
 export async function POST(r: Request) {

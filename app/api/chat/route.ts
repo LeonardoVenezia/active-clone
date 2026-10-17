@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { myConnections } from "@/lib/connectors";
 import { presetFor } from "@/lib/connectors/presets";
 import { neededToolkits } from "@/lib/chat-intents";
+import { nativeChatContext } from "@/lib/integrations/directory";
 export const maxDuration = 60;
 const ORIGINS = ["https://active-clone.vercel.app", "https://active-clone-leonardo-venezias-projects.vercel.app"];
 type Msg = { role: "user" | "assistant"; content: string };
@@ -28,11 +29,12 @@ export async function POST(r: Request) {
     const active = conns.find(c => c.status === "active");
     return { toolkitId: id, title: p?.title || id, grants: p?.grants.map(g => g.label) || [], doesNotGrant: p?.doesNotGrant || [], consentHint: p?.consentHint || "", connected: !!active, connectionId: active?.id || conns[0]?.id || null };
   }).filter(c => presetFor(c.toolkitId));
+  const nativeInfo = await nativeChatContext(s.user.id).catch(() => "");
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return NextResponse.json({ reply: "The chat model is not configured yet.", cards });
   try {
     const client = new OpenAI({ apiKey: key, baseURL: "https://openrouter.ai/api/v1" });
-    const extra = cards.length ? ` The app is showing the user a card for: ${cards.map(c => `${c.title} (${c.connected ? "already connected" : "not connected yet"})`).join(", ")}. Mention it briefly.` : "";
+    const extra = `${cards.length ? ` The app is showing the user a card for: ${cards.map(c => `${c.title} (${c.connected ? "already connected" : "not connected yet"})`).join(", ")}. Mention it briefly.` : ""}${nativeInfo ? `\n\n${nativeInfo}` : ""}`;
     const res = await client.chat.completions.create({ model: "openrouter/free", max_tokens: 300, messages: [{ role: "system", content: SYSTEM + extra }, ...messages] });
     const reply = res.choices[0]?.message?.content?.trim() || "I could not answer that. Try again.";
     return NextResponse.json({ reply, cards });

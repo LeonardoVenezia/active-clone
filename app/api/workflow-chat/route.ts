@@ -2,6 +2,7 @@ import { llmRoutes } from "@/lib/free-models";
 import { describeToolkit } from "@/lib/connectors/generic";
 import { myConnections } from "@/lib/connectors";
 import { PRESETS } from "@/lib/connectors/presets";
+import { nativeChatContext } from "@/lib/integrations/directory";
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
@@ -80,6 +81,8 @@ export async function POST(r: Request) {
       }
       connectionStatusContext = `Verified connection status for apps mentioned in recent user intent (do not ask the user to guess):\n${requestedToolkits.map(slug => `- ${slug}: ${connectionStatuses[slug]}`).join("\n")}`;
     }
+    const nativeInfo = await nativeChatContext(id).catch(() => "");
+    if (nativeInfo) connectionStatusContext = `${connectionStatusContext}\n\n${nativeInfo}`;
     const messages = [{ role: "system" as const, content: `${SYSTEM}\n\n${connectionStatusContext}\n\n${describe(b.snapshot)}` }, ...past.map(m => ({ role: m.role, content: m.content })), { role: "user" as const, content: text }];
     let reply = "";
     for (const r of llmRoutes()) {
