@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { AppHeader } from "@/components/app-header";
 import { Catalog } from "./catalog";
 import { useSession } from "@/lib/auth-client";
 import { AuthDialog } from "@/components/auth/dialog";
@@ -22,11 +22,11 @@ export default function Connections() {
       window.close();
     }
   }, []);
-  return <main className="pointer-events-auto fixed inset-0 z-20 overflow-auto bg-background p-6"><div className="mx-auto max-w-3xl space-y-6">
-    <div className="flex items-center justify-between"><h1 className="flex items-center gap-2 text-2xl font-bold"><img alt="Active-clone" className="size-8 rounded-lg" src="/logo.png" />Connections</h1><div className="flex gap-4 text-sm"><Link className="underline" href="/workflows">Flows</Link><Link className="underline" href="/history">History</Link><Link className="underline" href="/">Editor</Link></div></div>
+  return <main className="pointer-events-auto fixed inset-0 z-20 flex flex-col bg-background"><AppHeader /><div className="flex-1 overflow-auto p-6"><div className="mx-auto max-w-3xl space-y-6">
+    <h1 className="text-2xl font-bold">Connections</h1>
     {mlResult && <div className={"rounded-xl border p-4 text-sm " + (mlResult === "connected" || mlResult === "ok" ? "border-green-600" : "border-red-600")}>{mlResult === "connected" || mlResult === "ok" ? "Mercado Libre conectado. Ya podés elegir esa conexión en un paso del editor." : mlResult === "not-configured" ? "Mercado Libre todavía no está configurado en el servidor (faltan MERCADOLIBRE_APP_ID / MERCADOLIBRE_APP_SECRET)." : mlResult === "invalid-state" ? "No se pudo verificar el inicio de sesión de Mercado Libre. Probá de nuevo." : "No se pudo conectar Mercado Libre (" + mlResult + ")."}</div>}
     {mpResult && <div className={"rounded-xl border p-4 text-sm " + (mpResult === "connected" ? "border-green-600" : "border-red-600")}>{mpResult === "connected" ? "Mercado Pago conectado. Ya podés elegir esa conexión en un paso del editor." : mpResult === "not-configured" ? "Mercado Pago todavía no está configurado en el servidor (faltan MERCADOPAGO_CLIENT_ID / MERCADOPAGO_CLIENT_SECRET)." : mpResult === "invalid-state" ? "No se pudo verificar el inicio de sesión de Mercado Pago. Probá de nuevo." : mpResult === "access_denied" ? "No autorizaste la aplicación en Mercado Pago. Probá de nuevo." : "No se pudo conectar Mercado Pago (" + mpResult + ")."}</div>}
     <p className="text-muted-foreground">Connect the apps your flows use. You always see what a connection allows before you approve it, and we verify what was really granted afterwards.</p>
     {isPending ? <p>Loading session...</p> : !signedIn ? <div className="rounded-xl border p-5 space-y-3"><p className="font-semibold">Sign in to connect apps.</p><AuthDialog><Button>Sign In</Button></AuthDialog></div> : <Catalog signedIn={signedIn} />}
-  </div></main>;
+  </div></div></main>;
 }

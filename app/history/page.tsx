@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { AppHeader } from "@/components/app-header";
 import { EmailVerification } from "../connections/email-verification";
 import { useSession } from "@/lib/auth-client";
 import { AuthDialog } from "@/components/auth/dialog";
@@ -16,8 +16,8 @@ export default function History() {
     if (!signedIn) return;
     fetch("/api/mail-flow", { cache: "no-store" }).then(r => r.ok ? r.json() : { runs: [] }).then(d => setRuns(d.runs || [])).catch(() => setRuns([]));
   }, [signedIn]);
-  return <main className="pointer-events-auto fixed inset-0 z-20 overflow-auto bg-background p-6"><div className="mx-auto max-w-3xl space-y-6">
-    <div className="flex items-center justify-between"><h1 className="text-2xl font-bold">History</h1><div className="flex gap-4 text-sm"><Link className="underline" href="/workflows">Flows</Link><Link className="underline" href="/connections">Connections</Link></div></div>
+  return <main className="pointer-events-auto fixed inset-0 z-20 flex flex-col bg-background"><AppHeader /><div className="flex-1 overflow-auto p-6"><div className="mx-auto max-w-3xl space-y-6">
+    <h1 className="text-2xl font-bold">History</h1>
     {isPending ? <p>Loading...</p> : !signedIn ? <div className="rounded-xl border p-5 space-y-3"><p className="font-semibold">Sign in to see what your flows have done.</p><AuthDialog><Button>Sign In</Button></AuthDialog></div> : <>
       <section className="space-y-3"><h2 className="text-lg font-bold">Flow runs</h2>
         {runs === null && <p>Loading...</p>}
@@ -26,5 +26,5 @@ export default function History() {
       </section>
       <EmailVerification />
     </>}
-  </div></main>;
+  </div></div></main>;
 }

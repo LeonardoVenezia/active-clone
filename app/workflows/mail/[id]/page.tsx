@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { AppHeader } from "@/components/app-header";
 import MailFlowView from "@/components/mail-flow-view";
 export default function FlowPage() {
   const { id } = useParams<{ id: string }>();
@@ -20,9 +21,9 @@ export default function FlowPage() {
     })();
   }, [id, router]);
   if (state === "mail") return <MailFlowView />;
-  return <main className="pointer-events-auto fixed inset-0 z-20 overflow-auto bg-background p-6"><div className="mx-auto max-w-3xl space-y-4"><Link href="/workflows" className="underline text-sm">Back to flows</Link>
+  return <main className="pointer-events-auto fixed inset-0 z-20 flex flex-col bg-background"><AppHeader /><div className="flex-1 overflow-auto p-6"><div className="mx-auto max-w-3xl space-y-4"><Link href="/workflows" className="underline text-sm">Back to flows</Link>
     {state === "loading" && <p>Loading flow...</p>}
     {state === "signin" && <p>Sign in to open this flow. <Link href="/workflows" className="underline">Go to flows</Link></p>}
     {state === "error" && <p role="alert" className="text-destructive">Could not load this flow. Refresh to try again.</p>}
-  </div></main>;
+  </div></div></main>;
 }

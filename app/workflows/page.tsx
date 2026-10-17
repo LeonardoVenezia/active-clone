@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { AppHeader } from "@/components/app-header";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AuthDialog } from "@/components/auth/dialog";
@@ -56,8 +57,8 @@ export default function FlowsPage() {
     } catch (e) { toast.error(e instanceof Error ? e.message : "Algo falló."); } finally { setBusy(""); }
   }
 
-  return <main className="pointer-events-auto fixed inset-0 z-20 overflow-auto bg-background p-6"><div className="mx-auto max-w-5xl space-y-6">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="flex items-center gap-2 text-2xl font-bold"><img alt="Active-clone" className="size-8 rounded-lg" src="/logo.png" />Workflows</h1><div className="flex items-center gap-3"><Link className="self-center text-sm underline" href="/connections">Connections</Link><Link className="self-center text-sm underline" href="/history">History</Link><Button asChild size="sm"><a href="/?new=1">+ Nuevo workflow</a></Button></div></div>
+  return <main className="pointer-events-auto fixed inset-0 z-20 flex flex-col bg-background"><AppHeader /><div className="flex-1 overflow-auto p-6"><div className="mx-auto max-w-5xl space-y-6">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-bold">Workflows</h1><Button asChild size="sm"><a href="/?new=1">+ Nuevo workflow</a></Button></div>
     {isPending ? <p>Cargando...</p> : !signedIn ? <div className="space-y-3 rounded-xl border p-5"><p className="font-semibold">Iniciá sesión para ver y crear workflows.</p><p className="text-sm text-muted-foreground">Se guardan en tu cuenta.</p><AuthDialog><Button>Sign In</Button></AuthDialog></div> : <>
       {error && <p role="alert" className="text-destructive">{error}</p>}
       {rows === null && <p>Cargando workflows...</p>}
@@ -68,5 +69,5 @@ export default function FlowsPage() {
           {r.kind === "mail" && (r.status === "active" ? <Button size="sm" variant="outline" disabled={working} onClick={() => void act(r, "pause")}>Pausar</Button> : <Button size="sm" disabled={working} onClick={() => void act(r, "resume")}>Reanudar</Button>)}
           {r.kind === "canvas" && <Button size="sm" variant="ghost" className="text-destructive" disabled={working} onClick={() => void act(r, "delete")}>Borrar</Button>}</div></li>; })}</ul>
     </>}
-  </div></main>;
+  </div></div></main>;
 }
