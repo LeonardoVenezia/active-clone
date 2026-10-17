@@ -19,7 +19,10 @@ export async function GET(r: Request) {
     for (const list of Object.values(connections)) for (const c of list) if (usage[c.id]) c.usedBy = [usage[c.id]];
     // Native apps come from the same directory the chats read.
     const native = { apps: listNativeApps(), connections: await listNativeConnections(id).catch(() => []) };
-    return NextResponse.json({ ...page, connections, featured: Object.values(PRESETS), native });
+    // A native app overrides the same app in the Composio catalog (agreed with the owner).
+    const nativeIds = new Set<string>(native.apps.map((a) => a.id as string));
+    const items = page.items.filter((t) => !nativeIds.has(t.id));
+    return NextResponse.json({ ...page, items, connections, featured: Object.values(PRESETS), native });
   } catch (e) { return fail(e); }
 }
 export async function POST(r: Request) {
