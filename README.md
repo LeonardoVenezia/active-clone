@@ -96,7 +96,7 @@ Visit [http://localhost:3000](http://localhost:3000) to get started.
 - **Perplexity**: Search Web, Ask Question, Research Topic
 - **Resend**: Send Email
 - **Slack**: Send Slack Message
-- **Stripe**: Create Customer, Get Customer, Create Invoice
+- **Stripe**: Create Customer, Get Customer, Create Invoice, Search Customers, Get Payment, List Payments, Create Payment Link
 - **Superagent**: Guard, Redact
 - **Tiendanube**: Get Order, Search Orders, Get Product, Update Stock, Search Customers, Get Customer, Create Customer
 - **v0**: Create Chat, Send Message
