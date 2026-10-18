@@ -82,6 +82,25 @@ export async function POST(request: Request) {
 
     // Sharing with the company is opt-in and restricted to org owners/admins
     // (workers keep personal templates only, per product decision).
+    // Company templates are admins/owner-only: reject instead of silently
+    // downgrading to a personal template
+    if (body.shareWithOrg === true) {
+      if (!ctx.activeOrganizationId) {
+        return NextResponse.json(
+          { error: "No hay empresa activa para compartir la plantilla" },
+          { status: 400 }
+        );
+      }
+      if (!canManageOrgTemplates(ctx)) {
+        return NextResponse.json(
+          {
+            error:
+              "Solo el dueño o un admin de la empresa puede crear plantillas de la empresa",
+          },
+          { status: 403 }
+        );
+      }
+    }
     const shareWithOrg =
       body.shareWithOrg === true &&
       ctx.activeOrganizationId &&
