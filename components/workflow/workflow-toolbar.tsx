@@ -52,6 +52,7 @@ import {
   isExecutingAtom,
   isGeneratingAtom,
   isSavingAtom,
+  canEditWorkflowAtom,
   isWorkflowOwnerAtom,
   nodesAtom,
   propertiesPanelActiveTabAtom,
@@ -677,6 +678,7 @@ function useWorkflowState() {
     currentWorkflowVisibilityAtom
   );
   const isOwner = useAtomValue(isWorkflowOwnerAtom);
+  const canEdit = useAtomValue(canEditWorkflowAtom);
   const router = useRouter();
   const [isSaving, setIsSaving] = useAtom(isSavingAtom);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useAtom(
@@ -731,6 +733,7 @@ function useWorkflowState() {
     workflowVisibility,
     setWorkflowVisibility,
     isOwner,
+    canEdit,
     router,
     isSaving,
     setIsSaving,
@@ -1063,9 +1066,9 @@ function ToolbarActions({
   const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId);
   const hasSelection = selectedNode || selectedEdge;
 
-  // For non-owners viewing public workflows, don't show toolbar actions
+  // View-only users (no edit grant) don't get toolbar actions
   // (Duplicate button is now in the main toolbar next to Sign In)
-  if (workflowId && !state.isOwner) {
+  if (workflowId && !state.canEdit) {
     return null;
   }
 
@@ -1271,7 +1274,7 @@ function ToolbarActions({
       </ButtonGroup>
 
       {/* Visibility Toggle */}
-      <VisibilityButton actions={actions} state={state} />
+      {state.isOwner && <VisibilityButton actions={actions} state={state} />}
 
       <RunButtonGroup actions={actions} state={state} />
     </>
@@ -1570,7 +1573,7 @@ function WorkflowMenuComponent({
             <WorkflowIcon className="size-4 shrink-0" />
             {workflowId ? (
               <InlineWorkflowName
-                editable={state.isOwner}
+                editable={state.canEdit}
                 name={state.workflowName}
                 workflowId={workflowId}
               />
@@ -1621,7 +1624,7 @@ function WorkflowMenuComponent({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {workflowId && !state.isOwner && (
+      {workflowId && !state.canEdit && (
         <span className="text-muted-foreground text-xs uppercase lg:hidden">
           Read-only
         </span>
@@ -1646,7 +1649,7 @@ export const WorkflowToolbar = ({ workflowId }: WorkflowToolbarProps) => {
             state={state}
             workflowId={workflowId}
           />
-          {workflowId && !state.isOwner && (
+          {workflowId && !state.canEdit && (
             <span className="hidden text-muted-foreground text-xs uppercase lg:inline">
               Read-only
             </span>
@@ -1662,7 +1665,7 @@ export const WorkflowToolbar = ({ workflowId }: WorkflowToolbarProps) => {
             workflowId={workflowId}
           />
           <div className="flex items-center gap-2">
-            {workflowId && !state.isOwner && (
+            {workflowId && !state.canEdit && (
               <DuplicateButton
                 isDuplicating={state.isDuplicating}
                 onDuplicate={actions.handleDuplicate}

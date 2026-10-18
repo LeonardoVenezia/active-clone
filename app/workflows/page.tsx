@@ -8,9 +8,9 @@ import { AuthDialog } from "@/components/auth/dialog";
 import { useSession } from "@/lib/auth-client";
 import { api } from "@/lib/api-client";
 
-type Row = { id: string; name: string; href: string; kind: "mail" | "canvas"; status?: string; steps?: number; trigger?: string; manual?: boolean; updated?: string };
+type Row = { id: string; name: string; href: string; kind: "mail" | "canvas"; status?: string; steps?: number; trigger?: string; manual?: boolean; updated?: string; shared?: boolean };
 type Tpl = { id: string; name: string; description?: string | null; steps?: number; updatedAt?: string; orgId?: string | null; mine?: boolean; canManage?: boolean };
-type W = { id: string; name: string; updatedAt?: string; nodes?: { data?: { type?: string; config?: { triggerType?: string } } }[] };
+type W = { id: string; name: string; updatedAt?: string; shared?: boolean; nodes?: { data?: { type?: string; config?: { triggerType?: string } } }[] };
 
 export default function FlowsPage() {
   const { data: session, isPending } = useSession();
@@ -31,7 +31,7 @@ export default function FlowsPage() {
       for (const w of ws.filter(w => w.name !== "__current__")) {
         const trig = (w.nodes || []).find(n => n.data?.type === "trigger");
         const t = trig?.data?.config?.triggerType || "Manual";
-        out.push({ id: w.id, name: w.name, href: `/workflows/${w.id}`, kind: "canvas", steps: (w.nodes || []).filter(n => n.data?.type !== "trigger").length, trigger: t === "Manual" ? "Manual" : t === "Schedule" ? "Programado" : t === "Webhook" ? "Webhook" : t, manual: t === "Manual", updated: w.updatedAt });
+        out.push({ id: w.id, name: w.name, href: `/workflows/${w.id}`, kind: "canvas", steps: (w.nodes || []).filter(n => n.data?.type !== "trigger").length, trigger: t === "Manual" ? "Manual" : t === "Schedule" ? "Programado" : t === "Webhook" ? "Webhook" : t, manual: t === "Manual", updated: w.updatedAt, shared: !!w.shared });
       }
       setRows(out); setError("");
       try {
@@ -63,6 +63,33 @@ export default function FlowsPage() {
         const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || "No se pudo cambiar el estado.");
         toast.success(action === "pause" ? "Flujo pausado." : "Flujo reanudado."); await load();
       }
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Algo falló."); } finally { setBusy(""); }
+  }
+
+  async function shareFlow(row: Row) {
+    const email = window.prompt(`¿Con quién compartís "${row.name}"? Email de su cuenta:`);
+    if (email === null || !email.trim()) return;
+    setBusy(row.kind + row.id);
+    try {
+      const r = await fetch(`/api/workflows/${row.id}/shares`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim() }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "No se pudo compartir.");
+      toast.success(`"${row.name}" compartido con ${d.sharedWith?.email || email.trim()}. Puede verlo y editarlo.`);
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Algo falló."); } finally { setBusy(""); }
+  }
+
+  async function unshareFlow(row: Row) {
+    const email = window.prompt(`¿A quién le quitás el acceso a "${row.name}"? Email:`);
+    if (email === null || !email.trim()) return;
+    setBusy(row.kind + row.id);
+    try {
+      const lr = await fetch(`/api/workflows/${row.id}/shares`, { cache: "no-store" });
+      const ld = await lr.json().catch(() => ({}));
+      const target = (ld.shares || []).find((sh: { email?: string }) => sh.email?.toLowerCase() === email.trim().toLowerCase());
+      if (!target) throw new Error("Ese email no tiene acceso a este flujo.");
+      const r = await fetch(`/api/workflows/${row.id}/shares`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: target.userId }) });
+      if (!r.ok) throw new Error("No se pudo quitar el acceso.");
+      toast.success(`Acceso quitado a ${target.email}.`);
     } catch (e) { toast.error(e instanceof Error ? e.message : "Algo falló."); } finally { setBusy(""); }
   }
 
@@ -116,12 +143,14 @@ export default function FlowsPage() {
       {error && <p role="alert" className="text-destructive">{error}</p>}
       {rows === null && <p>Cargando workflows...</p>}
       {rows?.length === 0 && !error && <p>Todavía no tenés workflows. <a className="underline" href="/?new=1">Creá uno.</a></p>}
-      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{rows?.map(r => { const key = r.kind + r.id; const working = busy === key; return <li key={key} className="flex flex-col justify-between gap-4 rounded-xl border p-4"><div className="space-y-1"><div className="flex items-start justify-between gap-2"><p className="break-words font-semibold">{r.name}</p>{r.kind === "mail" && <span className={"shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium " + (r.status === "active" ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800")}>{r.status === "active" ? "Activo" : r.status === "paused" ? "Pausado" : r.status}</span>}</div><p className="text-xs text-muted-foreground">{r.kind === "mail" ? "Email to sheet" : "Workflow de lienzo"} · Dispara: {r.trigger}{r.kind === "canvas" ? ` · ${r.steps} paso${r.steps === 1 ? "" : "s"}` : ""}</p></div>
+      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{rows?.map(r => { const key = r.kind + r.id; const working = busy === key; return <li key={key} className="flex flex-col justify-between gap-4 rounded-xl border p-4"><div className="space-y-1"><div className="flex items-start justify-between gap-2"><p className="break-words font-semibold">{r.name}</p>{r.kind === "mail" && <span className={"shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium " + (r.status === "active" ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800")}>{r.status === "active" ? "Activo" : r.status === "paused" ? "Pausado" : r.status}</span>}{r.shared && <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-800">Compartido</span>}</div><p className="text-xs text-muted-foreground">{r.kind === "mail" ? "Email to sheet" : "Workflow de lienzo"} · Dispara: {r.trigger}{r.kind === "canvas" ? ` · ${r.steps} paso${r.steps === 1 ? "" : "s"}` : ""}</p></div>
         <div className="flex flex-wrap gap-2"><Button asChild size="sm" variant="outline"><Link href={r.href}>Editar</Link></Button>
           {r.kind === "canvas" && r.manual && <Button size="sm" disabled={working} onClick={() => void act(r, "run")}>Ejecutar</Button>}
           {r.kind === "mail" && (r.status === "active" ? <Button size="sm" variant="outline" disabled={working} onClick={() => void act(r, "pause")}>Pausar</Button> : <Button size="sm" disabled={working} onClick={() => void act(r, "resume")}>Reanudar</Button>)}
-          {r.kind === "canvas" && <Button size="sm" variant="outline" disabled={working} onClick={() => void saveAsTemplate(r)}>Guardar como plantilla</Button>}
-          {r.kind === "canvas" && <Button size="sm" variant="ghost" className="text-destructive" disabled={working} onClick={() => void act(r, "delete")}>Borrar</Button>}</div></li>; })}</ul>
+          {r.kind === "canvas" && !r.shared && <Button size="sm" variant="outline" disabled={working} onClick={() => void shareFlow(r)}>Compartir</Button>}
+          {r.kind === "canvas" && !r.shared && <Button size="sm" variant="ghost" disabled={working} onClick={() => void unshareFlow(r)}>Quitar acceso</Button>}
+          {r.kind === "canvas" && !r.shared && <Button size="sm" variant="outline" disabled={working} onClick={() => void saveAsTemplate(r)}>Guardar como plantilla</Button>}
+          {r.kind === "canvas" && !r.shared && <Button size="sm" variant="ghost" className="text-destructive" disabled={working} onClick={() => void act(r, "delete")}>Borrar</Button>}</div></li>; })}</ul>
       {templates !== null && templates.length > 0 && <div className="space-y-3"><h2 className="text-lg font-semibold">Plantillas</h2>
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{templates.map(t => { const working = busy === "tpl" + t.id; return <li key={t.id} className="flex flex-col justify-between gap-4 rounded-xl border border-dashed p-4"><div className="space-y-1"><p className="break-words font-semibold">{t.name}</p><p className="text-xs text-muted-foreground">Plantilla{t.orgId ? " de la empresa" : ""} · {t.steps ?? 0} paso{t.steps === 1 ? "" : "s"}</p></div>
           <div className="flex flex-wrap gap-2"><Button size="sm" disabled={working} onClick={() => void templateAction(t, "use")}>Usar</Button>

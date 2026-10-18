@@ -3,7 +3,21 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { validateWorkflowIntegrations } from "@/lib/db/integrations";
-import { workflows } from "@/lib/db/schema";
+import { workflowShares, workflows } from "@/lib/db/schema";
+
+// A user can edit a workflow they own or one explicitly shared with them
+async function hasShareAccess(
+  workflowId: string,
+  userId: string
+): Promise<boolean> {
+  const share = await db.query.workflowShares.findFirst({
+    where: and(
+      eq(workflowShares.workflowId, workflowId),
+      eq(workflowShares.sharedWithUserId, userId)
+    ),
+  });
+  return !!share;
+}
 
 // Helper to strip sensitive data from nodes for public viewing
 function sanitizeNodesForPublicView(
@@ -56,19 +70,26 @@ export async function GET(
     }
 
     const isOwner = session?.user?.id === workflow.userId;
+    const isSharedWithUser =
+      !isOwner && session?.user?.id
+        ? await hasShareAccess(workflowId, session.user.id)
+        : false;
 
-    // If not owner, check if workflow is public
-    if (!isOwner && workflow.visibility !== "public") {
+    // If not owner and not shared, check if workflow is public
+    if (!isOwner && !isSharedWithUser && workflow.visibility !== "public") {
       return NextResponse.json(
         { error: "Workflow not found" },
         { status: 404 }
       );
     }
 
-    // For public workflows viewed by non-owners, sanitize sensitive data
+    // Shared editors work with the owner's connections: give them the full
+    // nodes so edits preserve the saved integration references. Public
+    // non-owners still get sanitized nodes.
+    const canEdit = isOwner || isSharedWithUser;
     const responseData = {
       ...workflow,
-      nodes: isOwner
+      nodes: canEdit
         ? workflow.nodes
         : sanitizeNodesForPublicView(
             workflow.nodes as Record<string, unknown>[]
@@ -76,6 +97,8 @@ export async function GET(
       createdAt: workflow.createdAt.toISOString(),
       updatedAt: workflow.updatedAt.toISOString(),
       isOwner,
+      canEdit,
+      shared: isSharedWithUser,
     };
 
     return NextResponse.json(responseData);
@@ -135,13 +158,24 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Verify ownership
-    const existingWorkflow = await db.query.workflows.findFirst({
+    // Verify edit access: owner or a user the flow is shared with
+    const ownedWorkflow = await db.query.workflows.findFirst({
       where: and(
         eq(workflows.id, workflowId),
         eq(workflows.userId, session.user.id)
       ),
     });
+
+    const isOwner = !!ownedWorkflow;
+    let existingWorkflow = ownedWorkflow;
+    if (!existingWorkflow) {
+      const shared = await hasShareAccess(workflowId, session.user.id);
+      if (shared) {
+        existingWorkflow = await db.query.workflows.findFirst({
+          where: eq(workflows.id, workflowId),
+        });
+      }
+    }
 
     if (!existingWorkflow) {
       return NextResponse.json(
@@ -152,11 +186,20 @@ export async function PATCH(
 
     const body = await request.json();
 
-    // Validate that all integrationIds in nodes belong to the current user
+    // Only the owner can change visibility
+    if (body.visibility !== undefined && !isOwner) {
+      return NextResponse.json(
+        { error: "Only the workflow owner can change visibility" },
+        { status: 403 }
+      );
+    }
+
+    // Validate that all integrationIds in nodes belong to the workflow owner
+    // (shared editors edit on top of the owner's connections)
     if (Array.isArray(body.nodes)) {
       const validation = await validateWorkflowIntegrations(
         body.nodes,
-        session.user.id
+        existingWorkflow.userId
       );
       if (!validation.valid) {
         return NextResponse.json(
@@ -226,7 +269,9 @@ export async function PATCH(
       ...updatedWorkflow,
       createdAt: updatedWorkflow.createdAt.toISOString(),
       updatedAt: updatedWorkflow.updatedAt.toISOString(),
-      isOwner: true,
+      isOwner,
+      canEdit: true,
+      shared: !isOwner,
     });
   } catch (error) {
     console.error("Failed to update workflow:", error);

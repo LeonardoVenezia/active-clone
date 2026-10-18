@@ -6,6 +6,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import type { IntegrationType } from "../types/integration";
 import { generateId } from "../utils/id";
@@ -92,6 +93,32 @@ export const workflows = pgTable("workflows", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// Per-flow sharing: creator grants individual users edit access to a flow
+export const workflowShares = pgTable(
+  "workflow_shares",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => generateId()),
+    workflowId: text("workflow_id")
+      .notNull()
+      .references(() => workflows.id),
+    sharedWithUserId: text("shared_with_user_id")
+      .notNull()
+      .references(() => users.id),
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("workflow_shares_pair_unique").on(
+      table.workflowId,
+      table.sharedWithUserId
+    ),
+  ]
+);
 
 // Workflow templates: private per-user snapshots that can be imported into new workflows
 export const workflowTemplates = pgTable("workflow_templates", {

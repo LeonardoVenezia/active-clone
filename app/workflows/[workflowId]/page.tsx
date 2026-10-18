@@ -28,6 +28,7 @@ import {
   isPanelAnimatingAtom,
   isSavingAtom,
   isSidebarCollapsedAtom,
+  canEditWorkflowAtom,
   isWorkflowOwnerAtom,
   nodesAtom,
   rightPanelWidthAtom,
@@ -144,6 +145,7 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
     currentWorkflowVisibilityAtom
   );
   const [isOwner, setIsWorkflowOwner] = useAtom(isWorkflowOwnerAtom);
+  const setCanEditWorkflow = useSetAtom(canEditWorkflowAtom);
   const setGlobalIntegrations = useSetAtom(integrationsAtom);
   const setIntegrationsLoaded = useSetAtom(integrationsLoadedAtom);
   const integrationsVersion = useAtomValue(integrationsVersionAtom);
@@ -376,6 +378,9 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
         (workflow.visibility as WorkflowVisibility) ?? "private"
       );
       setIsWorkflowOwner(workflow.isOwner !== false); // Default to true if not set
+      setCanEditWorkflow(
+        workflow.isOwner !== false || workflow.canEdit === true
+      );
       setHasUnsavedChanges(false);
       setWorkflowNotFound(false);
     } catch (error) {

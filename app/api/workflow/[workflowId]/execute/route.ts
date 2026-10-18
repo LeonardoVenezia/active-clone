@@ -1,10 +1,10 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { start } from "workflow/api";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { validateWorkflowIntegrations } from "@/lib/db/integrations";
-import { workflowExecutions, workflows } from "@/lib/db/schema";
+import { workflowExecutions, workflowShares, workflows } from "@/lib/db/schema";
 import { executeWorkflow } from "@/lib/workflow-executor.workflow";
 import type { WorkflowEdge, WorkflowNode } from "@/lib/workflow-store";
 
@@ -89,13 +89,23 @@ export async function POST(
     }
 
     if (workflow.userId !== session.user.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      // Flows can also be run by users they are explicitly shared with
+      const share = await db.query.workflowShares.findFirst({
+        where: and(
+          eq(workflowShares.workflowId, workflowId),
+          eq(workflowShares.sharedWithUserId, session.user.id)
+        ),
+      });
+      if (!share) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
 
-    // Validate that all integrationIds in workflow nodes belong to the current user
+    // Validate integration references against the workflow owner (shared
+    // editors run with the owner's connections)
     const validation = await validateWorkflowIntegrations(
       workflow.nodes as WorkflowNode[],
-      session.user.id
+      workflow.userId
     );
     if (!validation.valid) {
       console.error(

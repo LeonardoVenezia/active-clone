@@ -35,6 +35,7 @@ import {
   deleteNodeAtom,
   edgesAtom,
   isGeneratingAtom,
+  canEditWorkflowAtom,
   isWorkflowOwnerAtom,
   newlyCreatedNodeIdAtom,
   nodesAtom,
@@ -94,6 +95,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
     currentWorkflowNameAtom
   );
   const isOwner = useAtomValue(isWorkflowOwnerAtom);
+  const canEdit = useAtomValue(canEditWorkflowAtom);
   const updateNodeData = useSetAtom(updateNodeDataAtom);
   const deleteNode = useSetAtom(deleteNodeAtom);
   const deleteEdge = useSetAtom(deleteEdgeAtom);
@@ -255,7 +257,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
       const validTab =
         activeTab === "properties" ||
         activeTab === "code" ||
-        (activeTab === "runs" && isOwner)
+        (activeTab === "runs" && canEdit)
           ? activeTab
           : "properties";
       switch (validTab) {
@@ -390,7 +392,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
             <Label htmlFor="edge-target">Target</Label>
             <Input disabled id="edge-target" value={selectedEdge.target} />
           </div>
-          {isOwner && (
+          {canEdit && (
             <div className="pt-2">
               <Button onClick={handleDeleteEdge} variant="ghost">
                 <Trash2 className="mr-2 size-4" />
@@ -409,7 +411,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
     const validWorkflowTab =
       activeTab === "properties" ||
       activeTab === "code" ||
-      (activeTab === "runs" && isOwner)
+      (activeTab === "runs" && canEdit)
         ? activeTab
         : "properties";
 
@@ -423,7 +425,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
               <div className="space-y-2">
                 <Label htmlFor="workflow-name">Workflow Name</Label>
                 <Input
-                  disabled={!isOwner}
+                  disabled={!canEdit}
                   id="workflow-name"
                   onChange={(e) => handleUpdateWorkflowName(e.target.value)}
                   value={currentWorkflowName}
@@ -437,7 +439,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
                   value={currentWorkflowId || "Not saved"}
                 />
               </div>
-              {!isOwner && (
+              {!canEdit && (
                 <div className="rounded-lg border border-muted bg-muted/30 p-3">
                   <p className="text-muted-foreground text-sm">
                     You are viewing a public workflow. Duplicate it to make
@@ -445,16 +447,18 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
                   </p>
                 </div>
               )}
-              {isOwner && (
+              {canEdit && (
                 <div className="flex items-center gap-2 pt-2">
                   <Button onClick={handleClearWorkflow} variant="ghost">
                     <Eraser className="mr-2 size-4" />
                     Clear
                   </Button>
+                  {isOwner && (
                   <Button onClick={handleDeleteWorkflow} variant="ghost">
                     <Trash2 className="mr-2 size-4" />
                     Delete
                   </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -497,7 +501,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
             </div>
           )}
 
-          {validWorkflowTab === "runs" && isOwner && (
+          {validWorkflowTab === "runs" && canEdit && (
             <div className="flex h-full flex-col">
               <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2">
                 <Button
@@ -556,7 +560,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
             <Code className="size-5" />
             Code
           </button>
-          {isOwner && (
+          {canEdit && (
             <button
               className={`flex flex-1 flex-col items-center gap-1 py-3 font-medium text-xs transition-colors ${
                 validWorkflowTab === "runs"
@@ -587,7 +591,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
             {/* Action selection */}
             {selectedNode.data.type === "action" &&
               !selectedNode.data.config?.actionType &&
-              isOwner && (
+              canEdit && (
                 <ActionGrid
                   disabled={isGenerating}
                   isNewlyCreated={selectedNode?.id === newlyCreatedNodeId}
@@ -603,7 +607,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
             {selectedNode.data.type === "trigger" && (
               <TriggerConfig
                 config={selectedNode.data.config || {}}
-                disabled={isGenerating || !isOwner}
+                disabled={isGenerating || !canEdit}
                 onUpdateConfig={handleUpdateConfig}
                 workflowId={currentWorkflowId ?? undefined}
               />
@@ -613,7 +617,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
               selectedNode.data.config?.actionType !== undefined && (
                 <ActionConfig
                   config={selectedNode.data.config || {}}
-                  disabled={isGenerating || !isOwner}
+                  disabled={isGenerating || !canEdit}
                   isOwner={isOwner}
                   onUpdateConfig={handleUpdateConfig}
                 />
@@ -626,7 +630,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
                 <div className="space-y-2">
                   <Label htmlFor="label">Label</Label>
                   <Input
-                    disabled={isGenerating || !isOwner}
+                    disabled={isGenerating || !canEdit}
                     id="label"
                     onChange={(e) => handleUpdateLabel(e.target.value)}
                     value={selectedNode.data.label as string}
@@ -635,7 +639,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
                 <div className="space-y-2">
                   <Label htmlFor="description">Description</Label>
                   <Input
-                    disabled={isGenerating || !isOwner}
+                    disabled={isGenerating || !canEdit}
                     id="description"
                     onChange={(e) => handleUpdateDescription(e.target.value)}
                     placeholder="Optional description"
@@ -646,7 +650,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
             )}
 
             {/* Actions */}
-            {isOwner && (
+            {canEdit && (
               <div className="flex items-center gap-2 pt-2">
                 {selectedNode.data.type === "action" && (
                   <Button
@@ -730,7 +734,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
           </div>
         )}
 
-        {activeTab === "runs" && isOwner && (
+        {activeTab === "runs" && canEdit && (
           <div className="flex h-full flex-col">
             <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2">
               <Button
@@ -791,7 +795,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
             Code
           </button>
         )}
-        {isOwner && (
+        {canEdit && (
           <button
             className={`flex flex-1 flex-col items-center gap-1 py-3 font-medium text-xs transition-colors ${
               activeTab === "runs" ? "text-foreground" : "text-muted-foreground"

@@ -25,6 +25,8 @@ export type SavedWorkflow = WorkflowData & {
   createdAt: string;
   updatedAt: string;
   isOwner?: boolean;
+  canEdit?: boolean;
+  shared?: boolean;
 };
 
 // API error class

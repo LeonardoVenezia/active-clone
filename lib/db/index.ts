@@ -15,6 +15,7 @@ import {
   workflowExecutions,
   workflowExecutionsRelations,
   workflows,
+  workflowShares,
   workflowTemplates,
 } from "./schema";
 
@@ -31,6 +32,7 @@ const schema = {
   apiKeys,
   integrations,
   workflowTemplates,
+  workflowShares,
   organizations,
   members,
   invitations,

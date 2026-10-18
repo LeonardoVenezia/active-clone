@@ -1,8 +1,8 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { workflows } from "@/lib/db/schema";
+import { workflowShares, workflows } from "@/lib/db/schema";
 
 export async function GET(request: Request) {
   try {
@@ -20,11 +20,42 @@ export async function GET(request: Request) {
       .where(eq(workflows.userId, session.user.id))
       .orderBy(desc(workflows.updatedAt));
 
-    const mappedWorkflows = userWorkflows.map((workflow) => ({
-      ...workflow,
-      createdAt: workflow.createdAt.toISOString(),
-      updatedAt: workflow.updatedAt.toISOString(),
-    }));
+    // Flows explicitly shared with this user by their creator
+    const myShares = await db
+      .select()
+      .from(workflowShares)
+      .where(eq(workflowShares.sharedWithUserId, session.user.id));
+
+    let sharedWorkflows: (typeof workflows.$inferSelect)[] = [];
+    if (myShares.length > 0) {
+      sharedWorkflows = await db
+        .select()
+        .from(workflows)
+        .where(
+          inArray(
+            workflows.id,
+            myShares.map((share) => share.workflowId)
+          )
+        );
+    }
+
+    const mappedWorkflows = [
+      ...userWorkflows.map((workflow) => ({
+        ...workflow,
+        createdAt: workflow.createdAt.toISOString(),
+        updatedAt: workflow.updatedAt.toISOString(),
+        isOwner: true,
+        canEdit: true,
+      })),
+      ...sharedWorkflows.map((workflow) => ({
+        ...workflow,
+        createdAt: workflow.createdAt.toISOString(),
+        updatedAt: workflow.updatedAt.toISOString(),
+        isOwner: false,
+        canEdit: true,
+        shared: true,
+      })),
+    ];
 
     return NextResponse.json(mappedWorkflows);
   } catch (error) {

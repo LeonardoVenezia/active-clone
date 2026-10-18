@@ -37,6 +37,7 @@ import {
   deleteSelectedItemsAtom,
   edgesAtom,
   isGeneratingAtom,
+  canEditWorkflowAtom,
   isWorkflowOwnerAtom,
   newlyCreatedNodeIdAtom,
   nodesAtom,
@@ -154,6 +155,7 @@ export const PanelInner = () => {
     currentWorkflowNameAtom
   );
   const isOwner = useAtomValue(isWorkflowOwnerAtom);
+  const canEdit = useAtomValue(canEditWorkflowAtom);
   const updateNodeData = useSetAtom(updateNodeDataAtom);
   const deleteNode = useSetAtom(deleteNodeAtom);
   const deleteEdge = useSetAtom(deleteEdgeAtom);
@@ -553,7 +555,7 @@ export const PanelInner = () => {
               <Input disabled id="edge-target" value={selectedEdge.target} />
             </div>
 
-            {isOwner && (
+            {canEdit && (
               <div className="flex items-center gap-2 pt-4">
                 <Button
                   className="text-muted-foreground"
@@ -616,7 +618,7 @@ export const PanelInner = () => {
             >
               Code
             </TabsTrigger>
-            {isOwner && (
+            {canEdit && (
               <TabsTrigger
                 className="bg-transparent text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none"
                 value="runs"
@@ -635,7 +637,7 @@ export const PanelInner = () => {
                   Workflow Name
                 </Label>
                 <Input
-                  disabled={!isOwner}
+                  disabled={!canEdit}
                   id="workflow-name"
                   onChange={(e) => handleUpdateWorkspaceName(e.target.value)}
                   value={currentWorkflowName}
@@ -651,7 +653,7 @@ export const PanelInner = () => {
                   value={currentWorkflowId || "Not saved"}
                 />
               </div>
-              {!isOwner && (
+              {!canEdit && (
                 <div className="rounded-lg border border-muted bg-muted/30 p-3">
                   <p className="text-muted-foreground text-sm">
                     You are viewing a public workflow. Duplicate it to make
@@ -659,7 +661,7 @@ export const PanelInner = () => {
                   </p>
                 </div>
               )}
-              {isOwner && (
+              {canEdit && (
                 <div className="flex items-center gap-2 pt-4">
                   <Button
                     className="text-muted-foreground"
@@ -670,6 +672,7 @@ export const PanelInner = () => {
                     <Eraser className="mr-2 size-4" />
                     Clear
                   </Button>
+                  {isOwner && (
                   <Button
                     className="text-muted-foreground"
                     onClick={() => setShowDeleteWorkflowAlert(true)}
@@ -679,11 +682,12 @@ export const PanelInner = () => {
                     <Trash2 className="mr-2 size-4" />
                     Delete
                   </Button>
+                  )}
                 </div>
               )}
             </div>
           </TabsContent>
-          {isOwner && (
+          {canEdit && (
             <TabsContent className="flex flex-col overflow-hidden" value="runs">
               {/* Actions in content header */}
               <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2">
@@ -865,7 +869,7 @@ export const PanelInner = () => {
               Code
             </TabsTrigger>
           ) : null}
-          {isOwner && (
+          {canEdit && (
             <TabsTrigger
               className="bg-transparent text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none"
               value="runs"
@@ -881,7 +885,7 @@ export const PanelInner = () => {
           {/* Action selection - full height flex layout */}
           {selectedNode.data.type === "action" &&
             !selectedNode.data.config?.actionType &&
-            isOwner && (
+            canEdit && (
               <div className="flex min-h-0 flex-1 flex-col px-4 pt-4">
                 <ActionGrid
                   disabled={isGenerating}
@@ -917,13 +921,13 @@ export const PanelInner = () => {
           {!(
             selectedNode.data.type === "action" &&
             !selectedNode.data.config?.actionType &&
-            isOwner
+            canEdit
           ) && (
             <div className="flex-1 space-y-4 overflow-y-auto p-4">
               {selectedNode.data.type === "trigger" && (
                 <TriggerConfig
                   config={selectedNode.data.config || {}}
-                  disabled={isGenerating || !isOwner}
+                  disabled={isGenerating || !canEdit}
                   onUpdateConfig={handleUpdateConfig}
                   workflowId={currentWorkflowId ?? undefined}
                 />
@@ -931,7 +935,7 @@ export const PanelInner = () => {
 
               {selectedNode.data.type === "action" &&
                 !selectedNode.data.config?.actionType &&
-                !isOwner && (
+                !canEdit && (
                   <div className="rounded-lg border border-muted bg-muted/30 p-3">
                     <p className="text-muted-foreground text-sm">
                       No action configured for this step.
@@ -943,7 +947,7 @@ export const PanelInner = () => {
               selectedNode.data.config?.actionType ? (
                 <ActionConfig
                   config={selectedNode.data.config || {}}
-                  disabled={isGenerating || !isOwner}
+                  disabled={isGenerating || !canEdit}
                   isOwner={isOwner}
                   onUpdateConfig={handleUpdateConfig}
                 />
@@ -957,7 +961,7 @@ export const PanelInner = () => {
                       Label
                     </Label>
                     <Input
-                      disabled={isGenerating || !isOwner}
+                      disabled={isGenerating || !canEdit}
                       id="label"
                       onChange={(e) => handleUpdateLabel(e.target.value)}
                       value={selectedNode.data.label}
@@ -969,7 +973,7 @@ export const PanelInner = () => {
                       Description
                     </Label>
                     <Input
-                      disabled={isGenerating || !isOwner}
+                      disabled={isGenerating || !canEdit}
                       id="description"
                       onChange={(e) => handleUpdateDescription(e.target.value)}
                       placeholder="Optional description"
@@ -979,7 +983,7 @@ export const PanelInner = () => {
                 </>
               ) : null}
 
-              {!isOwner && (
+              {!canEdit && (
                 <div className="rounded-lg border border-muted bg-muted/30 p-3">
                   <p className="text-muted-foreground text-sm">
                     You are viewing a public workflow. Duplicate it to make
@@ -989,7 +993,7 @@ export const PanelInner = () => {
               )}
 
               {/* Actions moved into content */}
-              {isOwner && (
+              {canEdit && (
                 <div className="flex items-center gap-2 pt-4">
                   {selectedNode.data.type === "action" && (
                     <Button
@@ -1097,7 +1101,7 @@ export const PanelInner = () => {
             );
           })()}
         </TabsContent>
-        {isOwner && (
+        {canEdit && (
           <TabsContent className="flex flex-col overflow-hidden" value="runs">
             {/* Actions in content header */}
             <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2">
