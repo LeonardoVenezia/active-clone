@@ -33,3 +33,26 @@ export async function alegraGet(credentials: AlegraCredentialsLike, path: string
   }
   return response.json();
 }
+
+export async function alegraPost(credentials: AlegraCredentialsLike, path: string, body: Record<string, unknown>): Promise<unknown> {
+  const basic = Buffer.from(`${credentials.ALEGRA_EMAIL}:${credentials.ALEGRA_TOKEN}`).toString("base64");
+  const response = await fetch(`${ALEGRA_BASE}/${path}`, {
+    method: "POST",
+    headers: { Authorization: `Basic ${basic}`, Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (response.status === 401) {
+    throw new Error("Invalid Alegra email or API token");
+  }
+  if (!response.ok) {
+    let message = "";
+    try {
+      const data = (await response.json()) as { message?: string; error?: string };
+      message = data.message ?? data.error ?? "";
+    } catch {
+      // ignore
+    }
+    throw new Error(message || `HTTP ${response.status}`);
+  }
+  return response.json();
+}

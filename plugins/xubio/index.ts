@@ -100,6 +100,83 @@ const xubioPlugin: IntegrationPlugin = {
       outputFields: [{ field: "invoice", description: "Invoice data" }],
       configFields: [textField("invoiceId", "Invoice ID", "123456", { required: true })],
     },
+    {
+      slug: "create-customer",
+      label: "Create Customer",
+      description: "Create a customer (cliente) in Xubio",
+      category: "Xubio",
+      stepFunction: "createCustomerStep",
+      stepImportPath: "create-customer",
+      outputFields: [
+        { field: "customerId", description: "Customer ID (cliente_id)" },
+        { field: "name", description: "Customer name" },
+      ],
+      configFields: [
+        {
+          key: "name",
+          label: "Name / razón social",
+          type: "template-input",
+          placeholder: "Distribuidora del Sur SA",
+          example: "Distribuidora del Sur SA",
+          required: true,
+        },
+        {
+          key: "taxIdType",
+          label: "Tax ID type (CUIT, CUIL, DNI)",
+          type: "template-input",
+          placeholder: "CUIT",
+          example: "CUIT",
+        },
+        {
+          key: "cuit",
+          label: "CUIT (with dashes, required to invoice)",
+          type: "template-input",
+          placeholder: "30-71555555-3",
+          example: "30-71555555-3",
+        },
+        {
+          key: "fiscalCategory",
+          label: "Fiscal category (RI, MT, CF, EX, NA, CE)",
+          type: "template-input",
+          placeholder: "CF",
+          example: "CF",
+        },
+        {
+          key: "email",
+          label: "Email",
+          type: "template-input",
+          placeholder: "cliente@example.com",
+          example: "cliente@example.com",
+        },
+        {
+          type: "group",
+          label: "Address",
+          fields: [
+            {
+              key: "phone",
+              label: "Phone",
+              type: "template-input",
+              placeholder: "1122334455",
+              example: "1122334455",
+            },
+            {
+              key: "address",
+              label: "Address",
+              type: "template-input",
+              placeholder: "Av. Siempre Viva 123",
+              example: "Av. Siempre Viva 123",
+            },
+            {
+              key: "postalCode",
+              label: "Postal code",
+              type: "template-input",
+              placeholder: "1405",
+              example: "1405",
+            },
+          ],
+        },
+      ],
+    },
   ],
 };
 

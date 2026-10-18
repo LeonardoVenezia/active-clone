@@ -50,3 +50,23 @@ export async function xubioGet(credentials: XubioCredentialsLike, path: string, 
   }
   return response.json();
 }
+
+export async function xubioPost(credentials: XubioCredentialsLike, path: string, body: Record<string, unknown>): Promise<unknown> {
+  const token = await getXubioToken(credentials);
+  const response = await fetch(`${XUBIO_BASE}/${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let message = "";
+    try {
+      const data = (await response.json()) as { message?: string; error?: string; error_description?: string };
+      message = data.message ?? data.error_description ?? data.error ?? "";
+    } catch {
+      // ignore
+    }
+    throw new Error(message || `HTTP ${response.status}`);
+  }
+  return response.json();
+}

@@ -100,6 +100,69 @@ const alegraPlugin: IntegrationPlugin = {
       outputFields: [{ field: "invoice", description: "Invoice data" }],
       configFields: [textField("invoiceId", "Invoice ID", "123", { required: true })],
     },
+    {
+      slug: "create-contact",
+      label: "Create Contact",
+      description: "Create a client or supplier contact",
+      category: "Alegra",
+      stepFunction: "createContactStep",
+      stepImportPath: "create-contact",
+      outputFields: [
+        { field: "id", description: "Contact ID" },
+        { field: "name", description: "Contact name" },
+      ],
+      configFields: [
+        {
+          key: "name",
+          label: "Name",
+          type: "template-input",
+          placeholder: "Cliente Nuevo SA",
+          example: "Cliente Nuevo SA",
+          required: true,
+        },
+        {
+          key: "identification",
+          label: "Tax ID / identification",
+          type: "template-input",
+          placeholder: "30715555553",
+          example: "30715555553",
+        },
+        {
+          key: "email",
+          label: "Email",
+          type: "template-input",
+          placeholder: "cliente@example.com",
+          example: "cliente@example.com",
+        },
+        {
+          key: "type",
+          label: "Type (client or provider)",
+          type: "template-input",
+          placeholder: "client",
+          example: "client",
+        },
+        {
+          type: "group",
+          label: "Phones",
+          fields: [
+            {
+              key: "phonePrimary",
+              label: "Primary phone",
+              type: "template-input",
+              placeholder: "+54 11 5555 5555",
+              example: "+54 11 5555 5555",
+            },
+            {
+              key: "mobile",
+              label: "Mobile",
+              type: "template-input",
+              placeholder: "+54 9 11 5555 5555",
+              example: "+54 9 11 5555 5555",
+            },
+          ],
+        },
+      ],
+    },
   ],
 };
 
