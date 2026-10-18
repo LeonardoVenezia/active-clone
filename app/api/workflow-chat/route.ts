@@ -3,7 +3,8 @@ import { describeToolkit } from "@/lib/connectors/generic";
 import { myConnections } from "@/lib/connectors";
 import { PRESETS } from "@/lib/connectors/presets";
 import { listNativeConnections, nativeChatContext, nativeOAuthApp } from "@/lib/integrations/directory";
-import { generateText } from "ai";
+import { createUIMessageStream, createUIMessageStreamResponse, streamText } from "ai";
+import { z } from "zod";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
@@ -52,10 +53,20 @@ export async function GET(r: Request) {
 }
 export async function POST(r: Request) {
   const origin = r.headers.get("origin");
-  if (!origin || !ORIGINS.includes(origin) || new URL(r.url).origin !== origin) return NextResponse.json({ error: "Invalid origin." }, { status: 403 });
+  const previewOk = process.env.VERCEL_ENV === "preview" && !!origin && origin.endsWith(".vercel.app");
+  if (!origin || (!ORIGINS.includes(origin) && !previewOk) || new URL(r.url).origin !== origin) return NextResponse.json({ error: "Invalid origin." }, { status: 403 });
   const id = await user(r); if (!id) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   let b: { workflowId?: unknown; message?: unknown; snapshot?: Snap };
   try { b = await r.json(); } catch { return NextResponse.json({ error: "Bad request." }, { status: 400 }); }
+  const bodyShape = z.object({
+    workflowId: z.unknown(),
+    message: z.unknown(),
+    snapshot: z.object({
+      nodes: z.array(z.object({ id: z.unknown().optional(), label: z.unknown().optional(), type: z.unknown().optional(), action: z.unknown().optional() })).optional(),
+      edges: z.array(z.object({ source: z.unknown().optional(), target: z.unknown().optional() })).optional(),
+    }).optional(),
+  });
+  if (!bodyShape.safeParse(b).success) return NextResponse.json({ error: "Bad request." }, { status: 400 });
   if (!validWorkflowId(b.workflowId)) return NextResponse.json({ error: "Bad workflow." }, { status: 400 });
   const text = typeof b.message === "string" ? b.message.trim().slice(0, 2000) : "";
   if (!text) return NextResponse.json({ error: "Write a message first." }, { status: 400 });
@@ -94,16 +105,58 @@ export async function POST(r: Request) {
     const nativeInfo = await nativeChatContext(id).catch(() => "");
     if (nativeInfo) connectionStatusContext = `${connectionStatusContext}\n\n${nativeInfo}`;
     const messages = [{ role: "system" as const, content: `${SYSTEM}\n\n${connectionStatusContext}\n\n${describe(b.snapshot)}` }, ...past.map(m => ({ role: m.role, content: m.content })), { role: "user" as const, content: text }];
-    let reply = "";
-    for (const r of llmRoutes()) {
-      if (reply) break;
-      try {
-        const provider = createOpenAICompatible({ name: r.name, apiKey: r.apiKey, baseURL: r.baseURL });
-        reply = (await generateText({ model: provider(r.model), messages, maxOutputTokens: r.maxTokens, maxRetries: 0, abortSignal: AbortSignal.timeout(10_000) })).text.trim();
-        if (!reply) console.error("[workflow-chat] empty reply from", r.name, r.model);
-      } catch (e) { console.error("[workflow-chat] model failed", r.name, r.model, (e as { status?: number })?.status); }
-    }
-    if (!reply) return NextResponse.json({ error: "The free AI model didn't answer (it may be busy). Your message was kept; send it again in a moment." }, { status: 502 });
+  return createUIMessageStreamResponse({
+    stream: createUIMessageStream({
+      execute: async ({ writer }) => {
+        try {
+          const textId = "t1";
+          let reply = "";
+          let emitted = "";
+          let buf = "";
+          let started = false;
+          const feed = (chunk: string): string => {
+            buf += chunk;
+            const idx = buf.search(/\[\[?/);
+            if (idx === -1) { const out = buf; buf = ""; return out; }
+            const out = buf.slice(0, idx); buf = buf.slice(idx); return out;
+          };
+          const push = (chunk: string) => {
+            reply += chunk;
+            const out = feed(chunk);
+            if (out) { emitted += out; if (started) writer.write({ type: "text-delta", id: textId, delta: out }); }
+          };
+          for (const route of llmRoutes()) {
+            if (reply) break;
+            try {
+              const provider = createOpenAICompatible({ name: route.name, apiKey: route.apiKey, baseURL: route.baseURL });
+              const res = streamText({ model: provider(route.model), messages, maxOutputTokens: route.maxTokens, maxRetries: 0 });
+              const reader = res.textStream.getReader();
+              let first;
+              try {
+                first = await Promise.race([reader.read(), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("first chunk timeout")), 10_000))]);
+              } catch {
+                await reader.cancel().catch(() => undefined);
+                console.error("[workflow-chat] model failed (first chunk)", route.name, route.model);
+                continue;
+              }
+              if (first.done || !first.value || !first.value.trim()) { console.error("[workflow-chat] empty reply from", route.name, route.model); continue; }
+              if (!started) { writer.write({ type: "text-start", id: textId }); started = true; }
+              push(first.value);
+              try {
+                for (;;) {
+                  const next = await reader.read();
+                  if (next.done) break;
+                  if (next.value) push(next.value);
+                }
+              } catch (streamError) {
+                console.error("[workflow-chat] stream error", route.name, route.model, streamError instanceof Error ? streamError.message : "unknown");
+              }
+              reply = reply.trim();
+              if (!reply) console.error("[workflow-chat] empty reply from", route.name, route.model);
+            } catch (e) { console.error("[workflow-chat] model failed", route.name, route.model, (e as { status?: number })?.status); }
+          }
+          if (!reply) { writer.write({ type: "data-chat-error", data: { error: "The free AI model didn't answer (it may be busy). Your message was kept; send it again in a moment." } }); return; }
+          if (!started) { writer.write({ type: "text-start", id: textId }); started = true; }
     if (/\[\[BUILD:\s*one plain sentence|Composio toolkit slug in lowercase|one extra final line/i.test(reply)) reply = "I got confused there. Could you say that again in one sentence?";
     reply = reply.replace(/<\|[^|>]{1,40}\|>(\s*\[\s*\])?/g, "").trim();
     let form: { title: string; fields: { key: string; label: string }[]; offerCreate: boolean } | null = null;
@@ -162,8 +215,25 @@ export async function POST(r: Request) {
     const m = reply.match(/\[\[BUILD:\s*([\s\S]{3,600}?)\]\]\s*$/);
     const build = m ? m[1].trim() : null;
     const shown = m ? reply.slice(0, m.index).trim() || "Armando el flujo en el lienzo." : reply;
-    await append(id, b.workflowId, "assistant", shown);
-    return NextResponse.json({ reply: shown, build, connect, form: connect || build ? null : form, autoBuild: !!build && !connect && (explicitBuildIntent || recentlyConfirmedPlan) });
+    if (shown.startsWith(emitted)) {
+      const restText = shown.slice(emitted.length);
+      if (restText) writer.write({ type: "text-delta", id: textId, delta: restText });
+      writer.write({ type: "text-end", id: textId });
+    } else if (emitted.startsWith(shown)) {
+      writer.write({ type: "text-end", id: textId });
+    } else {
+      writer.write({ type: "text-end", id: textId });
+      writer.write({ type: "data-replace-text", data: { text: shown } });
+    }
+    await append(id, b.workflowId as string, "assistant", shown);
+    writer.write({ type: "data-chat-result", data: { build, connect, form: connect || build ? null : form, autoBuild: !!build && !connect && (explicitBuildIntent || recentlyConfirmedPlan) } });
+
+        } catch {
+          try { writer.write({ type: "data-chat-error", data: { error: "Something went wrong. Your message was kept; try again." } }); } catch { /* stream already closed */ }
+        }
+      },
+    }),
+  });
   } catch { return NextResponse.json({ error: "Something went wrong. Your message was kept; try again." }, { status: 503 }); }
 }
 
