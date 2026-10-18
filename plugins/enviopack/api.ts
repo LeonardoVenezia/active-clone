@@ -90,7 +90,13 @@ export async function enviopackGetBytes(
   }
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+    let detail = "";
+    try {
+      detail = (await response.text()).slice(0, 300);
+    } catch {
+      // ignore
+    }
+    throw new Error(`Envíopack request failed: HTTP ${response.status}${detail ? ` - ${detail}` : ""}`);
   }
   const buffer = Buffer.from(await response.arrayBuffer());
   return {
