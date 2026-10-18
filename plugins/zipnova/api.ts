@@ -15,10 +15,15 @@ export async function zipnovaRequest(
   credentials: CredentialsLike,
   method: "GET" | "POST",
   path: string,
-  body?: unknown
+  body?: unknown,
+  query?: Record<string, string | undefined>
 ): Promise<unknown> {
   const basic = Buffer.from(`${credentials.ZIPNOVA_API_TOKEN}:${credentials.ZIPNOVA_API_SECRET}`).toString("base64");
-  const response = await fetch(`${ZIPNOVA_BASE}${path}`, {
+  const url = new URL(`${ZIPNOVA_BASE}${path}`);
+  for (const [key, value] of Object.entries(query ?? {})) {
+    if (value) url.searchParams.set(key, value);
+  }
+  const response = await fetch(url, {
     method,
     headers: { Authorization: `Basic ${basic}`, Accept: "application/json", "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),

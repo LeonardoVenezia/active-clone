@@ -53,3 +53,48 @@ export async function enviopackGet(credentials: CredentialsLike, path: string, q
   }
   return response.json();
 }
+
+export async function enviopackPost(credentials: CredentialsLike, path: string, body: unknown): Promise<unknown> {
+  const token = await getEnviopackToken(credentials);
+  const url = new URL(`${ENVIOPACK_BASE}${path}`);
+  url.searchParams.set("access_token", token);
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let message = "";
+    try {
+      const data = (await response.json()) as { message?: string; error?: string };
+      message = data.message ?? data.error ?? "";
+    } catch {
+      // ignore
+    }
+    throw new Error(message || `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+// For binary downloads (labels): returns base64 + content type.
+export async function enviopackGetBytes(
+  credentials: CredentialsLike,
+  path: string,
+  query: Record<string, string | undefined>
+): Promise<{ base64: string; contentType: string }> {
+  const token = await getEnviopackToken(credentials);
+  const url = new URL(`${ENVIOPACK_BASE}${path}`);
+  url.searchParams.set("access_token", token);
+  for (const [key, value] of Object.entries(query)) {
+    if (value) url.searchParams.set(key, value);
+  }
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
+  return {
+    base64: buffer.toString("base64"),
+    contentType: response.headers.get("content-type") ?? "application/octet-stream",
+  };
+}
