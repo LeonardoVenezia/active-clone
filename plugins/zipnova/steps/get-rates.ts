@@ -35,7 +35,7 @@ async function stepHandler(input: Input, credentials: ZipnovaCredentials): Promi
   }
   const n = (value: unknown) => Number(value);
   const pkg = { weight: n(input.weightGrams), height: n(input.heightCm), width: n(input.widthCm), length: n(input.lengthCm), classification_id: "default" };
-  if (!input.city || !input.state || !input.zipcode || Object.values(pkg).some((v) => !Number.isFinite(v) || v <= 0)) {
+  if (!input.city || !input.state || !input.zipcode || [pkg.weight, pkg.height, pkg.width, pkg.length].some((v) => !Number.isFinite(v) || v <= 0)) {
     return { success: false, error: "City, state, zip code, weight (g) and height/width/length (cm) are required" };
   }
   const sortBy = input.sortBy?.toString().trim().toLowerCase();
