@@ -113,12 +113,12 @@ async function stepHandler(input: Input, credentials: EnviopackCredentials): Pro
   }
 }
 
-export async function createShipmentStep(input: Input): Promise<Result> {
+export async function enviopackCreateShipment(input: Input): Promise<Result> {
   "use step";
 
   const credentials = input.integrationId ? await fetchCredentials(input.integrationId) : {};
   return withStepLogging(input, () => stepHandler(input, credentials));
 }
-createShipmentStep.maxRetries = 0;
+enviopackCreateShipment.maxRetries = 0;
 
 export const _integrationType = "enviopack";

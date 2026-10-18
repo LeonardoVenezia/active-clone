@@ -24,12 +24,12 @@ async function stepHandler(input: Input, credentials: EnviopackCredentials): Pro
   }
 }
 
-export async function getTrackingStep(input: Input): Promise<Result> {
+export async function enviopackGetTracking(input: Input): Promise<Result> {
   "use step";
 
   const credentials = input.integrationId ? await fetchCredentials(input.integrationId) : {};
   return withStepLogging(input, () => stepHandler(input, credentials));
 }
-getTrackingStep.maxRetries = 0;
+enviopackGetTracking.maxRetries = 0;
 
 export const _integrationType = "enviopack";

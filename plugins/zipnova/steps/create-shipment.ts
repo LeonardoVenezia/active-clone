@@ -90,12 +90,12 @@ async function stepHandler(input: Input, credentials: ZipnovaCredentials): Promi
   }
 }
 
-export async function createShipmentStep(input: Input): Promise<Result> {
+export async function zipnovaCreateShipment(input: Input): Promise<Result> {
   "use step";
 
   const credentials = input.integrationId ? await fetchCredentials(input.integrationId) : {};
   return withStepLogging(input, () => stepHandler(input, credentials));
 }
-createShipmentStep.maxRetries = 0;
+zipnovaCreateShipment.maxRetries = 0;
 
 export const _integrationType = "zipnova";

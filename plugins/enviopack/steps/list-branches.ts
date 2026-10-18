@@ -23,12 +23,12 @@ async function stepHandler(input: Input, credentials: EnviopackCredentials): Pro
   }
 }
 
-export async function listBranchesStep(input: Input): Promise<Result> {
+export async function enviopackListBranches(input: Input): Promise<Result> {
   "use step";
 
   const credentials = input.integrationId ? await fetchCredentials(input.integrationId) : {};
   return withStepLogging(input, () => stepHandler(input, credentials));
 }
-listBranchesStep.maxRetries = 0;
+enviopackListBranches.maxRetries = 0;
 
 export const _integrationType = "enviopack";

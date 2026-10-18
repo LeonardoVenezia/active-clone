@@ -21,12 +21,12 @@ async function stepHandler(input: Input, credentials: ZipnovaCredentials): Promi
   }
 }
 
-export async function cancelShipmentStep(input: Input): Promise<Result> {
+export async function zipnovaCancelShipment(input: Input): Promise<Result> {
   "use step";
 
   const credentials = input.integrationId ? await fetchCredentials(input.integrationId) : {};
   return withStepLogging(input, () => stepHandler(input, credentials));
 }
-cancelShipmentStep.maxRetries = 0;
+zipnovaCancelShipment.maxRetries = 0;
 
 export const _integrationType = "zipnova";

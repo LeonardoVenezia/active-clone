@@ -88,12 +88,12 @@ async function stepHandler(input: Input, credentials: CorreoArgentinoCredentials
   }
 }
 
-export async function importShipmentStep(input: Input): Promise<Result> {
+export async function correoImportShipment(input: Input): Promise<Result> {
   "use step";
 
   const credentials = input.integrationId ? await fetchCredentials(input.integrationId) : {};
   return withStepLogging(input, () => stepHandler(input, credentials));
 }
-importShipmentStep.maxRetries = 0;
+correoImportShipment.maxRetries = 0;
 
 export const _integrationType = "correoargentino";

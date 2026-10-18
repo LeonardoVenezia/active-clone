@@ -37,12 +37,12 @@ async function stepHandler(input: Input, credentials: ZipnovaCredentials): Promi
   }
 }
 
-export async function getLabelStep(input: Input): Promise<Result> {
+export async function zipnovaGetLabel(input: Input): Promise<Result> {
   "use step";
 
   const credentials = input.integrationId ? await fetchCredentials(input.integrationId) : {};
   return withStepLogging(input, () => stepHandler(input, credentials));
 }
-getLabelStep.maxRetries = 0;
+zipnovaGetLabel.maxRetries = 0;
 
 export const _integrationType = "zipnova";
