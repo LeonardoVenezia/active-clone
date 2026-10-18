@@ -5,6 +5,9 @@ import {
   accounts,
   apiKeys,
   integrations,
+  invitations,
+  members,
+  organizations,
   sessions,
   users,
   verifications,
@@ -28,6 +31,9 @@ const schema = {
   apiKeys,
   integrations,
   workflowTemplates,
+  organizations,
+  members,
+  invitations,
 };
 
 const connectionString =

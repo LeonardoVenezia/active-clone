@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { anonymous, genericOAuth } from "better-auth/plugins";
+import { anonymous, genericOAuth, organization } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { sendPasswordResetEmail, sendAccountVerificationEmail } from "./email";
 import { isAiGatewayManagedKeysEnabled } from "./ai-gateway/config";
@@ -8,6 +8,9 @@ import { db } from "./db";
 import {
   accounts,
   integrations,
+  invitations,
+  members,
+  organizations,
   sessions,
   users,
   verifications,
@@ -23,6 +26,9 @@ const schema = {
   session: sessions,
   account: accounts,
   verification: verifications,
+  organization: organizations,
+  member: members,
+  invitation: invitations,
   workflows,
   workflowExecutions,
   workflowExecutionLogs,
@@ -55,6 +61,7 @@ function getBaseURL() {
 
 // Build plugins array conditionally
 const plugins = [
+  organization(),
   anonymous({
     async onLinkAccount(data) {
       // When an anonymous user links to a real account, migrate their data

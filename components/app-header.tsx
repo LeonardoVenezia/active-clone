@@ -17,6 +17,7 @@ const NAV_ITEMS: { href: string; label: string; isActive: (p: string) => boolean
   { href: "/workflows", label: "Flows", isActive: (p) => p === "/workflows" },
   { href: "/history", label: "History", isActive: (p) => p.startsWith("/history") },
   { href: "/connections", label: "Connections", isActive: (p) => p.startsWith("/connections") },
+  { href: "/org", label: "Empresa", isActive: (p) => p.startsWith("/org") },
   {
     href: "/",
     label: "Editor",

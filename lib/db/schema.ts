@@ -34,6 +34,8 @@ export const sessions = pgTable("sessions", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id),
+  // better-auth organization plugin: the org active in this session
+  activeOrganizationId: text("active_organization_id"),
 });
 
 export const accounts = pgTable("accounts", {
@@ -114,6 +116,43 @@ export const workflowTemplates = pgTable("workflow_templates", {
   edges: jsonb("edges").notNull().$type<any[]>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// better-auth organization plugin tables (companies and their members)
+export const organizations = pgTable("organization", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  logo: text("logo"),
+  metadata: text("metadata"),
+  createdAt: timestamp("created_at").notNull(),
+});
+
+export const members = pgTable("member", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
+  // "owner" | "admin" | "member" (member = worker)
+  role: text("role").notNull().default("member"),
+  createdAt: timestamp("created_at").notNull(),
+});
+
+export const invitations = pgTable("invitation", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id),
+  email: text("email").notNull(),
+  role: text("role"),
+  status: text("status").notNull().default("pending"),
+  expiresAt: timestamp("expires_at").notNull(),
+  inviterId: text("inviter_id")
+    .notNull()
+    .references(() => users.id),
 });
 
 // Integrations table for storing user credentials
