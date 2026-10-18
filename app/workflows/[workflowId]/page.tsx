@@ -672,7 +672,7 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
   }, [selectedExecutionId, updateNodeData]);
 
   return (
-    <div className="flex h-dvh w-full flex-col overflow-hidden">
+    <div className="relative mt-14 flex h-[calc(100dvh-3.5rem)] w-full flex-col overflow-hidden">
       {/* Workflow not found overlay */}
       {workflowNotFound && (
         <div className="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center">
