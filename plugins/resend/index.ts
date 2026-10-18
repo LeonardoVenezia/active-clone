@@ -132,6 +132,30 @@ const resendPlugin: IntegrationPlugin = {
         },
       ],
     },
+    {
+      slug: "get-email",
+      label: "Get Email Status",
+      description: "Check the delivery status of a sent email",
+      category: "Resend",
+      stepFunction: "getEmailStep",
+      stepImportPath: "get-email",
+      outputFields: [
+        { field: "id", description: "Email ID" },
+        { field: "lastEvent", description: "Delivery status (sent, delivered, bounced, ...)" },
+        { field: "to", description: "Recipients" },
+        { field: "subject", description: "Subject" },
+      ],
+      configFields: [
+        {
+          key: "emailId",
+          label: "Email ID",
+          type: "template-input",
+          placeholder: "{{SendEmail.id}}",
+          example: "4ef9a417-...",
+          required: true,
+        },
+      ],
+    },
   ],
 };
 

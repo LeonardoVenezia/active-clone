@@ -94,8 +94,8 @@ Visit [http://localhost:3000](http://localhost:3000) to get started.
 - **Mercado Libre**: Get Order, Search Orders, Get Question, Answer Question, Get Listing, Update Listing, Get Shipment, Get Shipping Label, Send Post-Sale Message
 - **Mercado Pago**: Create Payment Link, Get Payment, Search Payments, Refund Payment, Create Customer, Search Customers, List Customer Cards
 - **Perplexity**: Search Web, Ask Question, Research Topic
-- **Resend**: Send Email
-- **Slack**: Send Slack Message
+- **Resend**: Send Email, Get Email Status
+- **Slack**: Send Slack Message, List Channels, Get Channel History, List Users, Update Message, Delete Message
 - **Stripe**: Create Customer, Get Customer, Create Invoice, Search Customers, Get Payment, List Payments, Create Payment Link
 - **Superagent**: Guard, Redact
 - **Tiendanube**: Get Order, Search Orders, Get Product, Update Stock, Search Customers, Get Customer, Create Customer
