@@ -78,7 +78,6 @@ import { MakePublicOverlay } from "../overlays/make-public-overlay";
 import { useOverlay } from "../overlays/overlay-provider";
 import { WorkflowIssuesOverlay } from "../overlays/workflow-issues-overlay";
 import { WorkflowIcon } from "../ui/workflow-icon";
-import { UserMenu } from "../workflows/user-menu";
 
 type WorkflowToolbarProps = {
   workflowId?: string;
@@ -1587,8 +1586,7 @@ export const WorkflowToolbar = ({ workflowId }: WorkflowToolbarProps) => {
                 onDuplicate={actions.handleDuplicate}
               />
             )}
-            <a className="text-sm underline" href="/connections">Connections</a>
-            <UserMenu />
+
           </div>
         </div>
       </div>

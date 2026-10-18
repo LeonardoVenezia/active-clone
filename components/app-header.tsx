@@ -24,12 +24,18 @@ const NAV_ITEMS: { href: string; label: string; isActive: (p: string) => boolean
   },
 ];
 
-export function AppHeader() {
+export function AppHeader({ fluid = false }: { fluid?: boolean }) {
   const pathname = usePathname() || "/";
 
   return (
-    <header className="flex h-14 w-full shrink-0 items-center justify-between gap-3 border-b bg-background px-4 sm:px-6">
-      <div className="flex min-w-0 items-center gap-6">
+    <header className="w-full shrink-0 border-b bg-background px-4 sm:px-6">
+      <div
+        className={cn(
+          "mx-auto flex h-14 w-full items-center justify-between gap-3",
+          fluid ? "" : "max-w-5xl"
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-6">
         <Link className="flex shrink-0 items-center gap-2" href="/workflows">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img alt="Active-clone" className="size-7 rounded-md" src="/logo.png" />
@@ -77,6 +83,7 @@ export function AppHeader() {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
       </div>
     </header>
   );

@@ -16,7 +16,7 @@ export default function History() {
     if (!signedIn) return;
     fetch("/api/mail-flow", { cache: "no-store" }).then(r => r.ok ? r.json() : { runs: [] }).then(d => setRuns(d.runs || [])).catch(() => setRuns([]));
   }, [signedIn]);
-  return <main className="pointer-events-auto fixed inset-0 z-20 flex flex-col bg-background"><AppHeader /><div className="flex-1 overflow-auto p-6"><div className="mx-auto max-w-3xl space-y-6">
+  return <main className="pointer-events-auto fixed inset-0 z-20 flex flex-col bg-background"><AppHeader /><div className="flex-1 overflow-auto p-4 sm:p-6"><div className="mx-auto max-w-5xl space-y-6">
     <h1 className="text-2xl font-bold">History</h1>
     {isPending ? <p>Loading...</p> : !signedIn ? <div className="rounded-xl border p-5 space-y-3"><p className="font-semibold">Sign in to see what your flows have done.</p><AuthDialog><Button>Sign In</Button></AuthDialog></div> : <>
       <section className="space-y-3"><h2 className="text-lg font-bold">Flow runs</h2>
