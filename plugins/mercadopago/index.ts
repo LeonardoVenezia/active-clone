@@ -284,6 +284,87 @@ const mercadoPagoPlugin: IntegrationPlugin = {
         },
       ],
     },
+    {
+      slug: "create-customer",
+      label: "Create Customer",
+      description: "Create a customer to save cards and charge later",
+      category: "Mercado Pago",
+      stepFunction: "createCustomerStep",
+      stepImportPath: "create-customer",
+      outputFields: [
+        { field: "id", description: "Customer ID" },
+        { field: "email", description: "Customer email" },
+        { field: "firstName", description: "First name" },
+        { field: "lastName", description: "Last name" },
+      ],
+      configFields: [
+        {
+          key: "email",
+          label: "Email",
+          type: "template-input",
+          placeholder: "comprador@email.com",
+          example: "comprador@email.com",
+          required: true,
+        },
+        {
+          key: "firstName",
+          label: "First name",
+          type: "template-input",
+          placeholder: "Juan",
+          example: "Juan",
+        },
+        {
+          key: "lastName",
+          label: "Last name",
+          type: "template-input",
+          placeholder: "Pérez",
+          example: "Pérez",
+        },
+      ],
+    },
+    {
+      slug: "search-customers",
+      label: "Search Customers",
+      description: "Find customers, optionally by email",
+      category: "Mercado Pago",
+      stepFunction: "searchCustomersStep",
+      stepImportPath: "search-customers",
+      outputFields: [
+        { field: "customers", description: "List of customers" },
+        { field: "count", description: "Customers returned" },
+      ],
+      configFields: [
+        {
+          key: "email",
+          label: "Email",
+          type: "template-input",
+          placeholder: "comprador@email.com (optional)",
+          example: "",
+        },
+      ],
+    },
+    {
+      slug: "list-cards",
+      label: "List Customer Cards",
+      description: "List a customer's saved cards",
+      category: "Mercado Pago",
+      stepFunction: "listCardsStep",
+      stepImportPath: "list-cards",
+      outputFields: [
+        { field: "cards", description: "List of saved cards" },
+        { field: "count", description: "Cards returned" },
+      ],
+      configFields: [
+        {
+          key: "customerId",
+          label: "Customer ID",
+          type: "template-input",
+          placeholder: "1469979538-vLQzQB or {{Create Customer.id}}",
+          example: "1469979538-vLQzQB",
+          required: true,
+        },
+      ],
+    },
   ],
 };
 
