@@ -39,6 +39,17 @@ export async function GET(request: Request) {
         );
     }
 
+    // Own flows that are shared with others belong in the shared section too
+    const myIds = userWorkflows.map((workflow) => workflow.id);
+    const sharesOfMine =
+      myIds.length > 0
+        ? await db
+            .select({ workflowId: workflowShares.workflowId })
+            .from(workflowShares)
+            .where(inArray(workflowShares.workflowId, myIds))
+        : [];
+    const sharedByMeIds = new Set(sharesOfMine.map((row) => row.workflowId));
+
     const mappedWorkflows = [
       ...userWorkflows.map((workflow) => ({
         ...workflow,
@@ -46,6 +57,7 @@ export async function GET(request: Request) {
         updatedAt: workflow.updatedAt.toISOString(),
         isOwner: true,
         canEdit: true,
+        sharedByMe: sharedByMeIds.has(workflow.id),
       })),
       ...sharedWorkflows.map((workflow) => ({
         ...workflow,

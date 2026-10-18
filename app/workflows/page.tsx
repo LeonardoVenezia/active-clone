@@ -37,9 +37,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type Row = { id: string; name: string; href: string; kind: "mail" | "canvas"; status?: string; steps?: number; trigger?: string; manual?: boolean; updated?: string; shared?: boolean };
+type Row = { id: string; name: string; href: string; kind: "mail" | "canvas"; status?: string; steps?: number; trigger?: string; manual?: boolean; updated?: string; shared?: boolean; sharedByMe?: boolean };
 type Tpl = { id: string; name: string; description?: string | null; steps?: number; updatedAt?: string; orgId?: string | null; mine?: boolean; canManage?: boolean };
-type W = { id: string; name: string; updatedAt?: string; shared?: boolean; nodes?: { data?: { type?: string; config?: { triggerType?: string } } }[] };
+type W = { id: string; name: string; updatedAt?: string; shared?: boolean; sharedByMe?: boolean; nodes?: { data?: { type?: string; config?: { triggerType?: string } } }[] };
 type Share = { id: string; userId: string; email: string; name?: string | null };
 
 function Badge({ tone, children }: { tone: "green" | "amber" | "blue" | "violet"; children: React.ReactNode }) {
@@ -85,7 +85,7 @@ export default function FlowsPage() {
       for (const w of ws.filter(w => w.name !== "__current__")) {
         const trig = (w.nodes || []).find(n => n.data?.type === "trigger");
         const t = trig?.data?.config?.triggerType || "Manual";
-        out.push({ id: w.id, name: w.name, href: `/workflows/${w.id}`, kind: "canvas", steps: (w.nodes || []).filter(n => n.data?.type !== "trigger").length, trigger: t === "Manual" ? "Manual" : t === "Schedule" ? "Programado" : t === "Webhook" ? "Webhook" : t, manual: t === "Manual", updated: w.updatedAt, shared: !!w.shared });
+        out.push({ id: w.id, name: w.name, href: `/workflows/${w.id}`, kind: "canvas", steps: (w.nodes || []).filter(n => n.data?.type !== "trigger").length, trigger: t === "Manual" ? "Manual" : t === "Schedule" ? "Programado" : t === "Webhook" ? "Webhook" : t, manual: t === "Manual", updated: w.updatedAt, shared: !!w.shared, sharedByMe: !!w.sharedByMe });
       }
       setRows(out); setError("");
       try {
@@ -220,13 +220,16 @@ export default function FlowsPage() {
       {error && <p role="alert" className="text-destructive">{error}</p>}
       {rows === null && <p>Cargando workflows...</p>}
       {rows?.length === 0 && !error && <p>Todavía no tenés workflows. <a className="underline" href="/?new=1">Creá uno.</a></p>}
-      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{rows?.map(r => { const key = r.kind + r.id; const working = busy === key; return <li key={key} className="flex flex-col gap-3 rounded-xl border p-4">
+      {(() => {
+        const sharedRows = (rows || []).filter(r => r.shared || r.sharedByMe);
+        const privateRows = (rows || []).filter(r => !(r.shared || r.sharedByMe));
+        const renderCard = (r: Row) => { const key = r.kind + r.id; const working = busy === key; return <li key={key} className="flex flex-col gap-3 rounded-xl border p-4">
         <div className="space-y-1">
           <div className="flex items-start justify-between gap-2">
             <p className="break-words font-semibold leading-snug">{r.name}</p>
             <span className="flex shrink-0 gap-1">
               {r.kind === "mail" && <Badge tone={r.status === "active" ? "green" : "amber"}>{r.status === "active" ? "Activo" : r.status === "paused" ? "Pausado" : r.status}</Badge>}
-              {r.shared && <Badge tone="blue">Compartido</Badge>}
+              {(r.shared || r.sharedByMe) && <Badge tone="blue">Compartido</Badge>}
             </span>
           </div>
           <p className="text-xs text-muted-foreground">{r.kind === "mail" ? "Email to sheet" : "Workflow de lienzo"} · Dispara: {r.trigger}{r.kind === "canvas" ? ` · ${r.steps} paso${r.steps === 1 ? "" : "s"}` : ""}</p>
@@ -234,7 +237,7 @@ export default function FlowsPage() {
         <div className="mt-auto flex items-center gap-2">
           <Button asChild size="sm"><Link href={r.href}>Editar</Link></Button>
           {r.kind === "canvas" && r.manual && <Button size="sm" variant="outline" disabled={working} onClick={() => void act(r, "run")}><Play className="mr-1 size-3.5" />Ejecutar</Button>}
-          <DropdownMenu>
+          {!(r.kind === "canvas" && r.shared) && <DropdownMenu>
             <DropdownMenuTrigger asChild><Button size="sm" variant="ghost" className="ml-auto px-2" aria-label="Más acciones"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {r.kind === "mail" && (r.status === "active"
@@ -245,9 +248,21 @@ export default function FlowsPage() {
               {!r.shared && <DropdownMenuSeparator />}
               {!r.shared && <DropdownMenuItem className="text-destructive" disabled={working} onClick={() => setDeleteRow(r)}>Borrar…</DropdownMenuItem>}
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu>}
         </div>
-      </li>; })}</ul>
+      </li>; };
+        return <>
+          {sharedRows.length > 0 && <div className="space-y-3">
+            <h2 className="text-lg font-semibold">Compartidos</h2>
+            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{sharedRows.map(renderCard)}</ul>
+          </div>}
+          <div className="space-y-3">
+            {sharedRows.length > 0 && <h2 className="text-lg font-semibold">Privados</h2>}
+            {privateRows.length === 0 && sharedRows.length > 0 && <p className="text-sm text-muted-foreground">No tenés flujos privados.</p>}
+            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{privateRows.map(renderCard)}</ul>
+          </div>
+        </>;
+      })()}
       {templates !== null && templates.length > 0 && <div className="space-y-3"><h2 className="text-lg font-semibold">Plantillas</h2>
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{templates.map(t => { const working = busy === "tpl" + t.id; return <li key={t.id} className="flex flex-col gap-3 rounded-xl border border-dashed p-4">
           <div className="space-y-1">
