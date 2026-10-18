@@ -1,9 +1,9 @@
 import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { workflowTemplates, workflows } from "@/lib/db/schema";
+import { members, workflowTemplates, workflows } from "@/lib/db/schema";
+import { getOrgContext } from "@/lib/org-utils";
 import { generateId } from "@/lib/utils/id";
 
 type WorkflowNodeLike = {
@@ -36,22 +36,38 @@ export async function POST(
 ) {
   try {
     const { templateId } = await context.params;
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
-
-    if (!session?.user) {
+    const ctx = await getOrgContext(request);
+    if (!ctx) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const template = await db.query.workflowTemplates.findFirst({
-      where: and(
-        eq(workflowTemplates.id, templateId),
-        eq(workflowTemplates.userId, session.user.id)
-      ),
+      where: eq(workflowTemplates.id, templateId),
     });
 
     if (!template) {
+      return NextResponse.json(
+        { error: "Template not found" },
+        { status: 404 }
+      );
+    }
+
+    // Personal templates: only the creator. Org templates: any current member
+    // of that org can import a copy into their own account.
+    if (template.orgId) {
+      const membership = await db.query.members.findFirst({
+        where: and(
+          eq(members.organizationId, template.orgId),
+          eq(members.userId, ctx.userId)
+        ),
+      });
+      if (!membership) {
+        return NextResponse.json(
+          { error: "Template not found" },
+          { status: 404 }
+        );
+      }
+    } else if (template.userId !== ctx.userId) {
       return NextResponse.json(
         { error: "Template not found" },
         { status: 404 }
@@ -97,7 +113,7 @@ export async function POST(
 
     // Pick a name that doesn't collide with the user's existing workflows
     const userWorkflows = await db.query.workflows.findMany({
-      where: eq(workflows.userId, session.user.id),
+      where: eq(workflows.userId, ctx.userId),
     });
     const existingNames = new Set(userWorkflows.map((w) => w.name));
     let workflowName = template.name;
@@ -117,7 +133,7 @@ export async function POST(
         description: template.description,
         nodes: newNodes,
         edges: newEdges,
-        userId: session.user.id,
+        userId: ctx.userId,
         visibility: "private",
       })
       .returning();

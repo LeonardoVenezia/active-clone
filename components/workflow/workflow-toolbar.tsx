@@ -988,12 +988,25 @@ function useWorkflowActions(state: ReturnType<typeof useWorkflowState>) {
       // The template snapshots the saved workflow: persist this exact canvas first
       await api.workflow.update(currentWorkflowId, { nodes, edges });
       setHasUnsavedChanges(false);
+      let shareWithOrg = false;
+      try {
+        const tr = await fetch("/api/templates", { cache: "no-store" });
+        const td = await tr.json().catch(() => ({}));
+        if (tr.ok && td.activeOrganizationId && td.canManageOrgTemplates) {
+          shareWithOrg = window.confirm(
+            "¿Guardarla como plantilla de la empresa?\nAceptar = visible para todos los miembros\nCancelar = personal (solo vos)"
+          );
+        }
+      } catch {
+        // Without org context the template stays personal
+      }
       const r = await fetch("/api/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workflowId: currentWorkflowId,
           name: name.trim() || workflowName || "Plantilla",
+          shareWithOrg,
         }),
       });
       const d = await r.json().catch(() => ({}));

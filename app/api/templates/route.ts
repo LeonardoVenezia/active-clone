@@ -1,22 +1,34 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { workflowTemplates, workflows } from "@/lib/db/schema";
+import { canManageOrgTemplates, getOrgContext } from "@/lib/org-utils";
 
 // GET /api/templates — list the current user's templates (newest first)
 export async function GET(request: Request) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
-
-    if (!session?.user) {
+    const ctx = await getOrgContext(request);
+    if (!ctx) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Visible templates: my personal ones (never shared) plus the ones of my
+    // active organization. Templates of other orgs are never returned.
+    const visibility = ctx.activeOrganizationId
+      ? or(
+          and(
+            eq(workflowTemplates.userId, ctx.userId),
+            isNull(workflowTemplates.orgId)
+          ),
+          eq(workflowTemplates.orgId, ctx.activeOrganizationId)
+        )
+      : and(
+          eq(workflowTemplates.userId, ctx.userId),
+          isNull(workflowTemplates.orgId)
+        );
+
     const templates = await db.query.workflowTemplates.findMany({
-      where: eq(workflowTemplates.userId, session.user.id),
+      where: visibility,
       orderBy: [desc(workflowTemplates.updatedAt)],
     });
 
@@ -28,9 +40,18 @@ export async function GET(request: Request) {
         steps: (t.nodes as { data?: { type?: string } }[]).filter(
           (n) => n.data?.type !== "trigger"
         ).length,
+        orgId: t.orgId,
+        mine: t.userId === ctx.userId,
+        canManage:
+          t.userId === ctx.userId ||
+          (!!t.orgId &&
+            t.orgId === ctx.activeOrganizationId &&
+            canManageOrgTemplates(ctx)),
         createdAt: t.createdAt.toISOString(),
         updatedAt: t.updatedAt.toISOString(),
       })),
+      activeOrganizationId: ctx.activeOrganizationId,
+      canManageOrgTemplates: canManageOrgTemplates(ctx),
     });
   } catch (error) {
     console.error("Failed to list templates:", error);
@@ -45,11 +66,8 @@ export async function GET(request: Request) {
 // Body: { workflowId: string, name?: string, description?: string }
 export async function POST(request: Request) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
-
-    if (!session?.user) {
+    const ctx = await getOrgContext(request);
+    if (!ctx) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -62,11 +80,19 @@ export async function POST(request: Request) {
       );
     }
 
+    // Sharing with the company is opt-in and restricted to org owners/admins
+    // (workers keep personal templates only, per product decision).
+    const shareWithOrg =
+      body.shareWithOrg === true &&
+      ctx.activeOrganizationId &&
+      canManageOrgTemplates(ctx);
+    const orgId = shareWithOrg ? ctx.activeOrganizationId : null;
+
     // Only the owner can turn a workflow into a template
     const sourceWorkflow = await db.query.workflows.findFirst({
       where: and(
         eq(workflows.id, body.workflowId),
-        eq(workflows.userId, session.user.id)
+        eq(workflows.userId, ctx.userId)
       ),
     });
 
@@ -99,7 +125,8 @@ export async function POST(request: Request) {
     const [template] = await db
       .insert(workflowTemplates)
       .values({
-        userId: session.user.id,
+        userId: ctx.userId,
+        orgId,
         name,
         description:
           typeof body.description === "string" ? body.description : null,
@@ -113,6 +140,7 @@ export async function POST(request: Request) {
       id: template.id,
       name: template.name,
       description: template.description,
+      orgId: template.orgId,
       createdAt: template.createdAt.toISOString(),
       updatedAt: template.updatedAt.toISOString(),
     });

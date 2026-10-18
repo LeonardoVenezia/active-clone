@@ -1,23 +1,19 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { workflowTemplates } from "@/lib/db/schema";
+import { canManageOrgTemplates, getOrgContext } from "@/lib/org-utils";
 
-async function getOwnedTemplate(request: Request, templateId: string) {
-  const session = await auth.api.getSession({
-    headers: request.headers,
-  });
-
-  if (!session?.user) {
+// Manage (rename/delete) rules: personal templates belong to their creator;
+// org templates are managed by that org's owners/admins.
+async function getManageableTemplate(request: Request, templateId: string) {
+  const ctx = await getOrgContext(request);
+  if (!ctx) {
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
 
   const template = await db.query.workflowTemplates.findFirst({
-    where: and(
-      eq(workflowTemplates.id, templateId),
-      eq(workflowTemplates.userId, session.user.id)
-    ),
+    where: eq(workflowTemplates.id, templateId),
   });
 
   if (!template) {
@@ -26,7 +22,19 @@ async function getOwnedTemplate(request: Request, templateId: string) {
     };
   }
 
-  return { template, session };
+  const isPersonalOwner = !template.orgId && template.userId === ctx.userId;
+  const isOrgManager =
+    !!template.orgId &&
+    template.orgId === ctx.activeOrganizationId &&
+    canManageOrgTemplates(ctx);
+
+  if (!(isPersonalOwner || isOrgManager)) {
+    return {
+      error: NextResponse.json({ error: "Template not found" }, { status: 404 }),
+    };
+  }
+
+  return { template, ctx };
 }
 
 // PATCH /api/templates/[templateId] — rename or change description.
@@ -37,7 +45,7 @@ export async function PATCH(
 ) {
   try {
     const { templateId } = await context.params;
-    const { template, error } = await getOwnedTemplate(request, templateId);
+    const { template, error } = await getManageableTemplate(request, templateId);
     if (error) return error;
 
     const body = await request.json();
@@ -84,7 +92,7 @@ export async function DELETE(
 ) {
   try {
     const { templateId } = await context.params;
-    const { template, error } = await getOwnedTemplate(request, templateId);
+    const { template, error } = await getManageableTemplate(request, templateId);
     if (error) return error;
 
     await db

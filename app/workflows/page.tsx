@@ -9,7 +9,7 @@ import { useSession } from "@/lib/auth-client";
 import { api } from "@/lib/api-client";
 
 type Row = { id: string; name: string; href: string; kind: "mail" | "canvas"; status?: string; steps?: number; trigger?: string; manual?: boolean; updated?: string };
-type Tpl = { id: string; name: string; description?: string | null; steps?: number; updatedAt?: string };
+type Tpl = { id: string; name: string; description?: string | null; steps?: number; updatedAt?: string; orgId?: string | null; mine?: boolean; canManage?: boolean };
 type W = { id: string; name: string; updatedAt?: string; nodes?: { data?: { type?: string; config?: { triggerType?: string } } }[] };
 
 export default function FlowsPage() {
@@ -17,6 +17,7 @@ export default function FlowsPage() {
   const signedIn = !!session?.user && !session.user.isAnonymous;
   const [rows, setRows] = useState<Row[] | null>(null);
   const [templates, setTemplates] = useState<Tpl[] | null>(null);
+  const [orgCtx, setOrgCtx] = useState<{ activeOrganizationId: string | null; canManageOrgTemplates: boolean }>({ activeOrganizationId: null, canManageOrgTemplates: false });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
 
@@ -37,6 +38,7 @@ export default function FlowsPage() {
         const tr = await fetch("/api/templates", { cache: "no-store" });
         const td = await tr.json().catch(() => ({}));
         setTemplates(tr.ok && Array.isArray(td.templates) ? td.templates : []);
+        setOrgCtx({ activeOrganizationId: td.activeOrganizationId || null, canManageOrgTemplates: !!td.canManageOrgTemplates });
       } catch { setTemplates([]); }
     } catch { setError("No pude cargar tus workflows. Recargá para reintentar."); setRows([]); }
   }, []);
@@ -67,9 +69,13 @@ export default function FlowsPage() {
   async function saveAsTemplate(row: Row) {
     const name = window.prompt("Nombre de la plantilla", row.name);
     if (name === null) return;
+    let shareWithOrg = false;
+    if (orgCtx.activeOrganizationId && orgCtx.canManageOrgTemplates) {
+      shareWithOrg = window.confirm("¿Guardarla como plantilla de la empresa?\nAceptar = visible para todos los miembros\nCancelar = personal (solo vos)");
+    }
     setBusy(row.kind + row.id);
     try {
-      const r = await fetch("/api/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflowId: row.id, name: name.trim() || row.name }) });
+      const r = await fetch("/api/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflowId: row.id, name: name.trim() || row.name, shareWithOrg }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || "No se pudo guardar la plantilla.");
       toast.success(`Plantilla "${d.name}" guardada.`);
@@ -117,10 +123,10 @@ export default function FlowsPage() {
           {r.kind === "canvas" && <Button size="sm" variant="outline" disabled={working} onClick={() => void saveAsTemplate(r)}>Guardar como plantilla</Button>}
           {r.kind === "canvas" && <Button size="sm" variant="ghost" className="text-destructive" disabled={working} onClick={() => void act(r, "delete")}>Borrar</Button>}</div></li>; })}</ul>
       {templates !== null && templates.length > 0 && <div className="space-y-3"><h2 className="text-lg font-semibold">Plantillas</h2>
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{templates.map(t => { const working = busy === "tpl" + t.id; return <li key={t.id} className="flex flex-col justify-between gap-4 rounded-xl border border-dashed p-4"><div className="space-y-1"><p className="break-words font-semibold">{t.name}</p><p className="text-xs text-muted-foreground">Plantilla · {t.steps ?? 0} paso{t.steps === 1 ? "" : "s"}</p></div>
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{templates.map(t => { const working = busy === "tpl" + t.id; return <li key={t.id} className="flex flex-col justify-between gap-4 rounded-xl border border-dashed p-4"><div className="space-y-1"><p className="break-words font-semibold">{t.name}</p><p className="text-xs text-muted-foreground">Plantilla{t.orgId ? " de la empresa" : ""} · {t.steps ?? 0} paso{t.steps === 1 ? "" : "s"}</p></div>
           <div className="flex flex-wrap gap-2"><Button size="sm" disabled={working} onClick={() => void templateAction(t, "use")}>Usar</Button>
-            <Button size="sm" variant="outline" disabled={working} onClick={() => void templateAction(t, "rename")}>Renombrar</Button>
-            <Button size="sm" variant="ghost" className="text-destructive" disabled={working} onClick={() => void templateAction(t, "delete")}>Borrar</Button></div></li>; })}</ul></div>}
+            {t.canManage && <Button size="sm" variant="outline" disabled={working} onClick={() => void templateAction(t, "rename")}>Renombrar</Button>}
+            {t.canManage && <Button size="sm" variant="ghost" className="text-destructive" disabled={working} onClick={() => void templateAction(t, "delete")}>Borrar</Button>}</div></li>; })}</ul></div>}
     </>}
   </div></div></main>;
 }
