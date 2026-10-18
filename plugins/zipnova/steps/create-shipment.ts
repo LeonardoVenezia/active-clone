@@ -75,6 +75,7 @@ async function stepHandler(input: Input, credentials: ZipnovaCredentials): Promi
         height: Number(input.packageHeightCm || "10"),
         width: Number(input.packageWidthCm || "10"),
         length: Number(input.packageLengthCm || "10"),
+        classification_id: "default",
         description_1: input.packageDescription || "Paquete",
       },
     ],
