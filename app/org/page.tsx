@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
 import { AuthDialog } from "@/components/auth/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { authClient, useSession } from "@/lib/auth-client";
 
 type Org = { id: string; name: string; slug: string };
@@ -228,8 +229,8 @@ export default function OrgPage() {
               <div className="space-y-3 rounded-xl border p-5">
                 <h2 className="text-lg font-semibold">Crear empresa</h2>
                 <div className="flex flex-wrap gap-2">
-                  <input
-                    className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+                  <Input
+                    className="min-w-0 flex-1"
                     onChange={(e) => setNewName(e.target.value)}
                     placeholder="Nombre de la empresa"
                     value={newName}
@@ -319,15 +320,15 @@ export default function OrgPage() {
                   <div className="space-y-2">
                     <p className="text-sm font-medium">Invitar por email</p>
                     <div className="flex flex-wrap gap-2">
-                      <input
-                        className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+                      <Input
+                        className="min-w-0 flex-1"
                         onChange={(e) => setInviteEmail(e.target.value)}
                         placeholder="email@empresa.com"
                         type="email"
                         value={inviteEmail}
                       />
                       <select
-                        className="rounded-md border bg-background px-2 py-2 text-sm"
+                        className="h-9 rounded-md border bg-background px-2 text-sm"
                         onChange={(e) =>
                           setInviteRole(e.target.value as "member" | "admin")
                         }
