@@ -102,7 +102,7 @@ Visit [http://localhost:3000](http://localhost:3000) to get started.
 - **v0**: Create Chat, Send Message
 - **VTEX**: Setup Order Hook, Get Order, List Orders, Start Handling
 - **Webflow**: List Sites, Get Site, Publish Site
-- **WhatsApp Business**: Send Message, Send Template, List Templates, Mark as Read
+- **WhatsApp Business**: Send Message, Send Template, List Templates, Mark as Read, Send Media
 - **Xubio**: Get Company, List Customers, List Sales Invoices, Get Sales Invoice
 - **Zipnova**: Get Shipping Rates, Create Shipment, Get Shipment, List Shipments, Get Tracking, Get Label, Cancel Shipment
 <!-- PLUGINS:END -->

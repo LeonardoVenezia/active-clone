@@ -215,6 +215,57 @@ const whatsappPlugin: IntegrationPlugin = {
         },
       ],
     },
+    {
+      slug: "send-media",
+      label: "Send Media",
+      description: "Send an image, document, audio or video from a public URL (only within 24 hours of the customer's last message)",
+      category: "WhatsApp",
+      stepFunction: "sendMediaStep",
+      stepImportPath: "send-media",
+      outputFields: [
+        { field: "messageId", description: "ID of the sent message" },
+        { field: "to", description: "Recipient" },
+      ],
+      configFields: [
+        {
+          key: "to",
+          label: "To",
+          type: "template-input",
+          placeholder: "5491112345678 or {{Trigger.from}}",
+          example: "5491112345678",
+          required: true,
+        },
+        {
+          key: "mediaType",
+          label: "Media type (image, document, audio, video)",
+          type: "template-input",
+          placeholder: "image",
+          example: "image",
+        },
+        {
+          key: "mediaUrl",
+          label: "Media URL (public https)",
+          type: "template-input",
+          placeholder: "https://example.com/factura.pdf",
+          example: "https://example.com/factura.pdf",
+          required: true,
+        },
+        {
+          key: "caption",
+          label: "Caption",
+          type: "template-input",
+          placeholder: "Tu factura",
+          example: "Tu factura",
+        },
+        {
+          key: "filename",
+          label: "Filename (documents)",
+          type: "template-input",
+          placeholder: "factura.pdf",
+          example: "factura.pdf",
+        },
+      ],
+    },
   ],
 };
 
