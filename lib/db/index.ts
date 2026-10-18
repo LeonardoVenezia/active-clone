@@ -12,6 +12,7 @@ import {
   workflowExecutions,
   workflowExecutionsRelations,
   workflows,
+  workflowTemplates,
 } from "./schema";
 
 // Construct schema object for drizzle
@@ -26,6 +27,7 @@ const schema = {
   workflowExecutionsRelations,
   apiKeys,
   integrations,
+  workflowTemplates,
 };
 
 const connectionString =

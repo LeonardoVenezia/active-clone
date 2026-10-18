@@ -9,12 +9,14 @@ import { useSession } from "@/lib/auth-client";
 import { api } from "@/lib/api-client";
 
 type Row = { id: string; name: string; href: string; kind: "mail" | "canvas"; status?: string; steps?: number; trigger?: string; manual?: boolean; updated?: string };
+type Tpl = { id: string; name: string; description?: string | null; steps?: number; updatedAt?: string };
 type W = { id: string; name: string; updatedAt?: string; nodes?: { data?: { type?: string; config?: { triggerType?: string } } }[] };
 
 export default function FlowsPage() {
   const { data: session, isPending } = useSession();
   const signedIn = !!session?.user && !session.user.isAnonymous;
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [templates, setTemplates] = useState<Tpl[] | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
 
@@ -31,6 +33,11 @@ export default function FlowsPage() {
         out.push({ id: w.id, name: w.name, href: `/workflows/${w.id}`, kind: "canvas", steps: (w.nodes || []).filter(n => n.data?.type !== "trigger").length, trigger: t === "Manual" ? "Manual" : t === "Schedule" ? "Programado" : t === "Webhook" ? "Webhook" : t, manual: t === "Manual", updated: w.updatedAt });
       }
       setRows(out); setError("");
+      try {
+        const tr = await fetch("/api/templates", { cache: "no-store" });
+        const td = await tr.json().catch(() => ({}));
+        setTemplates(tr.ok && Array.isArray(td.templates) ? td.templates : []);
+      } catch { setTemplates([]); }
     } catch { setError("No pude cargar tus workflows. Recargá para reintentar."); setRows([]); }
   }, []);
 
@@ -57,6 +64,46 @@ export default function FlowsPage() {
     } catch (e) { toast.error(e instanceof Error ? e.message : "Algo falló."); } finally { setBusy(""); }
   }
 
+  async function saveAsTemplate(row: Row) {
+    const name = window.prompt("Nombre de la plantilla", row.name);
+    if (name === null) return;
+    setBusy(row.kind + row.id);
+    try {
+      const r = await fetch("/api/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflowId: row.id, name: name.trim() || row.name }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "No se pudo guardar la plantilla.");
+      toast.success(`Plantilla "${d.name}" guardada.`);
+      await load();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Algo falló."); } finally { setBusy(""); }
+  }
+
+  async function templateAction(t: Tpl, action: "use" | "rename" | "delete") {
+    if (action === "delete" && !window.confirm(`¿Borrar la plantilla "${t.name}"? Los workflows creados desde ella no se tocan.`)) return;
+    let name: string | undefined;
+    if (action === "rename") {
+      const n = window.prompt("Nuevo nombre de la plantilla", t.name);
+      if (n === null || !n.trim()) return;
+      name = n.trim();
+    }
+    setBusy("tpl" + t.id);
+    try {
+      if (action === "use") {
+        const r = await fetch(`/api/templates/${t.id}/use`, { method: "POST" });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || "No se pudo crear el workflow.");
+        toast.success(`Workflow "${d.name}" creado desde la plantilla.`);
+        window.location.href = `/workflows/${d.id}`;
+        return;
+      }
+      const r = await fetch(`/api/templates/${t.id}`, action === "delete"
+        ? { method: "DELETE" }
+        : { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+      if (!r.ok) throw new Error(action === "delete" ? "No se pudo borrar." : "No se pudo renombrar.");
+      toast.success(action === "delete" ? `Plantilla "${t.name}" borrada.` : "Plantilla renombrada.");
+      await load();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Algo falló."); } finally { setBusy(""); }
+  }
+
   return <main className="pointer-events-auto fixed inset-0 z-20 flex flex-col bg-background"><AppHeader /><div className="flex-1 overflow-auto p-4 sm:p-6"><div className="mx-auto max-w-5xl space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-bold">Workflows</h1><Button asChild size="sm"><a href="/?new=1">+ Nuevo workflow</a></Button></div>
     {isPending ? <p>Cargando...</p> : !signedIn ? <div className="space-y-3 rounded-xl border p-5"><p className="font-semibold">Iniciá sesión para ver y crear workflows.</p><p className="text-sm text-muted-foreground">Se guardan en tu cuenta.</p><AuthDialog><Button>Sign In</Button></AuthDialog></div> : <>
@@ -67,7 +114,13 @@ export default function FlowsPage() {
         <div className="flex flex-wrap gap-2"><Button asChild size="sm" variant="outline"><Link href={r.href}>Editar</Link></Button>
           {r.kind === "canvas" && r.manual && <Button size="sm" disabled={working} onClick={() => void act(r, "run")}>Ejecutar</Button>}
           {r.kind === "mail" && (r.status === "active" ? <Button size="sm" variant="outline" disabled={working} onClick={() => void act(r, "pause")}>Pausar</Button> : <Button size="sm" disabled={working} onClick={() => void act(r, "resume")}>Reanudar</Button>)}
+          {r.kind === "canvas" && <Button size="sm" variant="outline" disabled={working} onClick={() => void saveAsTemplate(r)}>Guardar como plantilla</Button>}
           {r.kind === "canvas" && <Button size="sm" variant="ghost" className="text-destructive" disabled={working} onClick={() => void act(r, "delete")}>Borrar</Button>}</div></li>; })}</ul>
+      {templates !== null && templates.length > 0 && <div className="space-y-3"><h2 className="text-lg font-semibold">Plantillas</h2>
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{templates.map(t => { const working = busy === "tpl" + t.id; return <li key={t.id} className="flex flex-col justify-between gap-4 rounded-xl border border-dashed p-4"><div className="space-y-1"><p className="break-words font-semibold">{t.name}</p><p className="text-xs text-muted-foreground">Plantilla · {t.steps ?? 0} paso{t.steps === 1 ? "" : "s"}</p></div>
+          <div className="flex flex-wrap gap-2"><Button size="sm" disabled={working} onClick={() => void templateAction(t, "use")}>Usar</Button>
+            <Button size="sm" variant="outline" disabled={working} onClick={() => void templateAction(t, "rename")}>Renombrar</Button>
+            <Button size="sm" variant="ghost" className="text-destructive" disabled={working} onClick={() => void templateAction(t, "delete")}>Borrar</Button></div></li>; })}</ul></div>}
     </>}
   </div></div></main>;
 }

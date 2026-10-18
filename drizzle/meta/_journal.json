@@ -64,6 +64,13 @@
       "when": 1791600200000,
       "tag": "0008_arca_store",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791600300000,
+      "tag": "0009_workflow_templates",
+      "breakpoints": true
     }
   ]
 }

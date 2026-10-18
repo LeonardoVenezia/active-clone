@@ -91,6 +91,27 @@ export const workflows = pgTable("workflows", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// Workflow templates: private per-user snapshots that can be imported into new workflows
+export const workflowTemplates = pgTable("workflow_templates", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => generateId()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  // The workflow this template was saved from (informational only; the
+  // snapshot below is self-contained and survives workflow deletion)
+  sourceWorkflowId: text("source_workflow_id"),
+  // biome-ignore lint/suspicious/noExplicitAny: JSONB type - structure validated at application level
+  nodes: jsonb("nodes").notNull().$type<any[]>(),
+  // biome-ignore lint/suspicious/noExplicitAny: JSONB type - structure validated at application level
+  edges: jsonb("edges").notNull().$type<any[]>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Integrations table for storing user credentials
 export const integrations = pgTable("integrations", {
   id: text("id")
