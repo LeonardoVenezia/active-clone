@@ -104,6 +104,10 @@ export const workflowTemplates = pgTable("workflow_templates", {
   // The workflow this template was saved from (informational only; the
   // snapshot below is self-contained and survives workflow deletion)
   sourceWorkflowId: text("source_workflow_id"),
+  // Organization scope. null = personal template (only the owner sees it).
+  // Set when orgs/workspaces ship: templates with an org_id are visible to
+  // all members of that organization and never outside it.
+  orgId: text("org_id"),
   // biome-ignore lint/suspicious/noExplicitAny: JSONB type - structure validated at application level
   nodes: jsonb("nodes").notNull().$type<any[]>(),
   // biome-ignore lint/suspicious/noExplicitAny: JSONB type - structure validated at application level

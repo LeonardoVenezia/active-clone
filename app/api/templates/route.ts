@@ -82,6 +82,20 @@ export async function POST(request: Request) {
         ? body.name.trim()
         : sourceWorkflow.name;
 
+    // Templates are structure only: strip every connection reference so an
+    // import always asks for the importer's own connections.
+    const strippedNodes = (
+      sourceWorkflow.nodes as {
+        data?: { config?: Record<string, unknown> };
+      }[]
+    ).map((node) => {
+      if (!node.data?.config || !("integrationId" in node.data.config)) {
+        return node;
+      }
+      const { integrationId: _dropped, ...config } = node.data.config;
+      return { ...node, data: { ...node.data, config } };
+    });
+
     const [template] = await db
       .insert(workflowTemplates)
       .values({
@@ -90,7 +104,7 @@ export async function POST(request: Request) {
         description:
           typeof body.description === "string" ? body.description : null,
         sourceWorkflowId: sourceWorkflow.id,
-        nodes: sourceWorkflow.nodes,
+        nodes: strippedNodes,
         edges: sourceWorkflow.edges,
       })
       .returning();

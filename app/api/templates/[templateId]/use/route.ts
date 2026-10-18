@@ -1,9 +1,9 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { integrations, workflowTemplates, workflows } from "@/lib/db/schema";
+import { workflowTemplates, workflows } from "@/lib/db/schema";
 import { generateId } from "@/lib/utils/id";
 
 type WorkflowNodeLike = {
@@ -60,27 +60,10 @@ export async function POST(
 
     const oldNodes = template.nodes as WorkflowNodeLike[];
 
-    // Which integrations referenced by the template still exist for this user?
-    const referencedIds = new Set<string>();
-    for (const node of oldNodes) {
-      const integrationId = node.data?.config?.integrationId;
-      if (typeof integrationId === "string" && integrationId) {
-        referencedIds.add(integrationId);
-      }
-    }
-
-    let validIntegrationIds = new Set<string>();
-    if (referencedIds.size > 0) {
-      const existing = await db.query.integrations.findMany({
-        where: and(
-          inArray(integrations.id, [...referencedIds]),
-          eq(integrations.userId, session.user.id)
-        ),
-      });
-      validIntegrationIds = new Set(existing.map((i) => i.id));
-    }
-
-    // Regenerate node IDs, reset status, drop dangling connection refs
+    // Templates never carry connections: strip every integrationId (older
+    // templates saved before this rule may still contain them) so each step
+    // asks the importer to connect their own account.
+    let strippedConnections = 0;
     const idMap = new Map<string, string>();
     const newNodes = oldNodes.map((node) => {
       const newId = nanoid();
@@ -90,11 +73,9 @@ export async function POST(
         const data = { ...newNode.data };
         if (data.config) {
           const config = { ...data.config };
-          if (
-            typeof config.integrationId === "string" &&
-            !validIntegrationIds.has(config.integrationId)
-          ) {
+          if (typeof config.integrationId === "string") {
             delete config.integrationId;
+            strippedConnections += 1;
           }
           data.config = config;
         }
@@ -141,7 +122,7 @@ export async function POST(
     return NextResponse.json({
       id: newWorkflow.id,
       name: newWorkflow.name,
-      droppedConnections: referencedIds.size - validIntegrationIds.size,
+      droppedConnections: strippedConnections,
       createdAt: newWorkflow.createdAt.toISOString(),
       updatedAt: newWorkflow.updatedAt.toISOString(),
     });

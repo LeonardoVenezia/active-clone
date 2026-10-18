@@ -8,6 +8,7 @@ import {
   Copy,
   Download,
   Globe,
+  LayoutTemplate,
   Loader2,
   Lock,
   Play,
@@ -971,6 +972,47 @@ function useWorkflowActions(state: ReturnType<typeof useWorkflowState>) {
     }
   };
 
+  const handleSaveAsTemplate = async () => {
+    if (!currentWorkflowId) {
+      return;
+    }
+    const name = window.prompt(
+      "Nombre de la plantilla",
+      workflowName || "Plantilla"
+    );
+    if (name === null) {
+      return;
+    }
+    setIsSaving(true);
+    try {
+      // The template snapshots the saved workflow: persist this exact canvas first
+      await api.workflow.update(currentWorkflowId, { nodes, edges });
+      setHasUnsavedChanges(false);
+      const r = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workflowId: currentWorkflowId,
+          name: name.trim() || workflowName || "Plantilla",
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        throw new Error(d.error || "No se pudo guardar la plantilla.");
+      }
+      toast.success(`Plantilla "${d.name}" guardada. La encontrás en Flows.`);
+    } catch (error) {
+      console.error("Failed to save template:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar la plantilla."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return {
     handleSave,
     handleExecute,
@@ -980,6 +1022,7 @@ function useWorkflowActions(state: ReturnType<typeof useWorkflowState>) {
     loadWorkflows,
     handleToggleVisibility,
     handleDuplicate,
+    handleSaveAsTemplate,
   };
 }
 
@@ -1204,12 +1247,14 @@ function ToolbarActions({
       <ButtonGroup className="flex lg:hidden" orientation="vertical">
         <SaveButton handleSave={actions.handleSave} state={state} />
         <DownloadButton actions={actions} state={state} />
+        <SaveTemplateButton actions={actions} state={state} />
       </ButtonGroup>
 
       {/* Save/Download - Desktop Horizontal */}
       <ButtonGroup className="hidden lg:flex" orientation="horizontal">
         <SaveButton handleSave={actions.handleSave} state={state} />
         <DownloadButton actions={actions} state={state} />
+        <SaveTemplateButton actions={actions} state={state} />
       </ButtonGroup>
 
       {/* Visibility Toggle */}
@@ -1247,6 +1292,30 @@ function SaveButton({
       {state.hasUnsavedChanges && !state.isSaving && (
         <div className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary" />
       )}
+    </Button>
+  );
+}
+
+// Save-as-Template Button Component
+function SaveTemplateButton({
+  state,
+  actions,
+}: {
+  state: ReturnType<typeof useWorkflowState>;
+  actions: ReturnType<typeof useWorkflowActions>;
+}) {
+  return (
+    <Button
+      className="border hover:bg-black/5 disabled:opacity-100 dark:hover:bg-white/5"
+      disabled={
+        !state.currentWorkflowId || state.isGenerating || state.isSaving
+      }
+      onClick={actions.handleSaveAsTemplate}
+      size="icon"
+      title="Guardar como plantilla"
+      variant="secondary"
+    >
+      <LayoutTemplate className="size-4" />
     </Button>
   );
 }

@@ -71,6 +71,13 @@
       "when": 1791600300000,
       "tag": "0009_workflow_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791600400000,
+      "tag": "0010_templates_org_scope",
+      "breakpoints": true
     }
   ]
 }
