@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AuthDialog } from "@/components/auth/dialog";
 import { useSession } from "@/lib/auth-client";
+import { parseJsonEventStream, readUIMessageStream, uiMessageChunkSchema } from "ai";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { currentWorkflowNameAtom, edgesAtom, nodesAtom } from "@/lib/workflow-store";
@@ -69,7 +70,33 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
     const t = (override ?? text).trim(); if (!t || busy) return;
     if (undo && /^\s*(?:desh[aá]c[eé]|deshacer|undo|volv[eé] atr[aá]s)(?![\p{L}])/iu.test(t)) { setText(""); setForm(null); setMsgs(m => [...m, { id: `u${Date.now()}`, role: "user", content: t }, { id: `a${Date.now()}u`, role: "assistant", content: "Listo, deshice el último cambio." }]); void undoBuild(); return; }
     setForm(null); setFormVals({}); setBusy(true); setError(""); const snapshot = { nodes: nodes.filter(n => n.type !== "add").map(n => ({ id: n.id, label: n.data?.label, type: n.data?.type, action: (n.data?.config as { actionType?: string; triggerType?: string } | undefined)?.actionType || (n.data?.config as { triggerType?: string } | undefined)?.triggerType })), edges: edges.map(e => ({ source: e.source, target: e.target })) };
-    try { const r = await fetch("/api/workflow-chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflowId, message: t, snapshot }), signal: AbortSignal.timeout(65000) }); const d = await r.json(); if (!r.ok) throw new Error(d.error || "Request failed."); const next: Msg[] = [...msgs, { id: `u${Date.now()}`, role: "user", content: t }, { id: `a${Date.now()}`, role: "assistant", content: d.reply }]; setMsgs(next); setText(""); setCard(d.connect ?? null); setCardNote(""); setForm(d.form ?? null); setFormVals({}); const autoBuild = !!d.build && !d.connect; setPendingBuild(d.build && !autoBuild ? { instruction: d.build, convo: next } : null); if (autoBuild && d.build) void build(d.build, next); } catch (e) { setError(e instanceof Error ? e.message : "Something went wrong. Your message is still in the box."); } finally { setBusy(false); }
+    try {
+      const r = await fetch("/api/workflow-chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflowId, message: t, snapshot }), signal: AbortSignal.timeout(65000) });
+      if (!r.ok || !r.body) { const d = await r.json().catch(() => ({} as { error?: string })); throw new Error(d.error || "Request failed."); }
+      const userMsg: Msg = { id: `u${Date.now()}`, role: "user", content: t };
+      const asstId = `a${Date.now()}`;
+      setMsgs(m => [...m, userMsg, { id: asstId, role: "assistant", content: "" }]);
+      setText("");
+      let finalText = "";
+      let result: { build?: string | null; connect?: Record<string, unknown> | null; form?: { title: string; fields: { key: string; label: string }[]; offerCreate: boolean } | null } = {};
+      const chunkStream = parseJsonEventStream({ stream: r.body, schema: uiMessageChunkSchema }).pipeThrough(new TransformStream({ transform(part, controller) { if (part.success) controller.enqueue(part.value); } }));
+      for await (const msg of readUIMessageStream({ stream: chunkStream })) {
+        const replace = msg.parts.find(part => part.type === "data-replace-text") as { data?: { text?: string } } | undefined;
+        if (replace?.data?.text !== undefined) finalText = replace.data.text;
+        else finalText = msg.parts.filter(part => part.type === "text").map(part => (part as { text?: string }).text ?? "").join("");
+        setMsgs(m => m.map(x => (x.id === asstId ? { ...x, content: finalText } : x)));
+        const res = msg.parts.find(part => part.type === "data-chat-result") as { data?: typeof result } | undefined;
+        if (res?.data) result = res.data;
+        const errPart = msg.parts.find(part => part.type === "data-chat-error") as { data?: { error?: string } } | undefined;
+        if (errPart?.data?.error) throw new Error(errPart.data.error);
+      }
+      if (!finalText) throw new Error("The assistant did not answer. Your message was kept; send it again in a moment.");
+      const next: Msg[] = [...msgs, userMsg, { id: asstId, role: "assistant", content: finalText }];
+      setCard((result.connect as typeof card) ?? null); setCardNote(""); setForm(result.form ?? null); setFormVals({});
+      const autoBuild = !!result.build && !result.connect;
+      setPendingBuild(result.build && !autoBuild ? { instruction: result.build, convo: next } : null);
+      if (autoBuild && result.build) void build(result.build, next);
+    } catch (e) { setMsgs(m => m.filter(x => x.content !== "")); setError(e instanceof Error ? e.message : "Something went wrong. Your message is still in the box."); } finally { setBusy(false); }
   }
   async function renameWorkflow() {
     const next = window.prompt("Nombre del workflow", wfName || "")?.trim();
