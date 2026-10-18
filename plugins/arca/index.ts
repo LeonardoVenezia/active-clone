@@ -163,6 +163,57 @@ const arcaPlugin: IntegrationPlugin = {
         },
       ],
     },
+    {
+      slug: "get-voucher",
+      label: "Get Voucher",
+      description: "Consult an issued voucher (invoice, credit/debit note) by its coordinates",
+      category: "ARCA",
+      stepFunction: "getVoucherStep",
+      stepImportPath: "get-voucher",
+      outputFields: [
+        { field: "found", description: "Whether ARCA has the voucher" },
+        { field: "voucher", description: "Voucher summary (CAE, dates, amounts)" },
+      ],
+      configFields: [
+        {
+          key: "salesPoint",
+          label: "Sales point number",
+          type: "template-input",
+          placeholder: "3",
+          example: "3",
+          required: true,
+        },
+        {
+          key: "voucherType",
+          label: "Voucher type code (11 = Factura C)",
+          type: "template-input",
+          placeholder: "11",
+          example: "11",
+          required: true,
+        },
+        {
+          key: "number",
+          label: "Voucher number",
+          type: "template-input",
+          placeholder: "42",
+          example: "42",
+          required: true,
+        },
+      ],
+    },
+    {
+      slug: "list-sales-points",
+      label: "List Sales Points",
+      description: "List the sales points (puntos de venta) enabled for web services",
+      category: "ARCA",
+      stepFunction: "listSalesPointsStep",
+      stepImportPath: "list-sales-points",
+      outputFields: [
+        { field: "salesPoints", description: "Sales points (number, blocked)" },
+        { field: "count", description: "Sales points returned" },
+      ],
+      configFields: [],
+    },
   ],
 };
 
