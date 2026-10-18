@@ -37,9 +37,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type Row = { id: string; name: string; href: string; kind: "mail" | "canvas"; status?: string; steps?: number; trigger?: string; manual?: boolean; updated?: string; shared?: boolean; sharedByMe?: boolean };
+type Row = { id: string; name: string; href: string; kind: "mail" | "canvas"; status?: string; steps?: number; trigger?: string; manual?: boolean; updated?: string; shared?: boolean; sharedByMe?: boolean; sharedAdmin?: boolean };
 type Tpl = { id: string; name: string; description?: string | null; steps?: number; updatedAt?: string; orgId?: string | null; mine?: boolean; canManage?: boolean };
-type W = { id: string; name: string; updatedAt?: string; shared?: boolean; sharedByMe?: boolean; nodes?: { data?: { type?: string; config?: { triggerType?: string } } }[] };
+type W = { id: string; name: string; updatedAt?: string; shared?: boolean; sharedByMe?: boolean; sharedAdmin?: boolean; nodes?: { data?: { type?: string; config?: { triggerType?: string } } }[] };
 type Share = { id: string; userId: string; email: string; name?: string | null };
 
 function Badge({ tone, children }: { tone: "green" | "amber" | "blue" | "violet"; children: React.ReactNode }) {
@@ -85,7 +85,7 @@ export default function FlowsPage() {
       for (const w of ws.filter(w => w.name !== "__current__")) {
         const trig = (w.nodes || []).find(n => n.data?.type === "trigger");
         const t = trig?.data?.config?.triggerType || "Manual";
-        out.push({ id: w.id, name: w.name, href: `/workflows/${w.id}`, kind: "canvas", steps: (w.nodes || []).filter(n => n.data?.type !== "trigger").length, trigger: t === "Manual" ? "Manual" : t === "Schedule" ? "Programado" : t === "Webhook" ? "Webhook" : t, manual: t === "Manual", updated: w.updatedAt, shared: !!w.shared, sharedByMe: !!w.sharedByMe });
+        out.push({ id: w.id, name: w.name, href: `/workflows/${w.id}`, kind: "canvas", steps: (w.nodes || []).filter(n => n.data?.type !== "trigger").length, trigger: t === "Manual" ? "Manual" : t === "Schedule" ? "Programado" : t === "Webhook" ? "Webhook" : t, manual: t === "Manual", updated: w.updatedAt, shared: !!w.shared, sharedByMe: !!w.sharedByMe, sharedAdmin: !!w.sharedAdmin });
       }
       setRows(out); setError("");
       try {
@@ -229,7 +229,8 @@ export default function FlowsPage() {
             <p className="break-words font-semibold leading-snug">{r.name}</p>
             <span className="flex shrink-0 gap-1">
               {r.kind === "mail" && <Badge tone={r.status === "active" ? "green" : "amber"}>{r.status === "active" ? "Activo" : r.status === "paused" ? "Pausado" : r.status}</Badge>}
-              {(r.shared || r.sharedByMe) && <Badge tone="blue">Compartido</Badge>}
+              {r.sharedByMe && <Badge tone="violet">Dueño</Badge>}
+              {r.shared && r.sharedAdmin && <Badge tone="amber">Admin</Badge>}
             </span>
           </div>
           <p className="text-xs text-muted-foreground">{r.kind === "mail" ? "Email to sheet" : "Workflow de lienzo"} · Dispara: {r.trigger}{r.kind === "canvas" ? ` · ${r.steps} paso${r.steps === 1 ? "" : "s"}` : ""}</p>
