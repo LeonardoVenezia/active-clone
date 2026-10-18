@@ -23,7 +23,7 @@ export async function getEnviopackToken(credentials: CredentialsLike): Promise<s
   if (!response.ok) {
     throw new Error(
       response.status === 401 || response.status === 400 || response.status === 403
-        ? "Invalid Envíopack API key or secret key"
+        ? `Invalid Envíopack API key or secret key (HTTP ${response.status})`
         : `Envíopack auth failed: HTTP ${response.status}`
     );
   }
