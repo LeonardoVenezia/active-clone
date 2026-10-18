@@ -81,6 +81,12 @@ function checkNodeIntegration(
     return null;
   }
 
+  // Steps imported from a template must stay unassigned until the importer
+  // picks their own connection: never auto-fix them.
+  if (node.data.config?.fromTemplate) {
+    return null;
+  }
+
   const currentIntegrationId = node.data.config?.integrationId as
     | string
     | undefined;

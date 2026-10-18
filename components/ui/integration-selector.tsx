@@ -37,6 +37,9 @@ type IntegrationSelectorProps = {
   onOpenSettings?: () => void;
   disabled?: boolean;
   onAddConnection?: () => void;
+  // Skip the auto-select-first effect (template-imported steps must stay
+  // unassigned until the user picks their own connection)
+  skipAutoSelect?: boolean;
 };
 
 export function IntegrationSelector({
@@ -46,6 +49,7 @@ export function IntegrationSelector({
   onOpenSettings,
   disabled,
   onAddConnection,
+  skipAutoSelect,
 }: IntegrationSelectorProps) {
   const { push } = useOverlay();
   const [globalIntegrations, setGlobalIntegrations] = useAtom(integrationsAtom);
@@ -171,7 +175,7 @@ export function IntegrationSelector({
 
   // Auto-select first integration when none is selected or current selection is invalid
   useEffect(() => {
-    if (integrations.length > 0 && !disabled) {
+    if (integrations.length > 0 && !disabled && !skipAutoSelect) {
       // Check if current value exists in available integrations
       const currentExists = value && integrations.some((i) => i.id === value);
       if (!currentExists) {
@@ -180,7 +184,7 @@ export function IntegrationSelector({
         onChange(managed?.id || integrations[0].id);
       }
     }
-  }, [integrations, value, disabled, onChange]);
+  }, [integrations, value, disabled, onChange, skipAutoSelect]);
 
   const handleNewIntegrationCreated = async (integrationId: string) => {
     await loadIntegrations();

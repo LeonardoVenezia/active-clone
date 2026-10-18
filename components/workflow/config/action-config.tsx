@@ -602,6 +602,7 @@ export function ActionConfig({
             disabled={disabled}
             integrationType={integrationType}
             onChange={(id) => onUpdateConfig("integrationId", id)}
+            skipAutoSelect={!config?.integrationId && !!config?.fromTemplate}
             value={(config?.integrationId as string) || ""}
           />
         </div>

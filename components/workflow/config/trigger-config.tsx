@@ -252,6 +252,7 @@ export function TriggerConfig({
                   disabled={disabled}
                   integrationType={selectedIntegrationTrigger.type}
                   onChange={(id) => onUpdateConfig("integrationId", id)}
+                  skipAutoSelect={!config?.integrationId && !!config?.fromTemplate}
                   value={(config?.integrationId as string) || ""}
                 />
               </div>

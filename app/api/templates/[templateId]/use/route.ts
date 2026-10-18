@@ -77,6 +77,9 @@ export async function POST(
             delete config.integrationId;
             strippedConnections += 1;
           }
+          // Mark template-imported steps so the editor does not auto-assign
+          // a connection on load: the importer must pick their own.
+          config.fromTemplate = true;
           data.config = config;
         }
         data.status = "idle";
