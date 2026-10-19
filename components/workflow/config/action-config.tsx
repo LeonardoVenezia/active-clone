@@ -576,7 +576,7 @@ export function ActionConfig({
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-2">
           <Label className="ml-1" htmlFor="actionCategory">
-            Service
+            Servicio
           </Label>
           <Select
             disabled={disabled}
@@ -611,7 +611,7 @@ export function ActionConfig({
 
         <div className="space-y-2">
           <Label className="ml-1" htmlFor="actionType">
-            Action
+            Acción
           </Label>
           <Select
             disabled={disabled || !category}

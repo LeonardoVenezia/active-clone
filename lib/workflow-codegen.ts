@@ -404,6 +404,33 @@ export function generateWorkflowCode(
     ];
   }
 
+  function generateFormulaActionCode(
+    node: WorkflowNode,
+    indent: string,
+    varName: string
+  ): string[] {
+    const stepInfo = getStepInfo("Fórmula");
+    imports.add(
+      `import { ${stepInfo.functionName} } from '${stepInfo.importPath}';`
+    );
+
+    const config = node.data.config || {};
+    const expression = (config.expression as string) || "";
+    const rawInput = (config.input as string) || "";
+    const convertedInput = convertTemplateToJS(rawInput).replace(/`/g, "\\`");
+
+    const lines = [
+      `${indent}// Fórmula (JSONata, sandboxed)`,
+      `${indent}const ${varName} = await ${stepInfo.functionName}({`,
+      `${indent}  expression: ${JSON.stringify(expression)},`,
+    ];
+    if (convertedInput.trim().length > 0) {
+      lines.push(`${indent}  input: \`${convertedInput}\`,`);
+    }
+    lines.push(`${indent}});`);
+    return lines;
+  }
+
   // Helper to process AI schema and convert to TypeScript literal
   function processAiSchema(aiSchema: string | undefined): string | null {
     if (!aiSchema) {
@@ -805,6 +832,10 @@ export function generateWorkflowCode(
     } else if (actionType === "HTTP Request") {
       lines.push(
         ...wrapActionCall(generateHTTPActionCode(node, indent, varName))
+      );
+    } else if (actionType === "Fórmula") {
+      lines.push(
+        ...wrapActionCall(generateFormulaActionCode(node, indent, varName))
       );
     } else {
       // Try to find the action in the plugin registry

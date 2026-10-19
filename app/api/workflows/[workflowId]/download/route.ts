@@ -150,7 +150,14 @@ function getIntegrationDependencies(
     .filter(Boolean);
 
   // Get dependencies from plugin registry
-  return getDependenciesForActions(actionTypes);
+  const deps = getDependenciesForActions(actionTypes);
+
+  // System actions with npm dependencies (not in plugin registry)
+  if (actionTypes.includes("Fórmula")) {
+    deps.jsonata = "^2.2.2";
+  }
+
+  return deps;
 }
 
 /**

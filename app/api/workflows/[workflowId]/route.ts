@@ -1,9 +1,14 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { validateWorkflowIntegrations } from "@/lib/db/integrations";
-import { workflowShares, workflows } from "@/lib/db/schema";
+import {
+  workflowExecutionLogs,
+  workflowExecutions,
+  workflowShares,
+  workflows,
+} from "@/lib/db/schema";
 
 // A user can edit a workflow they own or one explicitly shared with them
 async function hasShareAccess(
@@ -313,6 +318,23 @@ export async function DELETE(
         { status: 404 }
       );
     }
+
+    // Cascade: delete only what belongs to THIS workflow - execution logs,
+    // executions, and share rows - then the workflow itself.
+    const executions = await db.query.workflowExecutions.findMany({
+      where: eq(workflowExecutions.workflowId, workflowId),
+      columns: { id: true },
+    });
+    const executionIds = executions.map((e) => e.id);
+    if (executionIds.length > 0) {
+      await db
+        .delete(workflowExecutionLogs)
+        .where(inArray(workflowExecutionLogs.executionId, executionIds));
+      await db
+        .delete(workflowExecutions)
+        .where(eq(workflowExecutions.workflowId, workflowId));
+    }
+    await db.delete(workflowShares).where(eq(workflowShares.workflowId, workflowId));
 
     await db.delete(workflows).where(eq(workflows.id, workflowId));
 

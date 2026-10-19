@@ -104,9 +104,9 @@ const MultiSelectionPanel = ({
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
           <div className="space-y-2">
-            <Label>Selection</Label>
+            <Label>Selección</Label>
             <p className="text-muted-foreground text-sm">
-              {selectionText} selected
+              {selectionText} seleccionados
             </p>
           </div>
 
@@ -539,19 +539,19 @@ export const PanelInner = () => {
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
             <div className="space-y-2">
               <Label className="ml-1" htmlFor="edge-id">
-                Edge ID
+                ID de conexión
               </Label>
               <Input disabled id="edge-id" value={selectedEdge.id} />
             </div>
             <div className="space-y-2">
               <Label className="ml-1" htmlFor="edge-source">
-                Source
+                Origen
               </Label>
               <Input disabled id="edge-source" value={selectedEdge.source} />
             </div>
             <div className="space-y-2">
               <Label className="ml-1" htmlFor="edge-target">
-                Target
+                Destino
               </Label>
               <Input disabled id="edge-target" value={selectedEdge.target} />
             </div>
@@ -777,14 +777,14 @@ export const PanelInner = () => {
             <AlertDialogHeader>
               <AlertDialogTitle>Borrar todas las ejecuciones</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete all workflow runs? This action
-                cannot be undone.
+                ¿Seguro que querés borrar todas las ejecuciones del flujo?
+                No se puede deshacer.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction onClick={handleDeleteAllRuns}>
-                Delete
+                Eliminar
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -795,15 +795,15 @@ export const PanelInner = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete workflow</AlertDialogTitle>
+            <AlertDialogTitle>Eliminar flujo</AlertDialogTitle>
             <AlertDialogDescription>
-              Delete "{currentWorkflowName}" and its run history? This cannot
-              be undone.
+              ¿Eliminar "{currentWorkflowName}" y su historial de
+              ejecuciones? No se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeletingWorkflow}>
-              Cancel
+              Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               disabled={isDeletingWorkflow}
@@ -812,7 +812,7 @@ export const PanelInner = () => {
                 handleDeleteWorkflow();
               }}
             >
-              {isDeletingWorkflow ? "Eliminando..." : "Delete"}
+              {isDeletingWorkflow ? "Eliminando..." : "Eliminar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -825,8 +825,8 @@ export const PanelInner = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Limpiar workflow</AlertDialogTitle>
             <AlertDialogDescription>
-              Remove all steps and connections from this workflow? This cannot
-              be undone.
+              ¿Quitar todos los pasos y conexiones de este flujo? No se
+              puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -834,7 +834,7 @@ export const PanelInner = () => {
             <AlertDialogAction
               onClick={handleClearWorkflow}
             >
-              Clear
+              Limpiar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -857,7 +857,7 @@ export const PanelInner = () => {
             className="bg-transparent text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none"
             value="properties"
           >
-            Properties
+            Propiedades
           </TabsTrigger>
           {(selectedNode.data.type !== "trigger" ||
             (selectedNode.data.config?.triggerType as string) !== "Manual") &&
@@ -876,7 +876,7 @@ export const PanelInner = () => {
               className="bg-transparent text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none"
               value="runs"
             >
-              Runs
+              Ejecuciones
             </TabsTrigger>
           )}
         </TabsList>
@@ -960,7 +960,7 @@ export const PanelInner = () => {
                 <>
                   <div className="space-y-2">
                     <Label className="ml-1" htmlFor="label">
-                      Label
+                      Nombre
                     </Label>
                     <Input
                       disabled={isGenerating || !canEdit}
@@ -972,7 +972,7 @@ export const PanelInner = () => {
 
                   <div className="space-y-2">
                     <Label className="ml-1" htmlFor="description">
-                      Description
+                      Descripción
                     </Label>
                     <Input
                       disabled={isGenerating || !canEdit}
@@ -1007,12 +1007,12 @@ export const PanelInner = () => {
                       {selectedNode.data.enabled === false ? (
                         <>
                           <EyeOff className="mr-2 size-4" />
-                          Disabled
+                          Desactivado
                         </>
                       ) : (
                         <>
                           <Eye className="mr-2 size-4" />
-                          Enabled
+                          Activo
                         </>
                       )}
                     </Button>
@@ -1024,7 +1024,7 @@ export const PanelInner = () => {
                     variant="ghost"
                   >
                     <Trash2 className="mr-2 size-4" />
-                    Delete
+                    Eliminar
                   </Button>
                 </div>
               )}
@@ -1168,8 +1168,7 @@ export const PanelInner = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Eliminar paso</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this node? This action cannot be
-              undone.
+              ¿Seguro que querés eliminar este paso? No se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

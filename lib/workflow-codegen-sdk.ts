@@ -4,6 +4,7 @@ import { findActionById } from "@/plugins";
 // System action codegen templates (not in plugin registry)
 import conditionTemplate from "./codegen-templates/condition";
 import databaseQueryTemplate from "./codegen-templates/database-query";
+import formulaTemplate from "./codegen-templates/formula";
 import httpRequestTemplate from "./codegen-templates/http-request";
 
 // System actions that don't have plugins
@@ -11,6 +12,7 @@ const SYSTEM_CODEGEN_TEMPLATES: Record<string, string> = {
   "Database Query": databaseQueryTemplate,
   "HTTP Request": httpRequestTemplate,
   Condition: conditionTemplate,
+  "Fórmula": formulaTemplate,
 };
 
 import {
@@ -471,6 +473,18 @@ export function generateWorkflowSDKCode(
     ];
   }
 
+  function buildFormulaParams(config: Record<string, unknown>): string[] {
+    const expression = (config.expression as string) || "";
+    const rawInput = (config.input as string) || "";
+    const params = [`expression: ${JSON.stringify(expression)}`];
+    if (rawInput.trim().length > 0) {
+      params.push(
+        `input: \`${escapeForTemplateLiteral(convertTemplateToJS(rawInput))}\``
+      );
+    }
+    return params;
+  }
+
   function buildStepInputParams(
     actionType: string,
     config: Record<string, unknown>
@@ -483,6 +497,7 @@ export function generateWorkflowSDKCode(
       "Generate Image": () => buildAIImageParams(config),
       "Database Query": () => buildDatabaseParams(config),
       "HTTP Request": () => buildHttpParams(config),
+      "Fórmula": () => buildFormulaParams(config),
       Condition: () => buildConditionParams(config),
       Scrape: () => buildFirecrawlParams(actionType, config),
       Search: () => buildFirecrawlParams(actionType, config),

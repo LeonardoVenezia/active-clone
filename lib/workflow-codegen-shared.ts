@@ -302,6 +302,10 @@ const SYSTEM_STEP_INFO: Record<
     functionName: "conditionStep",
     importPath: "./steps/condition-step",
   },
+  "Fórmula": {
+    functionName: "formulaStep",
+    importPath: "./steps/formula-step",
+  },
 };
 
 /**
