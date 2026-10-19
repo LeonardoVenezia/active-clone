@@ -137,7 +137,7 @@ export function TriggerConfig({
   const handleCopyWebhookUrl = () => {
     if (webhookUrl) {
       navigator.clipboard.writeText(webhookUrl);
-      toast.success("Webhook URL copied to clipboard");
+      toast.success("URL del webhook copiada");
     }
   };
 
@@ -178,7 +178,7 @@ export function TriggerConfig({
           }
         >
           <SelectTrigger className="w-full" id="triggerType">
-            <SelectValue placeholder="Select trigger type" />
+            <SelectValue placeholder="Elegí el tipo de disparador" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="Manual">
@@ -228,7 +228,7 @@ export function TriggerConfig({
               value={(config?.integrationTrigger as string) || ""}
             >
               <SelectTrigger className="w-full" id="integrationTrigger">
-                <SelectValue placeholder="Select an event" />
+                <SelectValue placeholder="Elegí un evento" />
               </SelectTrigger>
               <SelectContent>
                 {integrationTriggerOptions.map((option) => (
@@ -247,7 +247,7 @@ export function TriggerConfig({
           {selectedIntegrationTrigger && (
             <>
               <div className="space-y-2">
-                <Label className="ml-1">Connection</Label>
+                <Label className="ml-1">Conexión</Label>
                 <IntegrationSelector
                   disabled={disabled}
                   integrationType={selectedIntegrationTrigger.type}
@@ -257,21 +257,21 @@ export function TriggerConfig({
                 />
               </div>
               <div className="space-y-2">
-                <Label className="ml-1">Notification URL</Label>
+                <Label className="ml-1">URL de notificación</Label>
                 <div className="flex gap-2">
                   <Input
                     className="font-mono text-xs"
                     disabled
                     value={
                       integrationWebhookUrl ||
-                      "Select a connection to get the URL"
+                      "Elegí una conexión para obtener la URL"
                     }
                   />
                   <Button
                     disabled={!integrationWebhookUrl}
                     onClick={() => {
                       navigator.clipboard.writeText(integrationWebhookUrl);
-                      toast.success("URL copied to clipboard");
+                      toast.success("URL copiada");
                     }}
                     size="icon"
                     variant="outline"
@@ -298,7 +298,7 @@ export function TriggerConfig({
               <Input
                 className="font-mono text-xs"
                 disabled
-                value={webhookUrl || "Save workflow to generate webhook URL"}
+                value={webhookUrl || "Guardá el workflow para generar la URL del webhook"}
               />
               <Button
                 disabled={!webhookUrl}
@@ -311,7 +311,7 @@ export function TriggerConfig({
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Request Schema (Optional)</Label>
+            <Label>Esquema del request (opcional)</Label>
             <SchemaBuilder
               disabled={disabled}
               onChange={(schema) =>
@@ -330,7 +330,7 @@ export function TriggerConfig({
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="webhookMockRequest">Mock Request (Optional)</Label>
+            <Label htmlFor="webhookMockRequest">Request de prueba (opcional)</Label>
             <div className="overflow-hidden rounded-md border">
               <CodeEditor
                 defaultLanguage="json"

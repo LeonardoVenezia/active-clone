@@ -114,14 +114,14 @@ function HttpRequestFields({
   return (
     <>
       <div className="space-y-2">
-        <Label htmlFor="httpMethod">HTTP Method</Label>
+        <Label htmlFor="httpMethod">Método HTTP</Label>
         <Select
           disabled={disabled}
           onValueChange={(value) => onUpdateConfig("httpMethod", value)}
           value={(config?.httpMethod as string) || "POST"}
         >
           <SelectTrigger className="w-full" id="httpMethod">
-            <SelectValue placeholder="Select method" />
+            <SelectValue placeholder="Elegí un método" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="GET">GET</SelectItem>
@@ -204,7 +204,7 @@ function ConditionFields({
 }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor="condition">Condition Expression</Label>
+      <Label htmlFor="condition">Expresión de condición</Label>
       <TemplateBadgeInput
         disabled={disabled}
         id="condition"
@@ -236,7 +236,7 @@ function LoopFields({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="loop-source">List to repeat over</Label>
+        <Label htmlFor="loop-source">Lista a recorrer</Label>
         <TemplateBadgeInput
           disabled={disabled}
           id="loop-source"
@@ -250,7 +250,7 @@ function LoopFields({
         </p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="loop-max">Max items (up to 50)</Label>
+        <Label htmlFor="loop-max">Máximo de ítems (hasta 50)</Label>
         <Input
           disabled={disabled}
           id="loop-max"
@@ -266,7 +266,7 @@ function LoopFields({
         {innerSteps.length ? (
           <ol className="list-decimal space-y-1 pl-5 text-sm">
             {innerSteps.map((step, i) => (
-              <li key={step.id || i}>{step.actionType || "Unconfigured step"}</li>
+              <li key={step.id || i}>{step.actionType || "Paso sin configurar"}</li>
             ))}
           </ol>
         ) : (
@@ -521,7 +521,7 @@ export function ActionConfig({
             value={category || undefined}
           >
             <SelectTrigger className="w-full" id="actionCategory">
-              <SelectValue placeholder="Select category" />
+              <SelectValue placeholder="Elegí una categoría" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="System">
@@ -556,7 +556,7 @@ export function ActionConfig({
             value={normalizeActionType(actionType) || undefined}
           >
             <SelectTrigger className="w-full" id="actionType">
-              <SelectValue placeholder="Select action" />
+              <SelectValue placeholder="Elegí una acción" />
             </SelectTrigger>
             <SelectContent>
               {category &&
@@ -574,14 +574,14 @@ export function ActionConfig({
         <div className="space-y-2">
           <div className="ml-1 flex items-center justify-between">
             <div className="flex items-center gap-1">
-              <Label>Connection</Label>
+              <Label>Conexión</Label>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <HelpCircle className="size-3.5 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>API key or OAuth credentials for this service</p>
+                    <p>API key o credenciales OAuth del servicio</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>

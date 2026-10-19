@@ -185,7 +185,7 @@ export function SchemaBuilder({
 
             {field.type === "object" && (
               <div className="mt-2">
-                <Label className="mb-2 block">Object Properties</Label>
+                <Label className="mb-2 block">Propiedades del objeto</Label>
                 <SchemaBuilder
                   disabled={disabled}
                   level={level + 1}
@@ -197,7 +197,7 @@ export function SchemaBuilder({
 
             {field.type === "array" && field.itemType === "object" && (
               <div className="mt-2">
-                <Label className="mb-2 block">Array Item Properties</Label>
+                <Label className="mb-2 block">Propiedades del ítem</Label>
                 <SchemaBuilder
                   disabled={disabled}
                   level={level + 1}
@@ -217,7 +217,7 @@ export function SchemaBuilder({
                 onChange={(e) =>
                   updateField(index, { description: e.target.value })
                 }
-                placeholder="Description for the AI"
+                placeholder="Descripción para la IA"
                 value={field.description || ""}
               />
             </div>

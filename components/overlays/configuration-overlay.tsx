@@ -191,9 +191,9 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
 
   const handleDeleteNode = useCallback(() => {
     push(ConfirmOverlay, {
-      title: "Delete Step",
+      title: "Eliminar paso",
       message:
-        "Are you sure you want to delete this node? This action cannot be undone.",
+        "¿Seguro que querés eliminar este paso? Esto no se puede deshacer.",
       confirmLabel: "Delete",
       confirmVariant: "destructive" as const,
       onConfirm: () => {
@@ -208,7 +208,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
   const handleCopyCode = useCallback(() => {
     if (!selectedNode) return;
     navigator.clipboard.writeText(generateNodeCode(selectedNode));
-    toast.success("Code copied to clipboard");
+    toast.success("Código copiado");
   }, [selectedNode]);
 
   const handleRefreshRuns = async () => {
@@ -221,9 +221,9 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
 
   const handleDeleteAllRuns = () => {
     push(ConfirmOverlay, {
-      title: "Delete All Runs",
+      title: "Borrar todas las ejecuciones",
       message:
-        "Are you sure you want to delete all workflow runs? This action cannot be undone.",
+        "¿Seguro que querés borrar todas las ejecuciones? Esto no se puede deshacer.",
       confirmLabel: "Delete",
       confirmVariant: "destructive" as const,
       onConfirm: async () => {
@@ -234,10 +234,10 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
           if (refreshRunsRef.current) {
             await refreshRunsRef.current();
           }
-          toast.success("All runs deleted");
+          toast.success("Ejecuciones borradas");
         } catch (error) {
           console.error("Failed to delete runs:", error);
-          toast.error("Failed to delete runs");
+          toast.error("No se pudieron borrar las ejecuciones");
         }
       },
     });
@@ -273,13 +273,13 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
     }
     switch (activeTab) {
       case "properties":
-        return "Properties";
+        return "Propiedades";
       case "code":
         return "Code";
       case "runs":
         return "Runs";
       default:
-        return "Properties";
+        return "Propiedades";
     }
   };
 
@@ -299,10 +299,10 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
   // Handle clear workflow
   const handleClearWorkflow = () => {
     push(ConfirmOverlay, {
-      title: "Clear Workflow",
+      title: "Limpiar workflow",
       message:
-        "Are you sure you want to clear all nodes and connections? This action cannot be undone.",
-      confirmLabel: "Clear Workflow",
+        "¿Seguro que querés borrar todos los pasos y conexiones? Esto no se puede deshacer.",
+      confirmLabel: "Limpiar workflow",
       confirmVariant: "destructive" as const,
       destructive: true,
       onConfirm: () => {
@@ -314,9 +314,9 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
   // Handle delete workflow
   const handleDeleteWorkflow = () => {
     push(ConfirmOverlay, {
-      title: "Delete Workflow",
+      title: "Eliminar workflow",
       message: `Are you sure you want to delete "${currentWorkflowName}"? This will permanently delete the workflow. This cannot be undone.`,
-      confirmLabel: "Delete Workflow",
+      confirmLabel: "Eliminar workflow",
       confirmVariant: "destructive" as const,
       destructive: true,
       onConfirm: async () => {
@@ -328,7 +328,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
           window.location.href = "/";
         } catch (error) {
           console.error("Failed to delete workflow:", error);
-          toast.error("Failed to delete workflow. Please try again.");
+          toast.error("No se pudo eliminar el workflow. Probá de nuevo.");
         }
       },
     });
@@ -353,16 +353,16 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
   // Handle copy workflow code
   const handleCopyWorkflowCode = () => {
     navigator.clipboard.writeText(workflowCode);
-    toast.success("Code copied to clipboard");
+    toast.success("Código copiado");
   };
 
   // Handle delete edge
   const handleDeleteEdge = () => {
     if (selectedEdgeId) {
       push(ConfirmOverlay, {
-        title: "Delete Connection",
+        title: "Eliminar conexión",
         message:
-          "Are you sure you want to delete this connection? This action cannot be undone.",
+          "¿Seguro que querés eliminar esta conexión? Esto no se puede deshacer.",
         confirmLabel: "Delete",
         confirmVariant: "destructive" as const,
         onConfirm: () => {
@@ -436,7 +436,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
                 <Input
                   disabled
                   id="workflow-id"
-                  value={currentWorkflowId || "Not saved"}
+                  value={currentWorkflowId || "Sin guardar"}
                 />
               </div>
               {!canEdit && (
@@ -642,7 +642,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
                     disabled={isGenerating || !canEdit}
                     id="description"
                     onChange={(e) => handleUpdateDescription(e.target.value)}
-                    placeholder="Optional description"
+                    placeholder="Descripción opcional"
                     value={(selectedNode.data.description as string) || ""}
                   />
                 </div>

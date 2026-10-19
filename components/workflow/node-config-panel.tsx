@@ -127,14 +127,14 @@ const MultiSelectionPanel = ({
       <AlertDialog onOpenChange={setShowDeleteAlert} open={showDeleteAlert}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Selected Items</AlertDialogTitle>
+            <AlertDialogTitle>Eliminar seleccionados</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete {selectionText}? This action
               cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -294,7 +294,7 @@ export const PanelInner = () => {
 
   const handleCopyWorkflowCode = () => {
     navigator.clipboard.writeText(workflowCode);
-    toast.success("Code copied to clipboard");
+    toast.success("Código copiado");
   };
 
   const handleDelete = () => {
@@ -333,7 +333,7 @@ export const PanelInner = () => {
     } catch (error) {
       console.error("Failed to delete runs:", error);
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to delete runs";
+        error instanceof Error ? error.message : "No se pudieron borrar las ejecuciones";
       toast.error(errorMessage);
     }
   };
@@ -458,7 +458,7 @@ export const PanelInner = () => {
         });
       } catch (error) {
         console.error("Failed to update workflow name:", error);
-        toast.error("Failed to update workspace name");
+        toast.error("No se pudo actualizar el nombre");
       }
     }
   };
@@ -472,11 +472,11 @@ export const PanelInner = () => {
       // Runs reference the workflow, so remove them first
       await api.workflow.deleteExecutions(currentWorkflowId);
       await api.workflow.delete(currentWorkflowId);
-      toast.success("Workflow deleted");
+      toast.success("Workflow eliminado");
       window.location.href = "/workflows";
     } catch (error) {
       console.error("Failed to delete workflow:", error);
-      toast.error("Failed to delete workflow. Please try again.");
+      toast.error("No se pudo eliminar el workflow. Probá de nuevo.");
       setIsDeletingWorkflow(false);
       setShowDeleteWorkflowAlert(false);
     }
@@ -495,7 +495,7 @@ export const PanelInner = () => {
         });
       } catch (error) {
         console.error("Failed to clear workflow:", error);
-        toast.error("Failed to clear workflow. Please try again.");
+        toast.error("No se pudo limpiar el workflow. Probá de nuevo.");
         return;
       }
     }
@@ -510,7 +510,7 @@ export const PanelInner = () => {
       }
     } catch (error) {
       console.error("Failed to refresh runs:", error);
-      toast.error("Failed to refresh runs");
+      toast.error("No se pudieron actualizar las ejecuciones");
     } finally {
       setIsRefreshing(false);
     }
@@ -577,14 +577,14 @@ export const PanelInner = () => {
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete Edge</AlertDialogTitle>
+              <AlertDialogTitle>Eliminar conexión</AlertDialogTitle>
               <AlertDialogDescription>
                 Are you sure you want to delete this connection? This action
                 cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction onClick={handleDeleteEdge}>
                 Delete
               </AlertDialogAction>
@@ -650,7 +650,7 @@ export const PanelInner = () => {
                 <Input
                   disabled
                   id="workflow-id"
-                  value={currentWorkflowId || "Not saved"}
+                  value={currentWorkflowId || "Sin guardar"}
                 />
               </div>
               {!canEdit && (
@@ -774,14 +774,14 @@ export const PanelInner = () => {
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete All Runs</AlertDialogTitle>
+              <AlertDialogTitle>Borrar todas las ejecuciones</AlertDialogTitle>
               <AlertDialogDescription>
                 Are you sure you want to delete all workflow runs? This action
                 cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction onClick={handleDeleteAllRuns}>
                 Delete
               </AlertDialogAction>
@@ -811,7 +811,7 @@ export const PanelInner = () => {
                 handleDeleteWorkflow();
               }}
             >
-              {isDeletingWorkflow ? "Deleting..." : "Delete"}
+              {isDeletingWorkflow ? "Eliminando..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -822,14 +822,14 @@ export const PanelInner = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear workflow</AlertDialogTitle>
+            <AlertDialogTitle>Limpiar workflow</AlertDialogTitle>
             <AlertDialogDescription>
               Remove all steps and connections from this workflow? This cannot
               be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleClearWorkflow}
             >
@@ -976,7 +976,7 @@ export const PanelInner = () => {
                       disabled={isGenerating || !canEdit}
                       id="description"
                       onChange={(e) => handleUpdateDescription(e.target.value)}
-                      placeholder="Optional description"
+                      placeholder="Descripción opcional"
                       value={selectedNode.data.description || ""}
                     />
                   </div>
@@ -1143,14 +1143,14 @@ export const PanelInner = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete All Runs</AlertDialogTitle>
+            <AlertDialogTitle>Borrar todas las ejecuciones</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete all workflow runs? This action
               cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteAllRuns}>
               Delete
             </AlertDialogAction>
@@ -1164,14 +1164,14 @@ export const PanelInner = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Step</AlertDialogTitle>
+            <AlertDialogTitle>Eliminar paso</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete this node? This action cannot be
               undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

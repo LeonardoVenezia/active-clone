@@ -23,11 +23,11 @@ export function MakePublicOverlay({
   return (
     <Overlay
       actions={[
-        { label: "Cancel", variant: "outline", onClick: closeAll },
-        { label: "Make Public", onClick: handleConfirm },
+        { label: "Cancelar", variant: "outline", onClick: closeAll },
+        { label: "Hacer público", onClick: handleConfirm },
       ]}
       overlayId={overlayId}
-      title="Make Workflow Public?"
+      title="¿Hacer público este workflow?"
     >
       <div className="flex items-center gap-2 text-muted-foreground">
         <Globe className="size-5 shrink-0" />
@@ -37,17 +37,17 @@ export function MakePublicOverlay({
       </div>
 
       <ul className="mt-3 list-inside list-disc space-y-1 text-muted-foreground text-sm">
-        <li>View the workflow structure and steps</li>
-        <li>See action types and configurations</li>
-        <li>Duplicate the workflow to their own account</li>
+        <li>Ver la estructura y los pasos del workflow</li>
+        <li>Ver los tipos de acción y su configuración</li>
+        <li>Duplicar el workflow en su propia cuenta</li>
       </ul>
 
       <p className="mt-4 font-medium text-foreground text-sm">
         The following will remain private:
       </p>
       <ul className="mt-2 list-inside list-disc space-y-1 text-muted-foreground text-sm">
-        <li>Your integration credentials (API keys, tokens)</li>
-        <li>Execution logs and run history</li>
+        <li>Tus credenciales de integraciones (API keys, tokens)</li>
+        <li>Los logs y el historial de ejecuciones</li>
       </ul>
     </Overlay>
   );
