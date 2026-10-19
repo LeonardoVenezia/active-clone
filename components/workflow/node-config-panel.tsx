@@ -745,7 +745,7 @@ export const PanelInner = () => {
                 variant="ghost"
               >
                 <Copy className="mr-2 size-4" />
-                Copy
+                Copiar
               </Button>
             </div>
             <div className="flex-1 overflow-hidden">
@@ -1076,7 +1076,7 @@ export const PanelInner = () => {
                       variant="ghost"
                     >
                       <Copy className="mr-2 size-4" />
-                      Copy
+                      Copiar
                     </Button>
                   </div>
                 )}
