@@ -4,6 +4,7 @@ import { anonymous, genericOAuth, organization } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { sendPasswordResetEmail, sendAccountVerificationEmail } from "./email";
 import { isAiGatewayManagedKeysEnabled } from "./ai-gateway/config";
+import { assertCanAccept, assertCanInvite } from "./org-cap";
 import { db } from "./db";
 import {
   accounts,
@@ -61,7 +62,19 @@ function getBaseURL() {
 
 // Build plugins array conditionally
 const plugins = [
-  organization(),
+  organization({
+    organizationHooks: {
+      // Enforce the org's member cap: invites count members + pending
+      // invitations, accepts count members (a pending seat was already
+      // reserved when the invitation was created).
+      beforeCreateInvitation: async ({ organization }) => {
+        await assertCanInvite(organization.id);
+      },
+      beforeAddMember: async ({ organization }) => {
+        await assertCanAccept(organization.id);
+      },
+    },
+  }),
   anonymous({
     async onLinkAccount(data) {
       // When an anonymous user links to a real account, migrate their data

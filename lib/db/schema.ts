@@ -1,6 +1,7 @@
 import { relations } from "drizzle-orm";
 import {
   boolean,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -152,6 +153,7 @@ export const organizations = pgTable("organization", {
   slug: text("slug").notNull().unique(),
   logo: text("logo"),
   metadata: text("metadata"),
+  memberCap: integer("member_cap"),
   createdAt: timestamp("created_at").notNull(),
 });
 
