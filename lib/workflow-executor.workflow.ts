@@ -34,6 +34,11 @@ const SYSTEM_ACTIONS: Record<string, StepImporter> = {
     importer: () => import("./steps/condition") as Promise<any>,
     stepFunction: "conditionStep",
   },
+  "Fórmula": {
+    // biome-ignore lint/suspicious/noExplicitAny: Dynamic module import
+    importer: () => import("./steps/formula") as Promise<any>,
+    stepFunction: "formulaStep",
+  },
 };
 
 type ExecutionResult = {

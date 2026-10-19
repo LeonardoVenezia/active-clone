@@ -220,6 +220,60 @@ function ConditionFields({
   );
 }
 
+// Fórmula fields component
+function FormulaFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="formula-input">Entrada (JSON)</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="formula-input"
+          onChange={(value) => onUpdateConfig("input", value)}
+          placeholder='{"precio": 100, "items": [1, 2, 3]}'
+          value={(config?.input as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          JSON de entrada para la expresión. Usá @ para referenciar salidas de
+          nodos anteriores.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="formula-expression">Expresión (JSONata)</Label>
+        <div className="overflow-hidden rounded-md border">
+          <CodeEditor
+            defaultLanguage="plaintext"
+            height="120px"
+            onChange={(value) => onUpdateConfig("expression", value || "")}
+            options={{
+              minimap: { enabled: false },
+              lineNumbers: "off",
+              scrollBeyondLastLine: false,
+              fontSize: 12,
+              readOnly: disabled,
+              wordWrap: "on",
+            }}
+            value={(config?.expression as string) || ""}
+          />
+        </div>
+        <p className="text-muted-foreground text-xs">
+          Expresión JSONata sobre la entrada. Ej: precio * 1.21,
+          $uppercase(nombre), items[precio &gt; 100]. Sin red, sin acceso a
+          credenciales, con límite de tiempo y tamaño.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Loop fields component
 function LoopFields({
   config,
@@ -320,6 +374,14 @@ function SystemActionFields({
           onUpdateConfig={onUpdateConfig}
         />
       );
+    case "Fórmula":
+      return (
+        <FormulaFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
     case "Loop":
       return (
         <LoopFields
@@ -339,6 +401,7 @@ const SYSTEM_ACTIONS: Array<{ id: string; label: string }> = [
   { id: "Database Query", label: "Database Query" },
   { id: "Condition", label: "Condition" },
   { id: "Loop", label: "Loop" },
+  { id: "Fórmula", label: "Fórmula" },
 ];
 
 const SYSTEM_ACTION_IDS = SYSTEM_ACTIONS.map((a) => a.id);

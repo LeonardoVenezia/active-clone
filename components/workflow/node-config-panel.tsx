@@ -195,7 +195,8 @@ export const PanelInner = () => {
 
     const isConditionAction =
       selectedNode.data.config?.actionType === "Condition" ||
-      selectedNode.data.config?.actionType === "Loop";
+      selectedNode.data.config?.actionType === "Loop" ||
+      selectedNode.data.config?.actionType === "Fórmula";
     const isManualTrigger =
       selectedNode.data.type === "trigger" &&
       selectedNode.data.config?.triggerType === "Manual";
@@ -861,7 +862,8 @@ export const PanelInner = () => {
           {(selectedNode.data.type !== "trigger" ||
             (selectedNode.data.config?.triggerType as string) !== "Manual") &&
           selectedNode.data.config?.actionType !== "Condition" &&
-          selectedNode.data.config?.actionType !== "Loop" ? (
+          selectedNode.data.config?.actionType !== "Loop" &&
+          selectedNode.data.config?.actionType !== "Fórmula" ? (
             <TabsTrigger
               className="bg-transparent text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none"
               value="code"

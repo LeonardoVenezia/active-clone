@@ -248,7 +248,8 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
     selectedNode &&
     (selectedNode.data.type !== "trigger" ||
       (selectedNode.data.config?.triggerType as string) !== "Manual") &&
-    selectedNode.data.config?.actionType !== "Condition";
+    selectedNode.data.config?.actionType !== "Condition" &&
+    selectedNode.data.config?.actionType !== "Fórmula";
 
   // Get current tab title
   const getTabTitle = () => {

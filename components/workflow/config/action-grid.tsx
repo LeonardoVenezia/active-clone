@@ -65,6 +65,12 @@ const SYSTEM_ACTIONS: ActionType[] = [
     description: "Repeat steps for each item of a list (up to 50)",
     category: "System",
   },
+  {
+    id: "Fórmula",
+    label: "Fórmula",
+    description: "Transformá datos con una expresión (JSONata)",
+    category: "System",
+  },
 ];
 
 // Combine System actions with plugin actions
