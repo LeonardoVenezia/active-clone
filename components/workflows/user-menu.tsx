@@ -97,7 +97,7 @@ export const UserMenu = () => {
             size="sm"
             variant="default"
           >
-            Sign In
+            Iniciar sesión
           </Button>
         </AuthDialog>
       </div>
