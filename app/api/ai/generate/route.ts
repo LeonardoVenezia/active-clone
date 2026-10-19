@@ -126,6 +126,8 @@ PLANNING RULES (IMPORTANT):
 - N similar outputs from a list (e.g. "generate 3 videos from the 3 chosen scripts") MUST be ONE Loop node with a single inner step, never N separate nodes. The step that produces the list must output STRUCTURED data (an array), so when using an AI text step to produce it, ask it for JSON object output with an array field (use the action's structured/object format when it has one) and point the Loop's source at that array.
 - Market, competitor or web research MUST use the Perplexity research action when it is available in the plugin list (it has live web access). Never simulate research with a plain text-generation step.
 - If the user asks to be presented options to review or choose from, ALWAYS end the workflow with a final presentation step that lists every option clearly (title, content, why it was chosen, and link or media).
+- Every edge endpoint MUST be the id of a node you actually emitted in this response. Never create an edge to or from a node that does not exist.
+- Template references MUST use only the output field names listed after "outputs:" for that action in the plugin list above (e.g. if the action lists "outputs: report, citations", {{@node-id:Label.report}} is valid and {{@node-id:Label.answer}} is not). For steps with structured/object format enabled, reference the object field; for plain text format, the text field.
 
 Edge structure:
 {
