@@ -118,7 +118,7 @@ const MultiSelectionPanel = ({
               variant="ghost"
             >
               <Trash2 className="mr-2 size-4" />
-              Delete
+              Eliminar
             </Button>
           </div>
         </div>
@@ -564,7 +564,7 @@ export const PanelInner = () => {
                   variant="ghost"
                 >
                   <Trash2 className="mr-2 size-4" />
-                  Delete
+                  Eliminar
                 </Button>
               </div>
             )}
@@ -586,7 +586,7 @@ export const PanelInner = () => {
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction onClick={handleDeleteEdge}>
-                Delete
+                Eliminar
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -670,7 +670,7 @@ export const PanelInner = () => {
                     variant="ghost"
                   >
                     <Eraser className="mr-2 size-4" />
-                    Clear
+                    Limpiar
                   </Button>
                   {isOwner && (
                   <Button
@@ -680,7 +680,7 @@ export const PanelInner = () => {
                     variant="ghost"
                   >
                     <Trash2 className="mr-2 size-4" />
-                    Delete
+                    Eliminar
                   </Button>
                   )}
                 </div>

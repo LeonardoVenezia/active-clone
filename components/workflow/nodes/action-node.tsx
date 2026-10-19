@@ -286,7 +286,7 @@ export const ActionNode = memo(({ data, selected, id }: ActionNodeProps) => {
           <Zap className="size-12 text-muted-foreground" strokeWidth={1.5} />
           <div className="flex flex-col items-center gap-1 text-center">
             <NodeTitle className="text-base">
-              {data.label || "Action"}
+              {data.label || "Acción"}
             </NodeTitle>
             <NodeDescription className="text-xs">
               Select an action

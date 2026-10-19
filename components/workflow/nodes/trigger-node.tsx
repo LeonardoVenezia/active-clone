@@ -35,7 +35,7 @@ export const TriggerNode = memo(({ data, selected }: TriggerNodeProps) => {
     : data.label || triggerType;
   const displayDescription = isPlaceholder
     ? "Elegí cómo arranca"
-    : data.description || "Trigger";
+    : data.description || "Disparador";
   const status = data.status;
 
   // Select icon based on trigger type
