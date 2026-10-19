@@ -100,7 +100,7 @@ const MultiSelectionPanel = ({
     <>
       <div className="flex size-full flex-col">
         <div className="flex h-14 w-full shrink-0 items-center border-b bg-transparent px-4">
-          <h2 className="font-semibold text-foreground">Properties</h2>
+          <h2 className="font-semibold text-foreground">Propiedades</h2>
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
           <div className="space-y-2">
@@ -135,7 +135,7 @@ const MultiSelectionPanel = ({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete}>Eliminar</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -533,7 +533,7 @@ export const PanelInner = () => {
       <>
         <div className="flex size-full flex-col">
           <div className="flex h-14 w-full shrink-0 items-center border-b bg-transparent px-4">
-            <h2 className="font-semibold text-foreground">Properties</h2>
+            <h2 className="font-semibold text-foreground">Propiedades</h2>
           </div>
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
             <div className="space-y-2">
@@ -610,20 +610,20 @@ export const PanelInner = () => {
               className="bg-transparent text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none"
               value="properties"
             >
-              Properties
+              Propiedades
             </TabsTrigger>
             <TabsTrigger
               className="bg-transparent text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none"
               value="code"
             >
-              Code
+              Código
             </TabsTrigger>
             {canEdit && (
               <TabsTrigger
                 className="bg-transparent text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none"
                 value="runs"
               >
-                Runs
+                Ejecuciones
               </TabsTrigger>
             )}
           </TabsList>
@@ -634,7 +634,7 @@ export const PanelInner = () => {
             <div className="flex-1 space-y-4 overflow-y-auto p-4">
               <div className="space-y-2">
                 <Label className="ml-1" htmlFor="workflow-name">
-                  Workflow Name
+                  Nombre del workflow
                 </Label>
                 <Input
                   disabled={!canEdit}
@@ -866,7 +866,7 @@ export const PanelInner = () => {
               className="bg-transparent text-muted-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none"
               value="code"
             >
-              Code
+              Código
             </TabsTrigger>
           ) : null}
           {canEdit && (
@@ -1172,7 +1172,7 @@ export const PanelInner = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete}>Eliminar</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

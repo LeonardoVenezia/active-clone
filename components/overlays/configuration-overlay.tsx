@@ -396,7 +396,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
             <div className="pt-2">
               <Button onClick={handleDeleteEdge} variant="ghost">
                 <Trash2 className="mr-2 size-4" />
-                Delete Connection
+                Eliminar conexión
               </Button>
             </div>
           )}
@@ -451,12 +451,12 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
                 <div className="flex items-center gap-2 pt-2">
                   <Button onClick={handleClearWorkflow} variant="ghost">
                     <Eraser className="mr-2 size-4" />
-                    Clear
+                    Limpiar
                   </Button>
                   {isOwner && (
                   <Button onClick={handleDeleteWorkflow} variant="ghost">
                     <Trash2 className="mr-2 size-4" />
-                    Delete
+                    Eliminar
                   </Button>
                   )}
                 </div>
@@ -679,7 +679,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
                   variant="ghost"
                 >
                   <Trash2 className="mr-2 size-4" />
-                  Delete
+                  Eliminar
                 </Button>
               </div>
             )}
