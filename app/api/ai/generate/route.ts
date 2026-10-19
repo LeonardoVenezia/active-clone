@@ -93,6 +93,7 @@ System action types (built-in):
 - Database Query: {"actionType": "Database Query", "dbQuery": "SELECT * FROM table", "dbTable": "table"}
 - HTTP Request: {"actionType": "HTTP Request", "httpMethod": "POST", "endpoint": "https://api.example.com", "httpHeaders": "{}", "httpBody": "{}"}
 - Condition: {"actionType": "Condition", "condition": "{{@nodeId:Label.field}} === 'value'"}
+- Fórmula: {"actionType": "Fórmula", "input": "{\"precio\": 100}", "expression": "precio * 1.21"} — evaluates a JSONata expression over the JSON input; use it to transform, calculate, filter or reshape data between steps. "input" is a JSON string that may contain {{@...}} templates; "expression" is plain JSONata (no {{@...}} templates inside).
 
 Plugin action types (from integrations):
 ${pluginActionPrompts}
@@ -119,6 +120,12 @@ Example: "if good send Slack, if bad create ticket" needs TWO conditions:
 {"op": "addEdge", "edge": {"source": "rate", "target": "cond-bad"}}
 {"op": "addEdge", "edge": {"source": "cond-good", "target": "slack"}}
 {"op": "addEdge", "edge": {"source": "cond-bad", "target": "ticket"}}
+
+PLANNING RULES (IMPORTANT):
+- Independent first steps with no dependency between them MUST be parallel branches from the trigger, never chained in series (e.g. a "get product" and a "get item" both connect from the trigger; their results join at the first step that needs both).
+- N similar outputs from a list (e.g. "generate 3 videos from the 3 chosen scripts") MUST be ONE Loop node with a single inner step, never N separate nodes. The step that produces the list must output STRUCTURED data (an array), so when using an AI text step to produce it, ask it for JSON object output with an array field (use the action's structured/object format when it has one) and point the Loop's source at that array.
+- Market, competitor or web research MUST use the Perplexity research action when it is available in the plugin list (it has live web access). Never simulate research with a plain text-generation step.
+- If the user asks to be presented options to review or choose from, ALWAYS end the workflow with a final presentation step that lists every option clearly (title, content, why it was chosen, and link or media).
 
 Edge structure:
 {
