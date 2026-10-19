@@ -216,7 +216,7 @@ export default function FlowsPage() {
 
   return <main className="pointer-events-auto fixed inset-0 z-20 flex flex-col bg-background"><AppHeader /><div className="flex-1 overflow-auto p-4 sm:p-6"><div className="mx-auto max-w-5xl space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-bold">Workflows</h1><Button asChild size="sm"><a href="/?new=1">+ Nuevo workflow</a></Button></div>
-    {isPending ? <p>Cargando...</p> : !signedIn ? <div className="space-y-3 rounded-xl border p-5"><p className="font-semibold">Iniciá sesión para ver y crear workflows.</p><p className="text-sm text-muted-foreground">Se guardan en tu cuenta.</p><AuthDialog><Button>Sign In</Button></AuthDialog></div> : <>
+    {isPending ? <p>Cargando...</p> : !signedIn ? <div className="space-y-3 rounded-xl border p-5"><p className="font-semibold">Iniciá sesión para ver y crear workflows.</p><p className="text-sm text-muted-foreground">Se guardan en tu cuenta.</p><AuthDialog><Button>Iniciar sesión</Button></AuthDialog></div> : <>
       {error && <p role="alert" className="text-destructive">{error}</p>}
       {rows === null && <p>Cargando workflows...</p>}
       {rows?.length === 0 && !error && <p>Todavía no tenés workflows. <a className="underline" href="/?new=1">Creá uno.</a></p>}

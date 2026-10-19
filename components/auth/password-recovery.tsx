@@ -22,7 +22,7 @@ export function PasswordRecovery({ reset = false }: { reset?: boolean }) {
     const params = new URLSearchParams(window.location.search);
     if (!params.get("token") || params.get("error")) {
       setInvalidLink(true);
-      setError("This reset link is invalid or expired. Request a new one.");
+      setError("Este enlace es inválido o ya venció. Pedí uno nuevo.");
     }
   }, [reset]);
 
@@ -32,7 +32,7 @@ export function PasswordRecovery({ reset = false }: { reset?: boolean }) {
     setError("");
     setMessage("");
     if (reset && password !== confirmation) {
-      setError("Passwords do not match.");
+      setError("Las contraseñas no coinciden.");
       return;
     }
     setBusy(true);
@@ -41,7 +41,7 @@ export function PasswordRecovery({ reset = false }: { reset?: boolean }) {
         const params = new URLSearchParams(window.location.search);
         const token = params.get("token");
         if (!token || params.get("error")) {
-          setError("This reset link is invalid or expired. Request a new one.");
+          setError("Este enlace es inválido o ya venció. Pedí uno nuevo.");
           return;
         }
         const response = await authClient.resetPassword({
@@ -49,28 +49,28 @@ export function PasswordRecovery({ reset = false }: { reset?: boolean }) {
           token,
         });
         if (response.error) {
-          setError("This reset link is invalid or expired. Request a new one.");
+          setError("Este enlace es inválido o ya venció. Pedí uno nuevo.");
           return;
         }
         setCompleted(true);
         setPassword("");
         setConfirmation("");
-        setMessage("Password changed. Sign in with your new password.");
+        setMessage("Contraseña cambiada. Iniciá sesión con la nueva.");
       } else {
         const response = await authClient.requestPasswordReset({
           email,
           redirectTo: `${window.location.origin}/reset-password`,
         });
         if (response.error) {
-          setError("Could not request a reset. Try again later.");
+          setError("No se pudo pedir el enlace. Probá de nuevo en un rato.");
           return;
         }
         setMessage(
-          "If an account exists for that address, you will receive a reset link.",
+          "Si hay una cuenta con ese email, te llega un enlace para recuperarla.",
         );
       }
     } catch {
-      setError("Could not complete the request. Try again later.");
+      setError("No se pudo completar. Probá de nuevo en un rato.");
     } finally {
       setBusy(false);
     }
@@ -81,11 +81,11 @@ export function PasswordRecovery({ reset = false }: { reset?: boolean }) {
     return (
       <main className="pointer-events-auto relative z-20 mx-auto mt-20 w-full max-w-md rounded-xl border bg-background p-6 shadow-lg">
         <h1 className="text-2xl font-semibold">
-          {reset ? "Password updated" : "Check your email"}
+          {reset ? "Contraseña actualizada" : "Revisá tu email"}
         </h1>
         <p role="status" className="mt-2 text-sm text-muted-foreground">
           {reset
-            ? "Your password was changed. Sign in with your new password."
+            ? "Tu contraseña ya fue cambiada. Iniciá sesión con la nueva."
             : `If an account exists for ${email}, we sent a link to reset your password. It may take a minute to arrive.`}
         </p>
         <div className="mt-6">
@@ -100,18 +100,18 @@ export function PasswordRecovery({ reset = false }: { reset?: boolean }) {
   return (
     <main className="pointer-events-auto relative z-20 mx-auto mt-20 w-full max-w-md rounded-xl border bg-background p-6 shadow-lg">
       <h1 className="text-2xl font-semibold">
-        {reset ? "Choose a new password" : "Reset your password"}
+        {reset ? "Elegí una contraseña nueva" : "Recuperá tu contraseña"}
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
         {reset
           ? "Use at least 8 characters."
-          : "Enter your account email to request a reset link."}
+          : "Ingresá el email de tu cuenta y te mandamos un enlace."}
       </p>
       <form className="mt-6 space-y-4" onSubmit={submit}>
         {reset ? (
           <>
             <div className="space-y-2">
-              <Label htmlFor="new-password">New password</Label>
+              <Label htmlFor="new-password">Nueva contraseña</Label>
               <Input
                 id="new-password"
                 type="password"
@@ -124,7 +124,7 @@ export function PasswordRecovery({ reset = false }: { reset?: boolean }) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="confirm-password">Confirm password</Label>
+              <Label htmlFor="confirm-password">Confirmá la contraseña</Label>
               <Input
                 id="confirm-password"
                 type="password"
@@ -165,7 +165,7 @@ export function PasswordRecovery({ reset = false }: { reset?: boolean }) {
           className="w-full"
           disabled={busy || invalidLink || completed}
         >
-          {busy ? "Working..." : reset ? "Change password" : "Send reset link"}
+          {busy ? "Procesando..." : reset ? "Cambiar contraseña" : "Enviar enlace"}
         </Button>
       </form>
       <div className="mt-4 flex justify-between text-sm">

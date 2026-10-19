@@ -131,11 +131,26 @@ const getProviderLabel = (provider: Provider) => {
   }
 };
 
+// Map the most common better-auth server messages to Spanish; keep the
+// original text for anything we don't recognize.
+const authErrorEs = (message: string | undefined, fallback: string) => {
+  if (!message) return fallback;
+  const m = message.toLowerCase();
+  if (m.includes("invalid email or password"))
+    return "Email o contraseña incorrectos.";
+  if (m.includes("user already exists") || m.includes("email already"))
+    return "Ya existe una cuenta con ese email.";
+  if (m.includes("password") && m.includes("short"))
+    return "La contraseña tiene que tener al menos 8 caracteres.";
+  if (m.includes("invalid email")) return "Ese email no parece válido.";
+  return message;
+};
+
 const getButtonText = (loading: boolean, mode: "signin" | "signup") => {
   if (loading) {
-    return "Loading...";
+    return "Cargando...";
   }
-  return mode === "signup" ? "Sign Up" : "Sign In";
+  return mode === "signup" ? "Crear cuenta" : "Iniciar sesión";
 };
 
 type EmailFormProps = {
@@ -170,12 +185,12 @@ const EmailForm = ({
       {mode === "signup" && (
         <div className="space-y-2">
           <Label className="ml-1" htmlFor="name">
-            Name
+            Nombre
           </Label>
           <Input
             id="name"
             onChange={(e) => onNameChange(e.target.value)}
-            placeholder="John Doe"
+            placeholder="Tu nombre"
             required
             type="text"
             value={name}
@@ -189,7 +204,7 @@ const EmailForm = ({
         <Input
           id="email"
           onChange={(e) => onEmailChange(e.target.value)}
-          placeholder="you@example.com"
+          placeholder="tu@email.com"
           required
           type="email"
           value={email}
@@ -197,7 +212,7 @@ const EmailForm = ({
       </div>
       <div className="space-y-2">
         <Label className="ml-1" htmlFor="password">
-          Password
+          Contraseña
         </Label>
         <Input
           id="password"
@@ -218,7 +233,7 @@ const EmailForm = ({
         className="block text-sm underline underline-offset-4"
         href="/forgot-password"
       >
-        Forgot your password?
+        ¿Olvidaste tu contraseña?
       </Link>
     )}
 
@@ -229,8 +244,8 @@ const EmailForm = ({
         type="button"
       >
         {mode === "signin"
-          ? "Don't have an account? Sign up"
-          : "Already have an account? Sign in"}
+          ? "¿No tenés cuenta? Creá una"
+          : "¿Ya tenés cuenta? Iniciá sesión"}
       </button>
     </div>
   </div>
@@ -261,7 +276,7 @@ const SocialButtons = ({
         variant="outline"
       >
         <VercelIcon />
-        {loadingProvider === "vercel" ? "Loading..." : "Sign In with Vercel"}
+        {loadingProvider === "vercel" ? "Cargando..." : "Continuar con Vercel"}
       </Button>
     )}
     {enabledProviders.github && (
@@ -273,7 +288,7 @@ const SocialButtons = ({
         variant="outline"
       >
         <GitHubIcon />
-        {loadingProvider === "github" ? "Loading..." : "Sign In with GitHub"}
+        {loadingProvider === "github" ? "Cargando..." : "Continuar con GitHub"}
       </Button>
     )}
     {enabledProviders.google && (
@@ -285,7 +300,7 @@ const SocialButtons = ({
         variant="outline"
       >
         <GoogleIcon />
-        {loadingProvider === "google" ? "Loading..." : "Sign In with Google"}
+        {loadingProvider === "google" ? "Cargando..." : "Continuar con Google"}
       </Button>
     )}
   </div>
@@ -331,7 +346,7 @@ const useAuthHandlers = (options: AuthHandlersOptions): UseAuthHandlers => {
       setLoadingProvider(provider);
       await signIn.social({ provider, callbackURL: window.location.pathname });
     } catch {
-      toast.error(`Failed to sign in with ${getProviderLabel(provider)}`);
+      toast.error(`No se pudo iniciar sesión con ${getProviderLabel(provider)}`);
       setLoadingProvider(null);
     }
   };
@@ -348,7 +363,7 @@ const useAuthHandlers = (options: AuthHandlersOptions): UseAuthHandlers => {
       name,
     });
     if (signUpResponse.error) {
-      setError(signUpResponse.error.message || "Sign up failed");
+      setError(authErrorEs(signUpResponse.error.message, "No se pudo crear la cuenta"));
       return false;
     }
 
@@ -357,11 +372,11 @@ const useAuthHandlers = (options: AuthHandlersOptions): UseAuthHandlers => {
       password,
     });
     if (signInResponse.error) {
-      setError(signInResponse.error.message || "Sign in failed");
+      setError(authErrorEs(signInResponse.error.message, "No se pudo iniciar sesión"));
       return false;
     }
 
-    toast.success("Account created and signed in successfully!");
+    toast.success("Cuenta creada. Sesión iniciada.");
     return true;
   };
 
@@ -371,11 +386,11 @@ const useAuthHandlers = (options: AuthHandlersOptions): UseAuthHandlers => {
       password,
     });
     if (response.error) {
-      setError(response.error.message || "Sign in failed");
+      setError(authErrorEs(response.error.message, "No se pudo iniciar sesión"));
       return false;
     }
 
-    toast.success("Signed in successfully!");
+    toast.success("Sesión iniciada.");
     return true;
   };
 
@@ -391,7 +406,7 @@ const useAuthHandlers = (options: AuthHandlersOptions): UseAuthHandlers => {
         setOpen(false);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Authentication failed");
+      setError(err instanceof Error ? err.message : "No se pudo autenticar");
     } finally {
       setLoading(false);
     }
@@ -445,7 +460,7 @@ const SingleProviderButton = ({
       ) : (
         getProviderIcon(provider, true)
       )}
-      <span className="text-sm">Sign In</span>
+      <span className="text-sm">Iniciar sesión</span>
     </Button>
   );
 };
@@ -487,19 +502,19 @@ const EmailOnlyDialog = ({
     <DialogTrigger asChild>
       {children || (
         <Button size="sm" variant="default">
-          Sign In
+          Iniciar sesión
         </Button>
       )}
     </DialogTrigger>
     <DialogContent className="sm:max-w-md">
       <DialogHeader>
         <DialogTitle>
-          {mode === "signin" ? "Sign In" : "Create Account"}
+          {mode === "signin" ? "Iniciar sesión" : "Crear cuenta"}
         </DialogTitle>
         <DialogDescription>
           {mode === "signin"
-            ? "Sign in to your account to continue"
-            : "Create a new account to get started"}
+            ? "Ingresá a tu cuenta para continuar"
+            : "Creá tu cuenta para empezar"}
         </DialogDescription>
       </DialogHeader>
 
@@ -567,12 +582,12 @@ const MultiProviderDialog = ({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {mode === "signin" ? "Sign In" : "Create Account"}
+            {mode === "signin" ? "Iniciar sesión" : "Crear cuenta"}
           </DialogTitle>
           <DialogDescription>
             {mode === "signin"
-              ? "Choose how you want to sign in to continue"
-              : "Create a new account to get started"}
+              ? "Elegí cómo querés ingresar"
+              : "Creá tu cuenta para empezar"}
           </DialogDescription>
         </DialogHeader>
 
@@ -592,7 +607,7 @@ const MultiProviderDialog = ({
               </div>
               <div className="relative flex justify-center text-xs uppercase">
                 <span className="bg-background px-2 text-muted-foreground">
-                  Or Sign In with email
+                  O ingresá con tu email
                 </span>
               </div>
             </div>

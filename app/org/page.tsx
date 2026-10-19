@@ -313,7 +313,7 @@ export default function OrgPage() {
                 Iniciá sesión para crear o administrar tu empresa.
               </p>
               <AuthDialog>
-                <Button>Sign In</Button>
+                <Button>Iniciar sesión</Button>
               </AuthDialog>
             </div>
           ) : (
