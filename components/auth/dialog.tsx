@@ -575,7 +575,7 @@ const MultiProviderDialog = ({
       <DialogTrigger asChild>
         {children || (
           <Button size="sm" variant="default">
-            Sign In
+            Iniciar sesión
           </Button>
         )}
       </DialogTrigger>
