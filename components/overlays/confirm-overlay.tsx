@@ -34,9 +34,9 @@ type ConfirmOverlayProps = {
  * const { open } = useOverlay();
  *
  * open(ConfirmOverlay, {
- *   title: "Delete Item",
- *   message: "Are you sure you want to delete this item? This action cannot be undone.",
- *   confirmLabel: "Delete",
+ *   title: "Eliminar",
+ *   message: "¿Seguro que querés eliminarlo? Esto no se puede deshacer.",
+ *   confirmLabel: "Eliminar",
  *   confirmVariant: "destructive",
  *   destructive: true,
  *   onConfirm: async () => {
@@ -47,10 +47,10 @@ type ConfirmOverlayProps = {
  */
 export function ConfirmOverlay({
   overlayId,
-  title = "Confirm",
+  title = "Confirmar",
   message,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel = "Confirmar",
+  cancelLabel = "Cancelar",
   confirmVariant = "default",
   destructive = false,
   onConfirm,

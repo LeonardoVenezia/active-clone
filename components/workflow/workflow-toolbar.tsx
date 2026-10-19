@@ -419,7 +419,7 @@ async function executeTestWorkflow({
     });
 
     if (!response.ok) {
-      throw new Error("Failed to execute workflow");
+      throw new Error("No se pudo ejecutar el workflow");
     }
 
     const result = await response.json();
@@ -469,7 +469,7 @@ async function executeTestWorkflow({
   } catch (error) {
     console.error("Failed to execute workflow:", error);
     toast.error(
-      error instanceof Error ? error.message : "Failed to execute workflow"
+      error instanceof Error ? error.message : "No se pudo ejecutar el workflow"
     );
     updateNodesStatus(nodes, updateNodeData, "error");
     setIsExecuting(false);
@@ -539,7 +539,7 @@ function useWorkflowHandlers({
       setHasUnsavedChanges(false);
     } catch (error) {
       console.error("Failed to save workflow:", error);
-      toast.error("Failed to save workflow. Please try again.");
+      toast.error("No se pudo guardar el workflow. Probá de nuevo.");
     } finally {
       setIsSaving(false);
     }
@@ -547,7 +547,7 @@ function useWorkflowHandlers({
 
   const executeWorkflow = async () => {
     if (!currentWorkflowId) {
-      toast.error("Please save the workflow before executing");
+      toast.error("Guardá el workflow antes de ejecutarlo.");
       return;
     }
 
@@ -558,19 +558,19 @@ function useWorkflowHandlers({
       // Execute API reads the saved workflow, so persist this exact canvas first.
       await api.workflow.update(currentWorkflowId, { nodes, edges });
       if (store.get(currentWorkflowIdAtom) !== currentWorkflowId) {
-        toast.error("Workflow changed while saving. Run stopped.");
+        toast.error("El workflow cambió mientras se guardaba. Ejecución detenida.");
         return;
       }
       if (JSON.stringify(store.get(nodesAtom)) !== JSON.stringify(nodes) ||
           JSON.stringify(store.get(edgesAtom)) !== JSON.stringify(edges)) {
-        toast.error("The canvas changed while saving. Run again to include your latest edits.");
+        toast.error("El canvas cambió mientras se guardaba. Ejecutá de nuevo para incluir tus últimos cambios.");
         return;
       }
       setHasUnsavedChanges(false);
       setIsExecuting(true);
     } catch (error) {
       console.error("Failed to save before run:", error);
-      toast.error("Could not save your changes. Nothing was run. Try Run again.");
+      toast.error("No se pudieron guardar los cambios. No se ejecutó nada. Probá de nuevo.");
       return;
     } finally {
       setIsSaving(false);
@@ -819,10 +819,10 @@ function useWorkflowActions(state: ReturnType<typeof useWorkflowState>) {
 
   const handleClearWorkflow = () => {
     openOverlay(ConfirmOverlay, {
-      title: "Clear Workflow",
+      title: "Limpiar workflow",
       message:
-        "Are you sure you want to clear all nodes and connections? This action cannot be undone.",
-      confirmLabel: "Clear Workflow",
+        "¿Seguro que querés borrar todos los pasos y conexiones? Esto no se puede deshacer.",
+      confirmLabel: "Limpiar todo",
       confirmVariant: "destructive" as const,
       destructive: true,
       onConfirm: () => {
@@ -833,9 +833,9 @@ function useWorkflowActions(state: ReturnType<typeof useWorkflowState>) {
 
   const handleDeleteWorkflow = () => {
     openOverlay(ConfirmOverlay, {
-      title: "Delete Workflow",
-      message: `Are you sure you want to delete "${workflowName}"? This will permanently delete the workflow. This cannot be undone.`,
-      confirmLabel: "Delete Workflow",
+      title: "Eliminar workflow",
+      message: `¿Seguro que querés eliminar "${workflowName}"? Se borra para siempre y no se puede deshacer.`,
+      confirmLabel: "Eliminar",
       confirmVariant: "destructive" as const,
       destructive: true,
       onConfirm: async () => {
@@ -1163,11 +1163,11 @@ function ToolbarActions({
           disabled={state.isGenerating}
           onClick={handleAddStep}
           size="sm"
-          title="Add Step"
+          title="Agregar paso"
           variant="secondary"
         >
           <Plus className="size-4" />
-          <span>Add step</span>
+          <span>Agregar paso</span>
         </Button>
       </ButtonGroup>
 
@@ -1177,7 +1177,7 @@ function ToolbarActions({
           className="border hover:bg-black/5 dark:hover:bg-white/5"
           onClick={() => openOverlay(ConfigurationOverlay, {})}
           size="icon"
-          title="Configuration"
+          title="Configuración"
           variant="secondary"
         >
           <Settings2 className="size-4" />
@@ -1188,7 +1188,7 @@ function ToolbarActions({
             className="border hover:bg-black/5 dark:hover:bg-white/5"
             onClick={handleDeleteConfirm}
             size="icon"
-            title="Delete"
+            title="Eliminar"
             variant="secondary"
           >
             <Trash2 className="size-4" />
@@ -1203,11 +1203,11 @@ function ToolbarActions({
           disabled={state.isGenerating}
           onClick={handleAddStep}
           size="sm"
-          title="Add Step"
+          title="Agregar paso"
           variant="secondary"
         >
           <Plus className="size-4" />
-          <span>Add step</span>
+          <span>Agregar paso</span>
         </Button>
       </ButtonGroup>
 
@@ -1218,7 +1218,7 @@ function ToolbarActions({
           disabled={!state.canUndo || state.isGenerating}
           onClick={() => state.undo()}
           size="icon"
-          title="Undo"
+          title="Deshacer"
           variant="secondary"
         >
           <Undo2 className="size-4" />
@@ -1228,7 +1228,7 @@ function ToolbarActions({
           disabled={!state.canRedo || state.isGenerating}
           onClick={() => state.redo()}
           size="icon"
-          title="Redo"
+          title="Rehacer"
           variant="secondary"
         >
           <Redo2 className="size-4" />
@@ -1242,7 +1242,7 @@ function ToolbarActions({
           disabled={!state.canUndo || state.isGenerating}
           onClick={() => state.undo()}
           size="icon"
-          title="Undo"
+          title="Deshacer"
           variant="secondary"
         >
           <Undo2 className="size-4" />
@@ -1252,7 +1252,7 @@ function ToolbarActions({
           disabled={!state.canRedo || state.isGenerating}
           onClick={() => state.redo()}
           size="icon"
-          title="Redo"
+          title="Rehacer"
           variant="secondary"
         >
           <Redo2 className="size-4" />
@@ -1297,7 +1297,7 @@ function SaveButton({
       }
       onClick={handleSave}
       size="icon"
-      title={state.isSaving ? "Saving..." : "Save workflow"}
+      title={state.isSaving ? "Guardando..." : "Guardar workflow"}
       variant="secondary"
     >
       {state.isSaving ? (
@@ -1397,7 +1397,7 @@ function VisibilityButton({
           className="border hover:bg-black/5 dark:hover:bg-white/5"
           disabled={!state.currentWorkflowId || state.isGenerating}
           size="icon"
-          title={isPublic ? "Public workflow" : "Private workflow"}
+          title={isPublic ? "Workflow público" : "Workflow privado"}
           variant="secondary"
         >
           {isPublic ? (
@@ -1445,7 +1445,7 @@ function RunButtonGroup({
       }
       onClick={() => actions.handleExecute()}
       size="icon"
-      title="Save and Run Workflow"
+      title="Guardar y ejecutar"
       variant="secondary"
     >
       {state.isExecuting ? (
@@ -1471,7 +1471,7 @@ function DuplicateButton({
       disabled={isDuplicating}
       onClick={onDuplicate}
       size="sm"
-      title="Duplicate to your workflows"
+      title="Duplicar en tus workflows"
       variant="secondary"
     >
       {isDuplicating ? (
@@ -1530,7 +1530,7 @@ function InlineWorkflowName({
 
   return (
     <input
-      aria-label="Workflow name"
+      aria-label="Nombre del workflow"
       className="min-w-[6rem] max-w-[14rem] truncate rounded bg-transparent px-1 py-0.5 font-medium text-sm outline-none hover:bg-black/5 focus:bg-background focus:ring-1 focus:ring-ring disabled:cursor-default dark:hover:bg-white/5"
       disabled={!editable}
       maxLength={100}
@@ -1579,8 +1579,8 @@ function WorkflowMenuComponent({
               />
             ) : (
               <p className="truncate font-medium text-sm">
-                <span className="sm:hidden">New</span>
-                <span className="hidden sm:inline">New Workflow</span>
+                <span className="sm:hidden">Nuevo</span>
+                <span className="hidden sm:inline">Nuevo workflow</span>
               </p>
             )}
           </div>
@@ -1602,7 +1602,7 @@ function WorkflowMenuComponent({
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {state.allWorkflows.length === 0 ? (
-              <DropdownMenuItem disabled>No workflows found</DropdownMenuItem>
+              <DropdownMenuItem disabled>No hay workflows</DropdownMenuItem>
             ) : (
               state.allWorkflows
                 .filter((w) => w.name !== "__current__")
