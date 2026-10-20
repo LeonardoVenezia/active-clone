@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
 import { getActionOutputFields, getAllActions } from "@/plugins/registry";
-import { type FlowEdge, type FlowNode, planCoverageError, validateFlow } from "@/lib/flow-validator";
+import { type FlowEdge, type FlowNode, planCoverageError, requestCoverageError, validateFlow } from "@/lib/flow-validator";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
 
 type Operation = {
@@ -164,6 +164,8 @@ PLANNING RULES (IMPORTANT):
 - Independent first steps with no dependency between them MUST be parallel branches from the trigger, never chained in series (e.g. a "get product" and a "get item" both connect from the trigger; their results join at the first step that needs both).
 - N similar outputs from a list (e.g. "generate 3 videos from the 3 chosen scripts") MUST be ONE Loop node with a single inner step, never N separate nodes. The step that produces the list must output STRUCTURED data (an array), so when using an AI text step to produce it, ask it for JSON object output with an array field (use the action's structured/object format when it has one) and point the Loop's source at that array.
 - Market, competitor or web research MUST use the Perplexity research action when it is available in the plugin list (it has live web access). Never simulate research with a plain text-generation step.
+- Per-item alerts ("if any item is X, notify"): put the Condition INSIDE the Loop as an inner step right after the per-item check, and the notify action as the LAST inner step. A false inner Condition filters that item, so the alert fires only for matching items. Example for "for each order item check stock and if it hit zero alert Slack": Loop {"source": "{{@get-order:Get Order.products}}", "steps": [{"id": "check-product", "actionType": "tiendanube/get-product", "config": {"productId": "{{@item:Item.id}}"}}, {"id": "stock-zero", "actionType": "Condition", "config": {"condition": "{{@check-product:Check Product.stock}} === 0"}}, {"id": "alert", "actionType": "slack/send-message", "config": {"channel": "#deposito", "text": "Sin stock: {{@item:Item.name}}"}}]}. NEVER express a per-item condition as a top-level Condition over the Loop's results.
+- Apps with a listed action: if the app the user names has an action in the plugin list above or in the live Composio catalog, you MUST use that action. NEVER hand-roll an HTTP Request node to that app's API, and NEVER invent its endpoint. HTTP Request is only for apps with NO available action (like WordPress).
 - WordPress: there is no native WordPress action. To publish or edit WordPress content, use an HTTP Request node against the site's REST API. Example (create a post): {"actionType": "HTTP Request", "httpMethod": "POST", "endpoint": "https://<site>/wp-json/wp/v2/posts", "httpHeaders": "{\"Authorization\": \"Basic <base64(usuario:application-password)>\", \"Content-Type\": \"application/json\"}", "httpBody": "{\"title\": ..., \"content\": ..., \"status\": \"publish\"}"}. Auth is HTTP Basic with a WordPress Application Password. NEVER ask for the username or application password in the chat and never invent one: leave the placeholder in httpHeaders and note that the user completes the credential in the node's config panel.
 - If the user asks to be presented options to review or choose from, ALWAYS end the workflow with a final presentation step that lists every option clearly (title, content, why it was chosen, and link or media).
 - Every edge endpoint MUST be the id of a node you actually emitted in this response. Never create an edge to or from a node that does not exist.
@@ -269,6 +271,8 @@ export async function POST(request: Request) {
       const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes());
       const coverage = planCoverageError(userPrompt, shadow.nodes);
       if (coverage) errs.push(coverage);
+      const appCoverage = requestCoverageError(userPrompt, shadow.nodes);
+      if (appCoverage) errs.push(appCoverage);
       return errs;
     };
     async function runCorrectivePass(operationCount: number, encoder: TextEncoder, controller: ReadableStreamDefaultController): Promise<number> {

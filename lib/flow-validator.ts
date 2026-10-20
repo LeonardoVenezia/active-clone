@@ -173,7 +173,11 @@ export function validateFlow(
     for (const { path, value } of strings) {
       for (const re of PLACEHOLDER_RES) {
         if (re.test(value)) {
-          errors.push(`consistencia: node "${n.id}" (${label}) field "${path}" looks like a placeholder ("${value.slice(0, 60)}"); use a real value or a {{@...}} reference`);
+          if (/endpoint|url/i.test(path)) {
+            errors.push(`consistencia: node "${n.id}" (${label}) field "${path}" has a placeholder URL ("${value.slice(0, 60)}"); if an action for this app exists in the plugin list or the live Composio catalog you MUST use that action instead of a hand-rolled HTTP Request; otherwise set the real endpoint (if the user explicitly provided this exact value, keep it)`);
+          } else {
+            errors.push(`consistencia: node "${n.id}" (${label}) field "${path}" looks like a placeholder ("${value.slice(0, 60)}"); use a real value or a {{@...}} reference`);
+          }
           break;
         }
       }
@@ -220,4 +224,70 @@ export function planCoverageError(promptText: string, nodes: FlowNode[]): string
   const actionCount = nodes.filter((n) => !isTrigger(n)).length;
   if (actionCount >= best.length - 1) return null;
   return `consistencia: the request/plan lists ${best.length} numbered steps but the canvas only has ${actionCount} action nodes; add the missing steps as nodes and wire them. Steps: ${best.join(" | ").slice(0, 1500)}`;
+}
+
+/** Known integration names: pattern over a request step -> pattern over a node's text. */
+const APP_MENTIONS: Array<[RegExp, RegExp, string]> = [
+  [/tiendanube/i, /tiendanube/i, "Tiendanube"],
+  [/zipnova/i, /zipnova/i, "Zipnova"],
+  [/slack/i, /slack/i, "Slack"],
+  [/whatsapp/i, /whatsapp/i, "WhatsApp"],
+  [/mercado\s?pago/i, /mercadopago|mercado\s?pago/i, "Mercado Pago"],
+  [/mercado\s?libre/i, /mercadolibre|mercado\s?libre/i, "Mercado Libre"],
+  [/(?:google\s+)?sheets?|planilla|spreadsheet|hoja de c[aá]lculo/i, /googlesheets|google\s+sheets|spreadsheet/i, "Google Sheets"],
+  [/wordpress/i, /wordpress|wp-json/i, "WordPress"],
+  [/perplexity/i, /perplexity/i, "Perplexity"],
+  [/gmail/i, /gmail/i, "Gmail"],
+  [/notion/i, /notion/i, "Notion"],
+  [/stripe/i, /stripe/i, "Stripe"],
+  [/hubspot/i, /hubspot/i, "HubSpot"],
+  [/linear/i, /linear/i, "Linear"],
+  [/airtable/i, /airtable/i, "Airtable"],
+  [/jira/i, /jira/i, "Jira"],
+  [/supabase/i, /supabase/i, "Supabase"],
+  [/github/i, /github/i, "GitHub"],
+  [/enviopack/i, /enviopack/i, "Enviopack"],
+  [/correo\s?argentino/i, /correoargentino|correo\s?argentino/i, "Correo Argentino"],
+  [/\bvtex\b/i, /vtex/i, "VTEX"],
+  [/alegra/i, /alegra/i, "Alegra"],
+  [/xubio/i, /xubio/i, "Xubio"],
+  [/webflow/i, /webflow/i, "Webflow"],
+];
+
+function nodeHaystack(node: FlowNode): string {
+  return JSON.stringify(node.data ?? {}).toLowerCase();
+}
+
+/**
+ * Semantic coverage: every numbered step of the user's request that names a known
+ * integration must have at least one node using that integration. Catches steps the
+ * model silently dropped even when the raw node count looks fine.
+ */
+function extractRequestSteps(promptText: string): string[] {
+  const steps: string[] = [];
+  for (const line of promptText.split("\n")) {
+    if (!/\d{1,2}[.)]\s+\S/.test(line)) continue;
+    for (const part of line.split(/(?=\b\d{1,2}[.)]\s)/)) {
+      if (/^\s*\d{1,2}[.)]\s+\S/.test(part)) steps.push(part.trim());
+    }
+  }
+  return steps;
+}
+
+export function requestCoverageError(promptText: string, nodes: FlowNode[]): string | null {
+  const missing: string[] = [];
+  const stepLines = extractRequestSteps(promptText);
+  if (stepLines.length < 2) return null;
+  const haystacks = nodes.map(nodeHaystack);
+  for (const line of stepLines) {
+    for (const [stepRe, nodeRe, name] of APP_MENTIONS) {
+      if (!stepRe.test(line)) continue;
+      if (!haystacks.some((h) => nodeRe.test(h))) {
+        missing.push(`${name} (step "${line.trim().slice(0, 80)}")`);
+      }
+    }
+  }
+  if (!missing.length) return null;
+  const uniq = [...new Set(missing)];
+  return `consistencia: the request explicitly asks for ${uniq.join(", ")} but no node uses ${uniq.length === 1 ? "that app" : "those apps"}; add the missing step(s) with the app's plugin or Composio action and wire them in the right position`;
 }
