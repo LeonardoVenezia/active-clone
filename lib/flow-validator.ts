@@ -24,7 +24,7 @@ const PLACEHOLDER_RES: RegExp[] = [
 ];
 
 const SYSTEM_OUTPUTS: OutputsMap = {
-  Loop: ["results", "items", "failed", "count", "completed", "failedCount"],
+  Loop: ["results", "items", "failed", "filtered", "count", "completed", "failedCount", "filteredCount"],
   Approval: ["approved", "note"],
   Fórmula: ["result"],
 };

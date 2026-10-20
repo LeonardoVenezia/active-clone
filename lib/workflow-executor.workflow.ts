@@ -580,8 +580,10 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
       index: number;
       item: unknown;
       steps: Record<string, unknown>;
+      filtered?: boolean;
     }[] = [];
     const failed: { index: number; step?: string; error: string }[] = [];
+    const filtered: { index: number }[] = [];
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
@@ -592,6 +594,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
       };
       let itemResult: unknown = null;
       let itemFailed = false;
+      let itemFiltered = false;
       const stepOutputs: Record<string, unknown> = {};
       for (let s = 0; s < rawSteps.length; s++) {
         const bodyStep = rawSteps[s] as {
@@ -650,6 +653,24 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           itemResult = bodyResult;
           stepOutputs[stepId] = bodyResult;
           itemOutputs[stepId] = { label: stepAction, data: bodyResult };
+
+          // Condition inside a Loop: a false result filters the item out —
+          // skip the remaining inner steps for this item and continue with
+          // the next one (not an error).
+          if (
+            stepAction === "Condition" &&
+            bodyResult &&
+            typeof bodyResult === "object" &&
+            (bodyResult as { condition?: unknown }).condition === false
+          ) {
+            console.log(
+              "[Workflow Executor] Loop item",
+              i,
+              "filtered out by inner Condition"
+            );
+            itemFiltered = true;
+            break;
+          }
         } catch (error) {
           failed.push({
             index: i,
@@ -660,7 +681,10 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           break;
         }
       }
-      if (!itemFailed) {
+      if (itemFiltered) {
+        filtered.push({ index: i });
+        loopItems.push({ index: i, item, steps: stepOutputs, filtered: true });
+      } else if (!itemFailed) {
         loopResults.push(itemResult);
         loopItems.push({ index: i, item, steps: stepOutputs });
       }
@@ -679,9 +703,11 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
         results: loopResults,
         items: loopItems,
         failed,
+        filtered,
         count: items.length,
         completed: loopResults.length,
         failedCount: failed.length,
+        filteredCount: filtered.length,
         truncated: list.length > maxItems,
       },
     };
@@ -943,10 +969,10 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
                 }
               };
               walk(nodeId);
-              for (const t of seen) skippedNodes.add(t);
-              skipReasons.push(
-                `Filtro no cumplido en "${getNodeName(node)}": ${seen.size} paso(s) no se ejecutaron`
-              );
+              // Merge semantics: nodes with another active parent still run
+              // (any-parent, once). Record candidates now; count as actually
+              // skipped only the ones that never executed (checked at the end).
+              skipCandidates.push({ label: getNodeName(node), nodes: seen });
             }
           }
         } else {
@@ -976,8 +1002,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
     }
   }
 
-  const skippedNodes = new Set<string>();
-  const skipReasons: string[] = [];
+  const skipCandidates: { label: string; nodes: Set<string> }[] = [];
   // Execute from each trigger node in parallel
   try {
     console.log("[Workflow Executor] Starting execution from trigger nodes");
@@ -987,6 +1012,15 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
 
     const finalSuccess = Object.values(results).every((r) => r.success);
     const duration = Date.now() - workflowStartTime;
+    const skipReasons: string[] = [];
+    for (const { label, nodes: candidates } of skipCandidates) {
+      const notRun = [...candidates].filter((id) => !results[id]);
+      if (notRun.length > 0) {
+        skipReasons.push(
+          `Filtro no cumplido en "${label}": ${notRun.length} paso(s) no se ejecutaron`
+        );
+      }
+    }
 
     console.log("[Workflow Executor] Workflow execution completed:", {
       success: finalSuccess,
