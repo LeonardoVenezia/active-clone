@@ -66,7 +66,8 @@ function reachableFrom(roots: string[], edges: FlowEdge[]): Set<string> {
 export function validateFlow(
   nodes: FlowNode[],
   edges: FlowEdge[],
-  actionOutputs: OutputsMap = {}
+  actionOutputs: OutputsMap = {},
+  validActionTypes?: ReadonlySet<string>
 ): string[] {
   const errors: string[] = [];
   const byId = new Map<string, FlowNode>();
@@ -101,6 +102,14 @@ export function validateFlow(
     const cfg = n.data?.config ?? {};
     const actionType = actionTypeOf(n);
 
+    if (!isTrigger(n)) {
+      if (!actionType) {
+        errors.push(`semántica: node "${n.id}" (${label}) has no actionType in its config`);
+      } else if (validActionTypes && !validActionTypes.has(actionType)) {
+        errors.push(`semántica: node "${n.id}" (${label}) has unknown actionType "${actionType}"; use a system action (Database Query, HTTP Request, Condition, Delay, Fórmula, Loop) or a plugin action id from the list (e.g. "slack/send-message")`);
+      }
+    }
+
     // ai-gateway/generate-text format checks
     if (actionType === "ai-gateway/generate-text") {
       const fmt = cfg.aiFormat;
@@ -127,6 +136,9 @@ export function validateFlow(
         for (const [i, step] of steps.entries()) {
           const s = step as { actionType?: unknown; config?: unknown; id?: unknown };
           if (!s.actionType) errors.push(`semántica: Loop "${n.id}" inner step ${i + 1} has no actionType`);
+          if (validActionTypes && typeof s.actionType === "string" && s.actionType && !validActionTypes.has(s.actionType)) {
+            errors.push(`semántica: Loop "${n.id}" inner step ${i + 1} has unknown actionType "${s.actionType}"; use an action from the provided list`);
+          }
           if (s.actionType === "Loop") errors.push(`semántica: Loop "${n.id}" contains a nested Loop; nesting is not supported`);
           if (!s.config || typeof s.config !== "object") {
             errors.push(`semántica: Loop "${n.id}" inner step ${i + 1} must keep all parameters inside its "config" object`);
@@ -191,4 +203,20 @@ export function validateFlow(
   }
 
   return errors;
+}
+
+/** Longest trailing numbered-list block in the prompt (an approved plan) vs nodes on the canvas. */
+export function planCoverageError(promptText: string, nodes: FlowNode[]): string | null {
+  const lines = promptText.split("\n");
+  let run: string[] = [];
+  let best: string[] = [];
+  for (const line of lines) {
+    if (/^\s*\d+[.)]\s+\S/.test(line)) run.push(line.trim());
+    else { if (run.length >= 4) best = run; run = []; }
+  }
+  if (run.length >= 4) best = run;
+  if (best.length < 4) return null;
+  const actionCount = nodes.filter((n) => !isTrigger(n)).length;
+  if (actionCount >= best.length - 1) return null;
+  return `consistencia: the request/plan lists ${best.length} numbered steps but the canvas only has ${actionCount} action nodes; add the missing steps as nodes and wire them. Steps: ${best.join(" | ").slice(0, 1500)}`;
 }

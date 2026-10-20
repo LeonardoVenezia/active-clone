@@ -3,8 +3,8 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
-import { getActionOutputFields } from "@/plugins/registry";
-import { type FlowEdge, type FlowNode, validateFlow } from "@/lib/flow-validator";
+import { getActionOutputFields, getAllActions } from "@/plugins/registry";
+import { type FlowEdge, type FlowNode, planCoverageError, validateFlow } from "@/lib/flow-validator";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
 
 type Operation = {
@@ -201,6 +201,18 @@ Example output (branching workflow with 250px vertical spacing):
 REMEMBER: After adding all nodes, you MUST add edges to connect them! Every node should be reachable from the trigger.`;
 }
 
+
+const SYSTEM_ACTION_TYPES = ["Database Query", "HTTP Request", "Condition", "Delay", "Fórmula", "Loop"];
+let cachedValidActionTypes: Set<string> | null = null;
+function getValidActionTypes(): Set<string> {
+  if (!cachedValidActionTypes) {
+    cachedValidActionTypes = new Set(SYSTEM_ACTION_TYPES);
+    for (const a of getAllActions()) { cachedValidActionTypes.add(a.id); if (a.label) cachedValidActionTypes.add(a.label); }
+  }
+  return cachedValidActionTypes;
+}
+
+
 export async function POST(request: Request) {
   try {
     const session = await auth.api.getSession({ headers: request.headers });
@@ -239,7 +251,7 @@ export async function POST(request: Request) {
           console.info("[ai-generate] provider attempt", route.name, route.model);
           const provider = new OpenAI({ apiKey: route.apiKey, baseURL: route.baseURL, maxRetries: 0, timeout: 15000 });
           const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: userPrompt }], stream: true, max_tokens: 8192 });
-          for await (const chunk of result) { const value = chunk.choices[0]?.delta?.content; if (value) { got = true; yield value; } }
+          for await (const chunk of result) { if (chunk.choices[0]?.finish_reason === "length") streamState.truncated = true; const value = chunk.choices[0]?.delta?.content; if (value) { got = true; yield value; } }
           if (got) return;
           failures.push(`${route.name}/${route.model}: empty stream`); console.warn("[ai-generate] provider returned no text", route.name, route.model);
         } catch (error) {
@@ -249,9 +261,16 @@ export async function POST(request: Request) {
       }
       console.error("[ai-generate] all providers exhausted before content", failures);
     }
+    const streamState = { truncated: false };
     const shadow: Shadow = { nodes: [...((existingWorkflow?.nodes ?? []) as FlowNode[])], edges: [...((existingWorkflow?.edges ?? []) as FlowEdge[])] };
+    const computeErrors = (): string[] => {
+      const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes());
+      const coverage = planCoverageError(userPrompt, shadow.nodes);
+      if (coverage) errs.push(coverage);
+      return errs;
+    };
     async function runCorrectivePass(operationCount: number, encoder: TextEncoder, controller: ReadableStreamDefaultController): Promise<number> {
-      const errors = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields());
+      const errors = computeErrors();
       if (!errors.length) return operationCount;
       console.warn("[ai-generate] validation errors", errors);
       const nodeList = shadow.nodes.map(n => `- ${n.id} (${n.data?.label ?? ""} / ${String(n.data?.config?.actionType ?? n.data?.type ?? "")})`).join("\n");
@@ -272,7 +291,26 @@ export async function POST(request: Request) {
       return operationCount;
     }
     const encoder = new TextEncoder();
-    const stream = new ReadableStream({ async start(controller) { try { let operationCount = await processOperationStream(textChunks(), encoder, controller, shadow); for (let pass = 0; pass < 2; pass++) { if (!validateFlow(shadow.nodes, shadow.edges, getActionOutputFields()).length) break; operationCount = await runCorrectivePass(operationCount, encoder, controller); } const remaining = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields()); if (remaining.length) { console.warn("[ai-generate] validation errors remain after retries", remaining); controller.enqueue(encodeMessage(encoder, { type: "validation", errors: remaining })); } controller.enqueue(encodeMessage(encoder, { type: "complete" })); controller.close(); } catch (error) { controller.enqueue(encodeMessage(encoder, { type: "error", error: error instanceof Error ? error.message : "Failed to generate workflow" })); controller.close(); } } });
+    async function runContinuationPass(operationCount: number, encoder: TextEncoder, controller: ReadableStreamDefaultController): Promise<number> {
+      console.warn("[ai-generate] output hit the token limit; running continuation pass");
+      const nodeList = shadow.nodes.map(n => `- ${n.id} (${n.data?.label ?? ""} / ${String(n.data?.config?.actionType ?? n.data?.type ?? "")})`).join("\n");
+      const edgeList = shadow.edges.map(e => `- ${e.source} -> ${e.target}`).join("\n");
+      const contPrompt = `Your previous output was CUT OFF by the output token limit BEFORE the workflow was complete.\n\nNodes already added:\n${nodeList}\nEdges already added:\n${edgeList}\n\nEmit ONLY the remaining operations (addNode/addEdge/updateNode) needed to COMPLETE the original request below. Add nodes before the edges that use them. Do NOT recreate existing nodes or edges; reuse their exact ids. Original request: ${userPrompt}`;
+      for (const route of llmRoutes()) {
+        try {
+          console.info("[ai-generate] continuation attempt", route.name, route.model);
+          const provider = new OpenAI({ apiKey: route.apiKey, baseURL: route.baseURL, maxRetries: 0, timeout: 20000 });
+          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: contPrompt }], max_tokens: 8192 });
+          const text = result.choices[0]?.message?.content ?? "";
+          if (!text) continue;
+          let count = operationCount;
+          for (const line of text.split("\n")) count = tryParseAndEnqueueOperation(line, encoder, controller, count, shadow);
+          return count;
+        } catch (error) { console.error("[ai-generate] continuation pass failed", route.name, error instanceof Error ? error.message.slice(0, 200) : "unknown"); }
+      }
+      return operationCount;
+    }
+    const stream = new ReadableStream({ async start(controller) { try { let operationCount = await processOperationStream(textChunks(), encoder, controller, shadow); if (streamState.truncated) operationCount = await runContinuationPass(operationCount, encoder, controller); for (let pass = 0; pass < 2; pass++) { if (!computeErrors().length) break; operationCount = await runCorrectivePass(operationCount, encoder, controller); } const remaining = computeErrors(); if (remaining.length) { console.warn("[ai-generate] validation errors remain after retries", remaining); controller.enqueue(encodeMessage(encoder, { type: "validation", errors: remaining })); } controller.enqueue(encodeMessage(encoder, { type: "complete" })); controller.close(); } catch (error) { controller.enqueue(encodeMessage(encoder, { type: "error", error: error instanceof Error ? error.message : "Failed to generate workflow" })); controller.close(); } } });
     return new Response(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-cache", Connection: "keep-alive" } });
   } catch (error) { console.error("Failed to generate workflow:", error instanceof Error ? error.message.slice(0, 240) : "unknown"); return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to generate workflow" }, { status: 500 }); }
 }
