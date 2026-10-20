@@ -135,6 +135,15 @@ export function validateFlow(
       }
     }
 
+    // Delay sanity
+    if (actionType === "Delay") {
+      const minutes = Number(cfg.durationMinutes ?? 0) || 0;
+      const seconds = Number(cfg.durationSeconds ?? 0) || 0;
+      if (Math.round(minutes * 60 + seconds) <= 0) {
+        errors.push(`semántica: Delay node "${n.id}" (${label}) needs a positive duration (durationMinutes and/or durationSeconds)`);
+      }
+    }
+
     // Condition sanity
     if (actionType === "Condition") {
       const cond = cfg.condition;

@@ -431,6 +431,24 @@ export function generateWorkflowCode(
     return lines;
   }
 
+
+  function generateDelayActionCode(
+    node: WorkflowNode,
+    indent: string,
+    varName: string
+  ): string[] {
+    imports.add(`import { sleep } from 'workflow';`);
+    const config = node.data.config || {};
+    const minutes = Number(config.durationMinutes ?? 0) || 0;
+    const seconds = Number(config.durationSeconds ?? 0) || 0;
+    const totalSeconds = Math.round(minutes * 60 + seconds);
+    return [
+      `${indent}// Delay (durable sleep)`,
+      `${indent}await sleep(${totalSeconds} * 1000);`,
+      `${indent}const ${varName} = { success: true, waitedSeconds: ${totalSeconds} };`,
+    ];
+  }
+
   // Helper to process AI schema and convert to TypeScript literal
   function processAiSchema(aiSchema: string | undefined): string | null {
     if (!aiSchema) {
@@ -836,6 +854,10 @@ export function generateWorkflowCode(
     } else if (actionType === "Fórmula") {
       lines.push(
         ...wrapActionCall(generateFormulaActionCode(node, indent, varName))
+      );
+    } else if (actionType === "Delay") {
+      lines.push(
+        ...wrapActionCall(generateDelayActionCode(node, indent, varName))
       );
     } else {
       // Try to find the action in the plugin registry

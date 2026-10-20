@@ -71,6 +71,12 @@ const SYSTEM_ACTIONS: ActionType[] = [
     description: "Transformá datos con una expresión (JSONata)",
     category: "System",
   },
+  {
+    id: "Delay",
+    label: "Delay",
+    description: "Espera un tiempo antes de seguir (hasta 24 h)",
+    category: "System",
+  },
 ];
 
 // Combine System actions with plugin actions

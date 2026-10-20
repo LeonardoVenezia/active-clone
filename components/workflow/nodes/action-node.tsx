@@ -10,6 +10,7 @@ import {
   EyeOff,
   GitBranch,
   Sigma,
+  Timer,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -77,6 +78,7 @@ const SYSTEM_ACTION_LABELS: Record<string, string> = {
   "Database Query": "Database",
   Condition: "Condition",
   "Fórmula": "Fórmula",
+  Delay: "Delay",
   "Execute Code": "System",
 };
 
@@ -135,6 +137,8 @@ const getProviderLogo = (actionType: string) => {
       return <GitBranch className="size-12 text-pink-300" strokeWidth={1.5} />;
     case "Fórmula":
       return <Sigma className="size-12 text-violet-300" strokeWidth={1.5} />;
+    case "Delay":
+      return <Timer className="size-12 text-amber-300" strokeWidth={1.5} />;
     default:
       // Not a system action, continue to check plugin registry
       break;

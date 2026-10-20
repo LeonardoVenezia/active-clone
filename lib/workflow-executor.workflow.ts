@@ -13,6 +13,7 @@ import {
   type StepImporter,
 } from "./step-registry";
 import type { StepContext } from "./steps/step-handler";
+import { sleep } from "workflow";
 import { triggerStep } from "./steps/trigger";
 import { getErrorMessageAsync } from "./utils";
 import type { WorkflowEdge, WorkflowNode } from "./workflow-store";
@@ -261,6 +262,30 @@ async function executeActionStep(input: {
         Object.keys(resolvedValues).length > 0 ? resolvedValues : undefined,
       _context: context,
     });
+  }
+
+
+  // Special handling for Delay action - durable sleep in the workflow context
+  if (actionType === "Delay") {
+    const minutes = Number(config.durationMinutes ?? 0) || 0;
+    const seconds = Number(config.durationSeconds ?? 0) || 0;
+    const totalSeconds = Math.round(minutes * 60 + seconds);
+    const MAX_DELAY_SECONDS = 24 * 60 * 60;
+    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
+      return {
+        success: false,
+        error: "Delay needs a positive duration (minutes and/or seconds).",
+      };
+    }
+    if (totalSeconds > MAX_DELAY_SECONDS) {
+      return {
+        success: false,
+        error: "Delay exceeds the maximum of 24 hours.",
+      };
+    }
+    console.log("[Delay] Sleeping", totalSeconds, "seconds");
+    await sleep(totalSeconds * 1000);
+    return { success: true, waitedSeconds: totalSeconds };
   }
 
   // Check system actions first (Database Query, HTTP Request)

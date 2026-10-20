@@ -274,6 +274,51 @@ function FormulaFields({
   );
 }
 
+
+// Delay fields component
+function DelayFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="delay-minutes">Minutos</Label>
+        <Input
+          disabled={disabled}
+          id="delay-minutes"
+          min={0}
+          onChange={(e) => onUpdateConfig("durationMinutes", e.target.value)}
+          placeholder="10"
+          type="number"
+          value={(config?.durationMinutes as string) || ""}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="delay-seconds">Segundos</Label>
+        <Input
+          disabled={disabled}
+          id="delay-seconds"
+          min={0}
+          onChange={(e) => onUpdateConfig("durationSeconds", e.target.value)}
+          placeholder="0"
+          type="number"
+          value={(config?.durationSeconds as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          El flujo espera este tiempo antes de seguir (máximo 24 horas). La
+          espera no consume ejecución: el flujo se pausa y retoma.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Loop fields component
 function LoopFields({
   config,
@@ -382,6 +427,14 @@ function SystemActionFields({
           onUpdateConfig={onUpdateConfig}
         />
       );
+    case "Delay":
+      return (
+        <DelayFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
     case "Loop":
       return (
         <LoopFields
@@ -402,6 +455,7 @@ const SYSTEM_ACTIONS: Array<{ id: string; label: string }> = [
   { id: "Condition", label: "Condition" },
   { id: "Loop", label: "Loop" },
   { id: "Fórmula", label: "Fórmula" },
+  { id: "Delay", label: "Delay" },
 ];
 
 const SYSTEM_ACTION_IDS = SYSTEM_ACTIONS.map((a) => a.id);
