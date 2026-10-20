@@ -2,7 +2,8 @@ import { llmRoutes } from "@/lib/free-models";
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { generateAIActionPrompts, getActionOutputFields } from "@/plugins";
+import { generateAIActionPrompts } from "@/plugins";
+import { getActionOutputFields } from "@/plugins/registry";
 import { type FlowEdge, type FlowNode, validateFlow } from "@/lib/flow-validator";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
 

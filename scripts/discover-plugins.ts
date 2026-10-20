@@ -133,6 +133,7 @@ export {
   findActionById,
   flattenConfigFields,
   generateAIActionPrompts,
+  getActionOutputFields,
   getActionsByCategory,
   getAllActions,
   getAllDependencies,
