@@ -2,7 +2,8 @@ import { llmRoutes } from "@/lib/free-models";
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { generateAIActionPrompts } from "@/plugins";
+import { generateAIActionPrompts, getActionOutputFields } from "@/plugins";
+import { type FlowEdge, type FlowNode, validateFlow } from "@/lib/flow-validator";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
 
 type Operation = {
@@ -10,25 +11,60 @@ type Operation = {
   name?: string; description?: string; node?: unknown; edge?: unknown; nodeId?: string; edgeId?: string;
   updates?: { position?: { x: number; y: number }; data?: unknown };
 };
+
+type Shadow = { nodes: FlowNode[]; edges: FlowEdge[] };
+function shadowApply(operation: Operation, shadow: Shadow): boolean {
+  if (operation.op === "addNode") {
+    const node = operation.node as FlowNode | undefined;
+    if (!node?.id || !node.data) return false;
+    if (shadow.nodes.some((n) => n.id === node.id)) return false;
+    shadow.nodes.push(node);
+    return true;
+  }
+  if (operation.op === "addEdge") {
+    const edge = operation.edge as FlowEdge | undefined;
+    if (!edge?.source || !edge?.target) return false;
+    const ids = new Set(shadow.nodes.map((n) => n.id));
+    if (!ids.has(edge.source) || !ids.has(edge.target)) return false;
+    if (shadow.edges.some((e) => e.source === edge.source && e.target === edge.target)) return false;
+    if (!edge.id) edge.id = `e-${edge.source}-${edge.target}`;
+    shadow.edges.push(edge);
+    return true;
+  }
+  if (operation.op === "removeNode" && operation.nodeId) {
+    shadow.nodes = shadow.nodes.filter((n) => n.id !== operation.nodeId);
+    shadow.edges = shadow.edges.filter((e) => e.source !== operation.nodeId && e.target !== operation.nodeId);
+    return true;
+  }
+  if (operation.op === "removeEdge" && operation.edgeId) {
+    shadow.edges = shadow.edges.filter((e) => e.id !== operation.edgeId);
+    return true;
+  }
+  if (operation.op === "updateNode" && operation.nodeId) {
+    shadow.nodes = shadow.nodes.map((n) => n.id === operation.nodeId ? { ...n, ...(operation.updates?.position ? { position: operation.updates.position } : {}), ...(operation.updates?.data ? { data: { ...n.data, ...(operation.updates.data as object) } } : {}) } as FlowNode : n);
+    return true;
+  }
+  return operation.op === "setName" || operation.op === "setDescription";
+}
 function encodeMessage(encoder: TextEncoder, message: object): Uint8Array { return encoder.encode(`${JSON.stringify(message)}\n`); }
 function shouldSkipLine(line: string): boolean { const trimmed = line.trim(); return !trimmed || trimmed.startsWith("```"); }
-function tryParseAndEnqueueOperation(line: string, encoder: TextEncoder, controller: ReadableStreamDefaultController, operationCount: number): number {
+function tryParseAndEnqueueOperation(line: string, encoder: TextEncoder, controller: ReadableStreamDefaultController, operationCount: number, shadow: Shadow): number {
   const trimmed = line.trim(); if (shouldSkipLine(line)) return operationCount;
-  try { const operation = JSON.parse(trimmed) as Operation; const newCount = operationCount + 1; console.log(`[API] Operation ${newCount}:`, operation.op); controller.enqueue(encodeMessage(encoder, { type: "operation", operation })); return newCount; }
+  try { const operation = JSON.parse(trimmed) as Operation; if (!shadowApply(operation, shadow)) { console.warn("[API] op rejected by guard:", operation.op, trimmed.substring(0, 80)); return operationCount; } const newCount = operationCount + 1; console.log(`[API] Operation ${newCount}:`, operation.op); controller.enqueue(encodeMessage(encoder, { type: "operation", operation })); return newCount; }
   catch { console.warn("[API] Skipping invalid JSON line:", trimmed.substring(0, 50)); return operationCount; }
 }
-function processBufferLines(buffer: string, encoder: TextEncoder, controller: ReadableStreamDefaultController, operationCount: number): { remainingBuffer: string; newOperationCount: number } {
+function processBufferLines(buffer: string, encoder: TextEncoder, controller: ReadableStreamDefaultController, operationCount: number, shadow: Shadow): { remainingBuffer: string; newOperationCount: number } {
   const lines = buffer.split("\n"); const remainingBuffer = lines.pop() || ""; let newOperationCount = operationCount;
-  for (const line of lines) newOperationCount = tryParseAndEnqueueOperation(line, encoder, controller, newOperationCount);
+  for (const line of lines) newOperationCount = tryParseAndEnqueueOperation(line, encoder, controller, newOperationCount, shadow);
   return { remainingBuffer, newOperationCount };
 }
-async function processOperationStream(textStream: AsyncIterable<string>, encoder: TextEncoder, controller: ReadableStreamDefaultController): Promise<void> {
+async function processOperationStream(textStream: AsyncIterable<string>, encoder: TextEncoder, controller: ReadableStreamDefaultController, shadow: Shadow): Promise<number> {
   let buffer = ""; let operationCount = 0; let chunkCount = 0; let charCount = 0;
-  for await (const chunk of textStream) { chunkCount += 1; charCount += chunk.length; buffer += chunk; const result = processBufferLines(buffer, encoder, controller, operationCount); buffer = result.remainingBuffer; operationCount = result.newOperationCount; }
-  operationCount = tryParseAndEnqueueOperation(buffer, encoder, controller, operationCount);
+  for await (const chunk of textStream) { chunkCount += 1; charCount += chunk.length; buffer += chunk; const result = processBufferLines(buffer, encoder, controller, operationCount, shadow); buffer = result.remainingBuffer; operationCount = result.newOperationCount; }
+  operationCount = tryParseAndEnqueueOperation(buffer, encoder, controller, operationCount, shadow);
   console.log("[ai-generate] stream complete", { chunkCount, charCount, operationCount });
   if (operationCount === 0) throw new Error(chunkCount === 0 ? "The free AI model returned nothing (it may be busy). Your prompt was kept. Try again in a moment." : "The AI answered, but not in a form that could change the workflow. Your prompt was kept. Try rephrasing it.");
-  controller.enqueue(encodeMessage(encoder, { type: "complete" }));
+  return operationCount;
 }
 function getSystemPrompt(composioCatalog = ""): string {
   const pluginActionPrompts = generateAIActionPrompts();
@@ -200,7 +236,7 @@ export async function POST(request: Request) {
         try {
           console.info("[ai-generate] provider attempt", route.name, route.model);
           const provider = new OpenAI({ apiKey: route.apiKey, baseURL: route.baseURL, maxRetries: 0, timeout: 15000 });
-          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: userPrompt }], stream: true, max_tokens: 4096 });
+          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: userPrompt }], stream: true, max_tokens: 8192 });
           for await (const chunk of result) { const value = chunk.choices[0]?.delta?.content; if (value) { got = true; yield value; } }
           if (got) return;
           failures.push(`${route.name}/${route.model}: empty stream`); console.warn("[ai-generate] provider returned no text", route.name, route.model);
@@ -211,8 +247,30 @@ export async function POST(request: Request) {
       }
       console.error("[ai-generate] all providers exhausted before content", failures);
     }
+    const shadow: Shadow = { nodes: [...((existingWorkflow?.nodes ?? []) as FlowNode[])], edges: [...((existingWorkflow?.edges ?? []) as FlowEdge[])] };
+    async function runCorrectivePass(operationCount: number, encoder: TextEncoder, controller: ReadableStreamDefaultController): Promise<number> {
+      const errors = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields());
+      if (!errors.length) return operationCount;
+      console.warn("[ai-generate] validation errors", errors);
+      const nodeList = shadow.nodes.map(n => `- ${n.id} (${n.data?.label ?? ""} / ${String(n.data?.config?.actionType ?? n.data?.type ?? "")})`).join("\n");
+      const edgeList = shadow.edges.map(e => `- ${e.source} -> ${e.target}`).join("\n");
+      const fixPrompt = `The workflow you generated has these DETERMINISTIC VALIDATION ERRORS:\n${errors.map(e => `- ${e}`).join("\n")}\n\nCurrent nodes:\n${nodeList}\nCurrent edges:\n${edgeList}\n\nEmit ONLY the corrective operations needed to fix these exact errors (addNode/addEdge/removeNode/removeEdge/updateNode). Add nodes before the edges that use them. Do NOT recreate existing nodes; reuse their exact ids. Original request: ${userPrompt}`;
+      for (const route of llmRoutes()) {
+        try {
+          console.info("[ai-generate] corrective attempt", route.name, route.model);
+          const provider = new OpenAI({ apiKey: route.apiKey, baseURL: route.baseURL, maxRetries: 0, timeout: 20000 });
+          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: fixPrompt }], max_tokens: 4096 });
+          const text = result.choices[0]?.message?.content ?? "";
+          if (!text) continue;
+          let count = operationCount;
+          for (const line of text.split("\n")) count = tryParseAndEnqueueOperation(line, encoder, controller, count, shadow);
+          return count;
+        } catch (error) { console.error("[ai-generate] corrective pass failed", route.name, error instanceof Error ? error.message.slice(0, 200) : "unknown"); }
+      }
+      return operationCount;
+    }
     const encoder = new TextEncoder();
-    const stream = new ReadableStream({ async start(controller) { try { await processOperationStream(textChunks(), encoder, controller); controller.close(); } catch (error) { controller.enqueue(encodeMessage(encoder, { type: "error", error: error instanceof Error ? error.message : "Failed to generate workflow" })); controller.close(); } } });
+    const stream = new ReadableStream({ async start(controller) { try { let operationCount = await processOperationStream(textChunks(), encoder, controller, shadow); for (let pass = 0; pass < 2; pass++) { if (!validateFlow(shadow.nodes, shadow.edges, getActionOutputFields()).length) break; operationCount = await runCorrectivePass(operationCount, encoder, controller); } const remaining = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields()); if (remaining.length) { console.warn("[ai-generate] validation errors remain after retries", remaining); controller.enqueue(encodeMessage(encoder, { type: "validation", errors: remaining })); } controller.enqueue(encodeMessage(encoder, { type: "complete" })); controller.close(); } catch (error) { controller.enqueue(encodeMessage(encoder, { type: "error", error: error instanceof Error ? error.message : "Failed to generate workflow" })); controller.close(); } } });
     return new Response(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-cache", Connection: "keep-alive" } });
   } catch (error) { console.error("Failed to generate workflow:", error instanceof Error ? error.message.slice(0, 240) : "unknown"); return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to generate workflow" }, { status: 500 }); }
 }

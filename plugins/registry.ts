@@ -630,3 +630,21 @@ export function generateAIActionPrompts(): string {
 
   return lines.join("\n");
 }
+
+/**
+ * Map of full action id -> declared output field names.
+ * Used by deterministic flow validation (lib/flow-validator.ts).
+ */
+export function getActionOutputFields(): Record<string, string[]> {
+  const map: Record<string, string[]> = {};
+  for (const plugin of integrationRegistry.values()) {
+    for (const action of plugin.actions) {
+      if (action.outputFields?.length) {
+        map[computeActionId(plugin.type, action.slug)] = action.outputFields.map(
+          (f) => f.field
+        );
+      }
+    }
+  }
+  return map;
+}
