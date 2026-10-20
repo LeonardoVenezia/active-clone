@@ -77,6 +77,12 @@ const SYSTEM_ACTIONS: ActionType[] = [
     description: "Espera un tiempo antes de seguir (hasta 24 h)",
     category: "System",
   },
+  {
+    id: "Approval",
+    label: "Aprobación",
+    description: "Pausa el flujo hasta que una persona apruebe o rechace",
+    category: "System",
+  },
 ];
 
 // Combine System actions with plugin actions

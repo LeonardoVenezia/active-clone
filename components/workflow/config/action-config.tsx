@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TemplateBadgeInput } from "@/components/ui/template-badge-input";
+import { TemplateBadgeTextarea } from "@/components/ui/template-badge-textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -319,6 +320,39 @@ function DelayFields({
   );
 }
 
+// Approval fields component
+function ApprovalFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="approval-message">Qué tiene que revisar la persona</Label>
+        <TemplateBadgeTextarea
+          disabled={disabled}
+          id="approval-message"
+          onChange={(value) => onUpdateConfig("message", value)}
+          placeholder="Ej: Revisá los 3 artículos generados y aprobá para publicar el elegido."
+          rows={4}
+          value={(config?.message as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          El flujo se pausa acá y muestra Aprobar/Rechazar en la ejecución. Si
+          rechazan, el flujo termina con error. La salida expone
+          {" "}
+          {"{{@...approved}}"} y {"{{@...note}}"}.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Loop fields component
 function LoopFields({
   config,
@@ -430,6 +464,14 @@ function SystemActionFields({
     case "Delay":
       return (
         <DelayFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
+    case "Approval":
+      return (
+        <ApprovalFields
           config={config}
           disabled={disabled}
           onUpdateConfig={onUpdateConfig}

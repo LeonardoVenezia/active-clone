@@ -11,6 +11,7 @@ import {
   GitBranch,
   Sigma,
   Timer,
+  UserCheck,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -79,6 +80,7 @@ const SYSTEM_ACTION_LABELS: Record<string, string> = {
   Condition: "Condition",
   "Fórmula": "Fórmula",
   Delay: "Delay",
+  Approval: "Aprobación",
   "Execute Code": "System",
 };
 
@@ -139,6 +141,8 @@ const getProviderLogo = (actionType: string) => {
       return <Sigma className="size-12 text-violet-300" strokeWidth={1.5} />;
     case "Delay":
       return <Timer className="size-12 text-amber-300" strokeWidth={1.5} />;
+    case "Approval":
+      return <UserCheck className="size-12 text-emerald-300" strokeWidth={1.5} />;
     default:
       // Not a system action, continue to check plugin registry
       break;

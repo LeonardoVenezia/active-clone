@@ -6,7 +6,7 @@ import { workflowExecutionLogs, workflowExecutions } from "@/lib/db/schema";
 
 type NodeStatus = {
   nodeId: string;
-  status: "pending" | "running" | "success" | "error";
+  status: "pending" | "running" | "success" | "error" | "waiting_approval";
 };
 
 export async function GET(

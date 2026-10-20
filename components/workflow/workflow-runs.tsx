@@ -36,7 +36,7 @@ type ExecutionLog = {
   nodeId: string;
   nodeName: string;
   nodeType: string;
-  status: "pending" | "running" | "success" | "error";
+  status: "pending" | "running" | "success" | "error" | "waiting_approval";
   startedAt: Date;
   completedAt: Date | null;
   duration: string | null;
@@ -99,7 +99,7 @@ function createExecutionLogsMap(logs: ExecutionLog[]): Record<
     nodeId: string;
     nodeName: string;
     nodeType: string;
-    status: "pending" | "running" | "success" | "error";
+    status: "pending" | "running" | "success" | "error" | "waiting_approval";
     output?: unknown;
   }
 > {
@@ -109,7 +109,7 @@ function createExecutionLogsMap(logs: ExecutionLog[]): Record<
       nodeId: string;
       nodeName: string;
       nodeType: string;
-      status: "pending" | "running" | "success" | "error";
+      status: "pending" | "running" | "success" | "error" | "waiting_approval";
       output?: unknown;
     }
   > = {};
@@ -405,6 +405,67 @@ function OutputDisplay({
   );
 }
 
+// Approve/reject control for a step log waiting on a human decision
+function ApprovalActions({
+  executionId,
+  nodeId,
+  message,
+  onDecided,
+}: {
+  executionId: string;
+  nodeId: string;
+  message: string;
+  onDecided: () => void;
+}) {
+  const [busy, setBusy] = useState<"" | "approve" | "reject">("");
+  const [error, setError] = useState("");
+  const decide = async (approved: boolean) => {
+    setBusy(approved ? "approve" : "reject");
+    setError("");
+    try {
+      const r = await fetch(
+        `/api/workflows/executions/${executionId}/approve`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nodeId, approved }),
+        }
+      );
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "No se pudo enviar la decisión.");
+      onDecided();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo enviar la decisión.");
+    } finally {
+      setBusy("");
+    }
+  };
+  return (
+    <div className="mt-2 mb-2 space-y-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
+      <p className="font-medium text-sm">Aprobación pendiente</p>
+      <p className="text-muted-foreground text-sm">{message}</p>
+      <div className="flex gap-2">
+        <Button
+          disabled={busy !== ""}
+          onClick={() => decide(true)}
+          size="sm"
+        >
+          {busy === "approve" ? "Aprobando…" : "Aprobar"}
+        </Button>
+        <Button
+          disabled={busy !== ""}
+          onClick={() => decide(false)}
+          size="sm"
+          variant="outline"
+        >
+          {busy === "reject" ? "Rechazando…" : "Rechazar"}
+        </Button>
+      </div>
+      {error && <p className="text-red-600 text-xs">{error}</p>}
+    </div>
+  );
+}
+
 // Component for rendering individual execution log entries
 function ExecutionLogEntry({
   log,
@@ -414,6 +475,8 @@ function ExecutionLogEntry({
   getStatusDotClass,
   isFirst,
   isLast,
+  executionId,
+  onDecided,
 }: {
   log: ExecutionLog;
   isExpanded: boolean;
@@ -422,6 +485,8 @@ function ExecutionLogEntry({
   getStatusDotClass: (status: string) => string;
   isFirst: boolean;
   isLast: boolean;
+  executionId: string;
+  onDecided: () => void;
 }) {
   return (
     <div className="relative flex gap-3" key={log.id}>
@@ -474,6 +539,18 @@ function ExecutionLogEntry({
             )}
           </div>
         </button>
+
+        {log.status === "waiting_approval" && (
+          <ApprovalActions
+            executionId={executionId}
+            message={
+              (log.input as { message?: string } | null)?.message ||
+              "Este paso espera una decisión humana para continuar."
+            }
+            nodeId={log.nodeId}
+            onDecided={onDecided}
+          />
+        )}
 
         {isExpanded && (
           <div className="mt-2 mb-2 space-y-3 px-3">
@@ -579,7 +656,7 @@ export function WorkflowRuns({
         nodeId: string;
         nodeName: string;
         nodeType: string;
-        status: "pending" | "running" | "success" | "error";
+        status: "pending" | "running" | "success" | "error" | "waiting_approval";
         input: unknown;
         output: unknown;
         error: string | null;
@@ -895,6 +972,7 @@ export function WorkflowRuns({
                   <div className="p-4">
                     {executionLogs.map((log, logIndex) => (
                       <ExecutionLogEntry
+                        executionId={selectedExecutionId ?? ""}
                         getStatusDotClass={getStatusDotClass}
                         getStatusIcon={getStatusIcon}
                         isExpanded={expandedLogs.has(log.id)}
@@ -902,6 +980,12 @@ export function WorkflowRuns({
                         isLast={logIndex === executionLogs.length - 1}
                         key={log.id}
                         log={log}
+                        onDecided={() => {
+                          if (selectedExecutionId) {
+                            loadExecutionLogs(selectedExecutionId);
+                            loadExecutions(false);
+                          }
+                        }}
                         onToggle={() => toggleLog(log.id)}
                       />
                     ))}

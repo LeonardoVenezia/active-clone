@@ -566,7 +566,7 @@ export const workflowApi = {
         nodeId: string;
         nodeName: string;
         nodeType: string;
-        status: "pending" | "running" | "success" | "error";
+        status: "pending" | "running" | "success" | "error" | "waiting_approval";
         input: unknown;
         output: unknown;
         error: string | null;
@@ -582,7 +582,7 @@ export const workflowApi = {
       status: string;
       nodeStatuses: Array<{
         nodeId: string;
-        status: "pending" | "running" | "success" | "error";
+        status: "pending" | "running" | "success" | "error" | "waiting_approval";
       }>;
     }>(`/api/workflows/executions/${executionId}/status`),
 

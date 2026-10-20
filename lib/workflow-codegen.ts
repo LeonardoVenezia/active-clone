@@ -449,6 +449,26 @@ export function generateWorkflowCode(
     ];
   }
 
+  function generateApprovalActionCode(
+    node: WorkflowNode,
+    indent: string,
+    varName: string
+  ): string[] {
+    imports.add(`import { createHook } from 'workflow';`);
+    const config = node.data.config || {};
+    const message = String(config.message ?? "").replace(/`/g, "\\`");
+    const token = `approval:${node.id}`;
+    return [
+      `${indent}// Approval (durable human-in-the-loop pause)`,
+      `${indent}const hook${varName} = createHook({ token: \`${token}\` });`,
+      `${indent}// Resume with: resumeHook(\`${token}\`, { approved: true, note }) from an API route.`,
+      `${indent}// Note: use a per-run unique token if this workflow can run concurrently.`,
+      `${indent}const decision${varName} = await hook${varName};`,
+      `${indent}if (decision${varName}?.approved !== true) throw new Error("Aprobación rechazada: ${message}");`,
+      `${indent}const ${varName} = { success: true, approved: true, note: decision${varName}?.note };`,
+    ];
+  }
+
   // Helper to process AI schema and convert to TypeScript literal
   function processAiSchema(aiSchema: string | undefined): string | null {
     if (!aiSchema) {
@@ -858,6 +878,10 @@ export function generateWorkflowCode(
     } else if (actionType === "Delay") {
       lines.push(
         ...wrapActionCall(generateDelayActionCode(node, indent, varName))
+      );
+    } else if (actionType === "Approval") {
+      lines.push(
+        ...wrapActionCall(generateApprovalActionCode(node, indent, varName))
       );
     } else {
       // Try to find the action in the plugin registry

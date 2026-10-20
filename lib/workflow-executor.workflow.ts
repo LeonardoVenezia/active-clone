@@ -13,8 +13,12 @@ import {
   type StepImporter,
 } from "./step-registry";
 import type { StepContext } from "./steps/step-handler";
-import { sleep } from "workflow";
+import { createHook, sleep } from "workflow";
 import { triggerStep } from "./steps/trigger";
+import {
+  recordApprovalDecisionStep,
+  recordPendingApprovalStep,
+} from "./steps/approval";
 import { getErrorMessageAsync } from "./utils";
 import type { WorkflowEdge, WorkflowNode } from "./workflow-store";
 
@@ -286,6 +290,56 @@ async function executeActionStep(input: {
     console.log("[Delay] Sleeping", totalSeconds, "seconds");
     await sleep(totalSeconds * 1000);
     return { success: true, waitedSeconds: totalSeconds };
+  }
+
+  // Special handling for Approval action - durable human-in-the-loop pause.
+  // The run suspends on a hook until someone approves or rejects it from the
+  // runs UI (POST /api/workflows/executions/[executionId]/approve).
+  if (actionType === "Approval") {
+    const message =
+      typeof config.message === "string" && config.message.trim()
+        ? config.message.trim()
+        : `Aprobación requerida: ${context.nodeName}`;
+    const token = `approval:${context.executionId ?? "unknown"}:${context.nodeId}`;
+    console.log("[Approval] Waiting for human decision", token);
+    const hook = createHook<{ approved?: boolean; note?: string }>({
+      token,
+      metadata: {
+        type: "approval",
+        nodeId: context.nodeId,
+        nodeName: context.nodeName,
+        message,
+      },
+    });
+    await recordPendingApprovalStep({
+      executionId: context.executionId,
+      nodeId: context.nodeId,
+      nodeName: context.nodeName,
+      message,
+      hookToken: token,
+    });
+    const decision = await hook;
+    const approved = decision?.approved === true;
+    const note =
+      typeof decision?.note === "string" && decision.note.trim()
+        ? decision.note.trim()
+        : undefined;
+    console.log("[Approval] Decision received:", { approved, note });
+    await recordApprovalDecisionStep({
+      executionId: context.executionId,
+      nodeId: context.nodeId,
+      approved,
+      note,
+    });
+    if (!approved) {
+      return {
+        success: false,
+        approved: false,
+        note,
+        error: note ? `Aprobación rechazada: ${note}` : "Aprobación rechazada.",
+      };
+    }
+    return { success: true, approved: true, note };
   }
 
   // Check system actions first (Database Query, HTTP Request)
