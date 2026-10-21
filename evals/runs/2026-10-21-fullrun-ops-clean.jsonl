@@ -1,21 +1,21 @@
-{"case":"C-01","workflow":"u38d648xyktcsv1oxsbeq","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-01","workflow":"pjh93ub1az5lm1iqhe9br","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-02","workflow":"rucoyvolofn37neicnhwb","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-02","workflow":"58vf0480y0aq97arhmzfm","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-03","workflow":"sbzbji7l5ugwv6lyfnmzn","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-03","workflow":"tfbantnwsxb7sn0fu0n6y","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-04","workflow":"w5286794jh8wjhb2je7ot","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-04","workflow":"0mi2y67bfuz0ktdxj8qb9","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-05","workflow":"ry0lu2ictzadbct7wzp76","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-05","workflow":"9qydmmiezbnlp5x18b1tq","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-06","workflow":"q7mq81vx1sswr7lw1kv2s","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-06","workflow":"6ea4p6is43uj5vypahq4j","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case": "C-07", "workflow": "p9gep2vhe4z3l5c2f9dco", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "no-fixture"}
-{"case": "C-07", "workflow": "cgk6ossq5d28vcu9cx620", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "no-fixture"}
+{"case": "C-01", "workflow": "u38d648xyktcsv1oxsbeq", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "not-run"}
+{"case": "C-01", "workflow": "pjh93ub1az5lm1iqhe9br", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "not-run"}
+{"case": "C-02", "workflow": "rucoyvolofn37neicnhwb", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "FAIL (0/4: refs .raw inexistentes, gating vacuo)"}
+{"case": "C-02", "workflow": "58vf0480y0aq97arhmzfm", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "FAIL (1/4: whatsapp sin tracking)"}
+{"case": "C-03", "workflow": "sbzbji7l5ugwv6lyfnmzn", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "not-run"}
+{"case": "C-03", "workflow": "tfbantnwsxb7sn0fu0n6y", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "not-run"}
+{"case": "C-04", "workflow": "w5286794jh8wjhb2je7ot", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "PASS (4/4)"}
+{"case": "C-04", "workflow": "0mi2y67bfuz0ktdxj8qb9", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "FAIL (3/4: orderId no existe en get-order)"}
+{"case": "C-05", "workflow": "ry0lu2ictzadbct7wzp76", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "PASS (4/4)"}
+{"case": "C-05", "workflow": "9qydmmiezbnlp5x18b1tq", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "FAIL (1/4: loop sobre string id)"}
+{"case": "C-06", "workflow": "q7mq81vx1sswr7lw1kv2s", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "not-run"}
+{"case": "C-06", "workflow": "6ea4p6is43uj5vypahq4j", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "not-run"}
+{"case": "C-07", "workflow": "p9gep2vhe4z3l5c2f9dco", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "PASS (4/4)"}
+{"case": "C-07", "workflow": "cgk6ossq5d28vcu9cx620", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "PASS (4/4)"}
 {"case": "C-08", "workflow": "ofuk8ive49nmpkjyt5u9m", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "no-fixture"}
+{"case": "C-09", "workflow": "hw0ycjusgh239zupz6mkq", "structural": "FAIL", "violations": ["falta acción requerida: Loop"], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "FAIL (1/3: no detecta pay_3/ord_7)"}
+{"case": "C-09", "workflow": "pm21q0wbeyothbw9ite41", "structural": "FAIL", "violations": ["falta acción requerida: Loop", "falta toolkit composio: googlesheets", "falta toolkit composio: gmail"], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "FAIL (0/3)"}
 {"case": "C-08", "workflow": "2j50pbv754cg7ux56ktiu", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "no-fixture"}
-{"case": "C-09", "workflow": "c1qpn8n5q2k1uvhq9hail", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "FAIL (1/3: no detecta pay_3/ord_7)"}
-{"case": "C-09", "workflow": "bizmjdooc73ers4vns2n8", "structural": "FAIL", "violations": ["falta toolkit composio: googlesheets", "falta toolkit composio: gmail"], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "PASS (3/3)"}
 {"case": "C-10", "workflow": "155hqqji1xz6grz02jrzh", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "no-fixture"}
 {"case": "C-10", "workflow": "8ajk0j2jc6ic01dumd9cd", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "no-fixture"}
 {"case": "C-11", "workflow": "7oryilrgo53asuhgjz0qg", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "no-fixture"}
