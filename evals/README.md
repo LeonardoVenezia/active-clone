@@ -43,3 +43,18 @@ la medición estructural completa vigente es run 3
 (`2026-10-21-first-try-rerun2.jsonl`, 10/12 casos, 18/24 corridas); las
 re-mediciones dirigidas posteriores (p.ej. `2026-10-21-targeted-rerun.jsonl`,
 6 corridas sobre 3 casos) no son una medición completa.
+
+## Confiabilidad de mediciones (2026-10-21)
+
+- Runs 1-3 (`2026-10-20-first-try*.jsonl`, `2026-10-21-first-try*.jsonl`,
+  `2026-10-21-targeted-rerun.jsonl`): evaluados a MANO, caso por caso, con
+  notas en `violations`/`notes`. NO contaminados por el bug del checker
+  automático; sus números se mantienen, pero son juicios manuales.
+- `2026-10-21-fullrun-baseline.jsonl` y `2026-10-21-fullrun-fulljson.jsonl`
+  en commits anteriores a d182236: NO CONFIABLES. El checker automático
+  leía la key equivocada de `cases.jsonl` y pasaba todo (falso 12/12).
+  Fueron re-generados en d182236 con `evals/structural-check.mjs`
+  (checker determinístico permanente: require/forbid + inner steps de Loop).
+  Números reales: ops 9/12, fullJson 8/12.
+- La vara estructural automática desde d182236 es
+  `evals/structural-check.mjs`: `node evals/structural-check.mjs <C-NN> <snapshot>`.

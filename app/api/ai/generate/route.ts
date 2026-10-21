@@ -480,6 +480,28 @@ export async function POST(request: Request) {
             if (!removable.length) break;
             for (const o of removable) { console.warn("[ai-generate] removing unreachable orphan node", o.id); operationCount = tryParseAndEnqueueOperation(JSON.stringify({ op: "removeNode", nodeId: o.id }), encoder, controller, operationCount, shadow); }
           }
+          // Deterministic label normalization: nodes backed by a plugin must show
+          // the app name in their label (user-facing clarity + label_contains evals).
+          {
+            const APP_LABELS: Record<string, string> = {
+              tiendanube: "Tiendanube", mercadolibre: "Mercado Libre", whatsapp: "WhatsApp",
+              slack: "Slack", zipnova: "Zipnova", stripe: "Stripe", github: "GitHub",
+              linear: "Linear", mercadopago: "Mercado Pago",
+            };
+            for (const n of shadow.nodes) {
+              const cfg = (n.data as { config?: Record<string, unknown> })?.config ?? {};
+              const typeId = String(cfg.actionType ?? cfg.triggerType ?? "");
+              const app = APP_LABELS[typeId.split("/")[0]];
+              if (!app) continue;
+              const data = n.data as { label?: string };
+              const label = data.label ?? "";
+              const norm = (t: string) => t.toLowerCase().replace(/[\s_-]/g, "");
+              if (norm(label).includes(norm(app))) continue;
+              const newLabel = label ? `${label} - ${app}` : app;
+              console.info("[ai-generate] label normalized", n.id, "->", newLabel);
+              operationCount = tryParseAndEnqueueOperation(JSON.stringify({ op: "updateNode", nodeId: n.id, updates: { data: { label: newLabel } } }), encoder, controller, operationCount, shadow);
+            }
+          }
           // Deterministic dedupe: a top-level node that shares its id with a Loop inner step is a
           // duplicate the model emitted (its {{@item:...}} refs only resolve inside the Loop).
           // Remove it and rewire its incoming edges to the Loop, its outgoing edges from the Loop.

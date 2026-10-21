@@ -422,6 +422,23 @@ export function validateFlow(
         if (known && firstField && !known.includes(firstField)) {
           errors.push(`semántica: node "${n.id}" (${label}) references "${refId}.${firstField}" but ${actionTypeOf(target)} only outputs: ${known.join(", ")}`);
         }
+        // Path que entra a un item de un array conocido (orders[0].shipping_id
+        // u orders.shipping_id): validar el campo del item contra la forma
+        // declarada; si el campo buscado lo tiene el get-* de detalle del
+        // mismo plugin, sugerir ese paso intermedio.
+        if (firstField && known?.includes(firstField)) {
+          const itemFields = options.actionItemFields?.[targetAction]?.[firstField];
+          const seg = fieldPath.split(".").slice(1);
+          const itemField = seg.length ? seg[0]?.split("[")[0] : "";
+          if (itemFields && itemField && !itemFields.includes(itemField)) {
+            const plugin = targetAction.split("/")[0];
+            const detailAction = Object.keys(actionOutputs).find((a) => a.startsWith(`${plugin}/get-`));
+            const hint = detailAction && (actionOutputs[detailAction] ?? []).includes(itemField)
+              ? `; that field is only on the DETAIL output, add a "${detailAction}" step after "${refId}" and reference it instead`
+              : "";
+            errors.push(`semántica: node "${n.id}" (${label}) references "${refId}.${firstField}[].${itemField}" but items from ${targetAction}.${firstField} only have: ${itemFields.join(", ")}${hint}`);
+          }
+        }
       }
     }
   }
