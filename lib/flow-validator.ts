@@ -248,6 +248,16 @@ export function validateFlow(
       }
     }
 
+    // Writing a raw list output as a single value: one row/item per element needs a Loop,
+    // otherwise the list must be aggregated to a scalar first.
+    if (isComposio) {
+      const txt = JSON.stringify(cfg);
+      const rawList = txt.match(/\{\{@([\w-]+):[^}]*\.(orders|payments|products|items|questions|results)\}\}/);
+      if (rawList) {
+        errors.push(`semántica: node "${n.id}" (${label}) writes the raw list field ".${rawList[2]}" from "${rawList[1]}" as a single value; one row/item per list element MUST go through a Loop (with filter/compare as inner steps), or aggregate the list to a scalar first (count, total, summary)`);
+      }
+    }
+
     // Fórmula over lists: comparing or filtering list outputs item-by-item requires a Loop.
     // Wholesale aggregation (sum, count, totals) in a Fórmula is fine.
     if (actionType === "Fórmula") {
