@@ -1,0 +1,167 @@
+{
+  "active": false,
+  "canEdit": true,
+  "createdAt": "2026-10-21T19:53:38.639Z",
+  "description": "Responde consultas de clientes en WhatsApp usando el historial de Tiendanube y un texto de preguntas frecuentes de ejemplo.",
+  "edges": [
+    {
+      "id": "e-trig-tienda",
+      "source": "jv2xWvUeqT4VT4iMObtcY",
+      "target": "tiendanube-search",
+      "type": "animated"
+    },
+    {
+      "id": "e-trig-faq",
+      "source": "jv2xWvUeqT4VT4iMObtcY",
+      "target": "faq-text",
+      "type": "animated"
+    },
+    {
+      "id": "e-tienda-ai",
+      "source": "tiendanube-search",
+      "target": "generate-response",
+      "type": "animated"
+    },
+    {
+      "id": "e-faq-ai",
+      "source": "faq-text",
+      "target": "generate-response",
+      "type": "animated"
+    },
+    {
+      "id": "e-ai-whatsapp",
+      "source": "generate-response",
+      "target": "whatsapp-reply",
+      "type": "animated"
+    },
+    {
+      "id": "e-search-to-get",
+      "source": "tiendanube-search",
+      "target": "tiendanube-get",
+      "type": "animated"
+    },
+    {
+      "id": "e-get-to-generate",
+      "source": "tiendanube-get",
+      "target": "generate-response",
+      "type": "animated"
+    }
+  ],
+  "id": "otal9slt8f9rzn6zchhw5",
+  "isOwner": true,
+  "name": "FAQ Asistente WhatsApp",
+  "nodes": [
+    {
+      "data": {
+        "config": {
+          "triggerType": "whatsapp/incoming-message"
+        },
+        "description": "",
+        "label": "Mensaje Recibido WhatsApp",
+        "status": "idle",
+        "type": "trigger"
+      },
+      "id": "jv2xWvUeqT4VT4iMObtcY",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 228
+      },
+      "selected": false,
+      "type": "trigger"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "tiendanube/search-orders",
+          "query": "{{@jv2xWvUeqT4VT4iMObtcY:Mensaje Recibido WhatsApp.from}}"
+        },
+        "label": "Buscar Órdenes Tiendanube",
+        "type": "action"
+      },
+      "id": "tiendanube-search",
+      "position": {
+        "x": 460,
+        "y": 303
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Preguntas frecuentes de ejemplo: 1. ¿Cuál es el estado de mi envío? Se despacha en 24hs hábiles. 2. ¿Cuáles son los medios de pago? Tarjeta, transferencia y Mercado Pago. 3. ¿Tienen cambios? Sí, dentro de los 30 días."
+        },
+        "label": "Preguntas Frecuentes Ejemplo",
+        "type": "action"
+      },
+      "id": "faq-text",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Responde al mensaje del cliente: {{@jv2xWvUeqT4VT4iMObtcY:Mensaje Recibido WhatsApp.text}}. Usa la información de su orden en Tiendanube (ID: {{@tiendanube-get:Obtener Detalle de Orden Tiendanube.id}}, Total: {{@tiendanube-get:Obtener Detalle de Orden Tiendanube.total}}, Estado: {{@tiendanube-get:Obtener Detalle de Orden Tiendanube.status}}) y las siguientes preguntas frecuentes: {{@faq-text:Preguntas Frecuentes Ejemplo.text}}."
+        },
+        "label": "Generar Respuesta con IA",
+        "type": "action"
+      },
+      "id": "generate-response",
+      "position": {
+        "x": 1200,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "whatsapp/send-message",
+          "text": "{{@generate-response:Generar Respuesta con IA.text}}",
+          "to": "{{@jv2xWvUeqT4VT4iMObtcY:Mensaje Recibido WhatsApp.from}}"
+        },
+        "label": "Enviar WhatsApp al Cliente",
+        "type": "action"
+      },
+      "id": "whatsapp-reply",
+      "position": {
+        "x": 1570,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "tiendanube/get-order",
+          "orderId": "{{@tiendanube-search:Buscar Órdenes Tiendanube.orders[0].id}}"
+        },
+        "label": "Obtener Detalle de Orden Tiendanube",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "tiendanube-get",
+      "position": {
+        "x": 830,
+        "y": 260
+      },
+      "type": "action"
+    }
+  ],
+  "shared": false,
+  "updatedAt": "2026-10-21T19:56:23.452Z",
+  "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+  "visibility": "private"
+}
