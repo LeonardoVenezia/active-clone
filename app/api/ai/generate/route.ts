@@ -318,7 +318,22 @@ export async function POST(request: Request) {
       }
       return operationCount;
     }
-    const stream = new ReadableStream({ async start(controller) { try { let operationCount = await processOperationStream(textChunks(), encoder, controller, shadow); if (streamState.truncated) operationCount = await runContinuationPass(operationCount, encoder, controller); for (let pass = 0; pass < 2; pass++) { if (!computeErrors().length) break; operationCount = await runCorrectivePass(operationCount, encoder, controller); } const remaining = computeErrors(); if (remaining.length) { console.warn("[ai-generate] validation errors remain after retries", remaining); controller.enqueue(encodeMessage(encoder, { type: "validation", errors: remaining })); } controller.enqueue(encodeMessage(encoder, { type: "complete" })); controller.close(); } catch (error) { controller.enqueue(encodeMessage(encoder, { type: "error", error: error instanceof Error ? error.message : "Failed to generate workflow" })); controller.close(); } } });
+    const stream = new ReadableStream({ async start(controller) { try { let operationCount = await processOperationStream(textChunks(), encoder, controller, shadow); if (streamState.truncated) operationCount = await runContinuationPass(operationCount, encoder, controller); for (let pass = 0; pass < 3; pass++) { if (!computeErrors().length) break; operationCount = await runCorrectivePass(operationCount, encoder, controller); }
+          // Deterministic cleanup: remove unreachable action nodes that nothing references
+          // (leftovers a corrective pass replaced but did not remove).
+          for (let sweep = 0; sweep < 3; sweep++) {
+            const triggerIds = shadow.nodes.filter(n => n.type === "trigger" || (n.data as { type?: string })?.type === "trigger").map(n => n.id);
+            const reachable = new Set<string>(triggerIds);
+            const queue = [...triggerIds];
+            while (queue.length) { const c = queue.pop() as string; for (const e of shadow.edges) if (e.source === c && !reachable.has(e.target)) { reachable.add(e.target); queue.push(e.target); } }
+            const orphans = shadow.nodes.filter(n => !reachable.has(n.id));
+            if (!orphans.length) break;
+            const referenced = new Set<string>();
+            for (const n of shadow.nodes) { const txt = JSON.stringify(n.data ?? {}); for (const m of txt.matchAll(/\{\{@([\w-]+):/g)) referenced.add(m[1]); }
+            const removable = orphans.filter(o => !referenced.has(o.id) && !shadow.edges.some(e => e.source === o.id && reachable.has(e.target)));
+            if (!removable.length) break;
+            for (const o of removable) { console.warn("[ai-generate] removing unreachable orphan node", o.id); operationCount = tryParseAndEnqueueOperation(JSON.stringify({ op: "removeNode", nodeId: o.id }), encoder, controller, operationCount, shadow); }
+          } const remaining = computeErrors(); if (remaining.length) { console.warn("[ai-generate] validation errors remain after retries", remaining); controller.enqueue(encodeMessage(encoder, { type: "validation", errors: remaining })); } controller.enqueue(encodeMessage(encoder, { type: "complete" })); controller.close(); } catch (error) { controller.enqueue(encodeMessage(encoder, { type: "error", error: error instanceof Error ? error.message : "Failed to generate workflow" })); controller.close(); } } });
     return new Response(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-cache", Connection: "keep-alive" } });
   } catch (error) { console.error("Failed to generate workflow:", error instanceof Error ? error.message.slice(0, 240) : "unknown"); return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to generate workflow" }, { status: 500 }); }
 }
