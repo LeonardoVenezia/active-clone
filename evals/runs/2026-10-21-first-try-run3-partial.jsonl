@@ -15,3 +15,9 @@
 {"id":"C-08-a","wf":"d7k7k1luh2epopv7nrgua","pass":true,"violations":[],"notes":"ARREGLADO vs run-2: googledocs + gmail via composio, doble condicion, whatsapp nativo."}
 {"id":"C-08-b","wf":"pslw0edmkhzrs0aco1ei8","pass":true,"violations":[],"notes":"Igual que -a: googledocs+gmail composio, doble cond, whatsapp nativo."}
 {"id":"C-09-a","wf":"sg4o1it8ccu6h3f6z6f1k","pass":false,"violations":["falta Loop requerido: comparacion en un solo paso Fórmula"],"notes":"stripe/TN nativos, sheets+gmail composio ok. Necesito nudge inicial (el modelo pidio re-explicar el pedido)."}
+{"id":"C-09-b","wf":"69b0y5do2h1lilej04iwx","pass":false,"violations":["falta Loop requerido (Fórmula unica)"],"notes":"Igual que -a: consistente con temp baja."}
+{"id":"C-10-a","wf":"cyj451wrbwvbd4r8t1ixb","pass":true,"violations":[],"notes":"ARREGLADO vs run-2: googledocs composio, doble cond, slack+whatsapp nativos."}
+{"id":"C-10-b","wf":"p1usy5jcqqg1102qmpbbj","pass":true,"violations":[],"notes":"Igual que -a."}
+{"id":"C-11-a","wf":"qy1e69k552nmjanw05jxt","pass":true,"violations":[],"notes":"TN+ML search-orders nativos, Fórmula, whatsapp native."}
+{"id":"C-11-b","wf":"yo17x55upjjk60u3s0tsn","pass":true,"violations":[],"notes":"Igual que -a."}
+{"id":"C-12-a","wf":"njmemw2qqnbu7is655mt9","pass":false,"violations":["falta Loop requerido y sin filtro de stock <5 (vuelcan todo a la planilla)"],"notes":"MEJORA vs run-2: sheets ahora composio googlesheets y hay Condition+slack nativo. Falta el Loop/filtro."}
