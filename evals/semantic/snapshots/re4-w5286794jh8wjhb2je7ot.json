@@ -1,0 +1,237 @@
+{
+  "active": false,
+  "canEdit": true,
+  "createdAt": "2026-10-21T20:17:21.682Z",
+  "description": "Flujo para recuperar carritos abandonados con descuento si superan los $50.000",
+  "edges": [
+    {
+      "id": "e1",
+      "source": "_IoE7958Bv4BwPtsm6vME",
+      "target": "esperar-2-horas",
+      "type": "animated"
+    },
+    {
+      "id": "e2",
+      "source": "esperar-2-horas",
+      "target": "obtener-orden",
+      "type": "animated"
+    },
+    {
+      "id": "e3",
+      "source": "obtener-orden",
+      "target": "cond-mayor-50k",
+      "type": "animated"
+    },
+    {
+      "id": "e4",
+      "source": "obtener-orden",
+      "target": "cond-menor-50k",
+      "type": "animated"
+    },
+    {
+      "id": "e5",
+      "source": "cond-mayor-50k",
+      "target": "mensaje-cupon",
+      "type": "animated"
+    },
+    {
+      "id": "e6",
+      "source": "cond-menor-50k",
+      "target": "mensaje-simple",
+      "type": "animated"
+    },
+    {
+      "id": "e7",
+      "source": "mensaje-cupon",
+      "target": "enviar-whatsapp-cupon",
+      "type": "animated"
+    },
+    {
+      "id": "e8",
+      "source": "mensaje-simple",
+      "target": "enviar-whatsapp-simple",
+      "type": "animated"
+    }
+  ],
+  "id": "w5286794jh8wjhb2je7ot",
+  "isOwner": true,
+  "name": "Recupero de Carritos Abandonados Tiendanube",
+  "nodes": [
+    {
+      "data": {
+        "config": {
+          "triggerType": "tiendanube/order-created"
+        },
+        "description": "Detecta cuando se abandona un carrito en Tiendanube",
+        "label": "Carrito Abandonado (Tiendanube)",
+        "status": "idle",
+        "type": "trigger"
+      },
+      "id": "_IoE7958Bv4BwPtsm6vME",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "selected": false,
+      "type": "trigger"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Delay",
+          "durationMinutes": 120
+        },
+        "description": "Espera duradera de 2 horas antes de continuar",
+        "label": "Esperar 2 Horas",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "esperar-2-horas",
+      "position": {
+        "x": 460,
+        "y": 185
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "tiendanube/get-order",
+          "orderId": "{{@_IoE7958Bv4BwPtsm6vME:Carrito Abandonado (Tiendanube).orderId}}"
+        },
+        "description": "Consulta el detalle y total del carrito o pedido",
+        "label": "Obtener Detalle del Carrito - Tiendanube",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "obtener-orden",
+      "position": {
+        "x": 830,
+        "y": 185
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@obtener-orden:Obtener Detalle del Carrito.total}} > 50000"
+        },
+        "description": "Verifica si el total es mayor a $50.000",
+        "label": "Total > $50.000",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "cond-mayor-50k",
+      "position": {
+        "x": 1200,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@obtener-orden:Obtener Detalle del Carrito.total}} <= 50000"
+        },
+        "description": "Verifica si el total es menor o igual a $50.000",
+        "label": "Total <= $50.000",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "cond-menor-50k",
+      "position": {
+        "x": 1200,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Escribe un mensaje de WhatsApp amigable para recuperar un carrito abandonado cuyo total es {{@obtener-orden:Obtener Detalle del Carrito.total}}. Incluye un cupón del 10% de descuento."
+        },
+        "description": "Genera mensaje con 10% de descuento",
+        "label": "Armar Mensaje con Cupón",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "mensaje-cupon",
+      "position": {
+        "x": 1570,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Escribe un mensaje de WhatsApp amigable y simple para recordar al cliente que dejó productos en su carrito por un total de {{@obtener-orden:Obtener Detalle del Carrito.total}}."
+        },
+        "description": "Genera mensaje simple de recordatorio",
+        "label": "Armar Mensaje Simple",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "mensaje-simple",
+      "position": {
+        "x": 1570,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "whatsapp/send-message",
+          "text": "{{@mensaje-cupon:Armar Mensaje con Cupón.text}}",
+          "to": "{{@obtener-orden:Obtener Detalle del Carrito.customerPhone}}"
+        },
+        "description": "Envía el mensaje con cupón al cliente por WhatsApp",
+        "label": "Enviar WhatsApp (Cupón)",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "enviar-whatsapp-cupon",
+      "position": {
+        "x": 1940,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "whatsapp/send-message",
+          "text": "{{@mensaje-simple:Armar Mensaje Simple.text}}",
+          "to": "{{@obtener-orden:Obtener Detalle del Carrito.customerPhone}}"
+        },
+        "description": "Envía el mensaje simple al cliente por WhatsApp",
+        "label": "Enviar WhatsApp (Simple)",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "enviar-whatsapp-simple",
+      "position": {
+        "x": 1940,
+        "y": 110
+      },
+      "type": "action"
+    }
+  ],
+  "shared": false,
+  "updatedAt": "2026-10-21T20:19:13.632Z",
+  "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+  "visibility": "private"
+}
