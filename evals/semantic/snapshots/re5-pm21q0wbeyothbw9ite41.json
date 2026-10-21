@@ -1,0 +1,90 @@
+{
+  "active": false,
+  "canEdit": true,
+  "createdAt": "2026-10-21T20:40:21.061Z",
+  "description": "Genera y envía un resumen por correo electrónico a la dirección especificada.",
+  "edges": [
+    {
+      "id": "e1",
+      "source": "KBLffmHLh7TKqGaCdd2w8",
+      "target": "generate-summary",
+      "type": "animated"
+    },
+    {
+      "id": "e2",
+      "source": "generate-summary",
+      "target": "send-email",
+      "type": "animated"
+    }
+  ],
+  "id": "pm21q0wbeyothbw9ite41",
+  "isOwner": true,
+  "name": "Resumen por Correo",
+  "nodes": [
+    {
+      "data": {
+        "config": {
+          "triggerType": "Manual"
+        },
+        "description": "Inicia la ejecución del flujo de resumen",
+        "label": "Inicio Manual",
+        "status": "idle",
+        "type": "trigger"
+      },
+      "id": "KBLffmHLh7TKqGaCdd2w8",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 110
+      },
+      "selected": false,
+      "type": "trigger"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Genera un resumen detallado de la conversación y tareas pendientes."
+        },
+        "label": "Generar Resumen",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "generate-summary",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "resend/send-email",
+          "emailBody": "{{@generate-summary:Generar Resumen.text}}",
+          "emailFrom": "Soporte <soporte@example.com>",
+          "emailSubject": "Resumen de Conversación",
+          "emailTo": "destinatario@example.com"
+        },
+        "label": "Enviar Correo",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "send-email",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "type": "action"
+    }
+  ],
+  "shared": false,
+  "updatedAt": "2026-10-21T20:46:00.166Z",
+  "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+  "visibility": "private"
+}
