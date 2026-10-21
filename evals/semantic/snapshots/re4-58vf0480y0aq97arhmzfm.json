@@ -1,0 +1,302 @@
+{
+  "active": false,
+  "canEdit": true,
+  "createdAt": "2026-10-21T20:13:08.739Z",
+  "description": "Flujo de seguimiento de envíos con Tiendanube y Zipnova",
+  "edges": [
+    {
+      "id": "e1",
+      "source": "auodvyaXPoS6CFj30GYH1",
+      "target": "zipnova-get-shipment",
+      "type": "animated"
+    },
+    {
+      "id": "e2",
+      "source": "zipnova-get-shipment",
+      "target": "cond-demorado",
+      "type": "animated"
+    },
+    {
+      "id": "e3",
+      "source": "cond-demorado",
+      "target": "slack-alert",
+      "type": "animated"
+    },
+    {
+      "id": "e4",
+      "source": "zipnova-get-shipment",
+      "target": "whatsapp-client",
+      "type": "animated"
+    },
+    {
+      "id": "e1",
+      "source": "auodvyaXPoS6CFj30GYH1",
+      "target": "tiendanube-get-order",
+      "type": "animated"
+    },
+    {
+      "id": "e2",
+      "source": "tiendanube-get-order",
+      "target": "zipnova-get-shipment",
+      "type": "animated"
+    },
+    {
+      "id": "e-mp",
+      "source": "tiendanube-get-order",
+      "target": "mercadopago-check",
+      "type": "animated"
+    },
+    {
+      "id": "e-ml",
+      "source": "mercadopago-check",
+      "target": "mercadolibre-search",
+      "type": "animated"
+    },
+    {
+      "id": "e-stripe",
+      "source": "mercadolibre-search",
+      "target": "stripe-check",
+      "type": "animated"
+    },
+    {
+      "id": "e-linear",
+      "source": "stripe-check",
+      "target": "linear-ticket",
+      "type": "animated"
+    },
+    {
+      "id": "e-gh",
+      "source": "linear-ticket",
+      "target": "github-issue",
+      "type": "animated"
+    }
+  ],
+  "id": "58vf0480y0aq97arhmzfm",
+  "isOwner": true,
+  "name": "Seguimiento Proactivo de Envíos",
+  "nodes": [
+    {
+      "data": {
+        "config": {
+          "triggerType": "tiendanube/order-created"
+        },
+        "description": "Detecta orden enviada en Tiendanube",
+        "label": "Orden Enviada Tiendanube",
+        "status": "idle",
+        "type": "trigger"
+      },
+      "id": "auodvyaXPoS6CFj30GYH1",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "selected": false,
+      "type": "trigger"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "zipnova/get-shipment",
+          "shipmentId": "{{@auodvyaXPoS6CFj30GYH1:Orden Enviada Tiendanube.orderId}}"
+        },
+        "label": "Obtener Detalle Zipnova",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "zipnova-get-shipment",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 830,
+        "y": 185
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@zipnova-get-shipment:Obtener Detalle Zipnova.raw}} === 'delayed'"
+        },
+        "label": "Es Demorado o Con Problema",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "cond-demorado",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 1200,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "slack/send-message",
+          "slackChannel": "#envios",
+          "slackMessage": "El envio de la orden esta demorado o con problema."
+        },
+        "label": "Avisar en Slack",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "slack-alert",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 1570,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "whatsapp/send-message",
+          "text": "Hola {{@tiendanube-get-order:Obtener Detalle Tiendanube.customerName}}, tu pedido #{{@tiendanube-get-order:Obtener Detalle Tiendanube.number}} ha sido enviado. Estado del envío: {{@zipnova-get-shipment:Obtener Detalle Zipnova.raw}}.",
+          "to": "{{@tiendanube-get-order:Obtener Detalle Tiendanube.customerPhone}}"
+        },
+        "label": "Enviar WhatsApp al Cliente",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "whatsapp-client",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 1200,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "tiendanube/get-order",
+          "orderId": "{{@auodvyaXPoS6CFj30GYH1:Orden Enviada Tiendanube.orderId}}"
+        },
+        "label": "Obtener Detalle Tiendanube",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "tiendanube-get-order",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 460,
+        "y": 143
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "mercadopago/search-payments",
+          "externalReference": "{{@auodvyaXPoS6CFj30GYH1:Orden Enviada Tiendanube.orderId}}"
+        },
+        "label": "Verificar Pago Mercado Pago",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "mercadopago-check",
+      "position": {
+        "x": 830,
+        "y": 400
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "mercadolibre/search-orders",
+          "query": "{{@tiendanube-get-order:Obtener Detalle Tiendanube.number}}"
+        },
+        "label": "Buscar Orden Mercado Libre",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "mercadolibre-search",
+      "position": {
+        "x": 830,
+        "y": 600
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "stripe/search-customers",
+          "email": "{{@tiendanube-get-order:Obtener Detalle Tiendanube.customerEmail}}"
+        },
+        "label": "Verificar Cliente Stripe",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "stripe-check",
+      "position": {
+        "x": 1200,
+        "y": 400
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "linear/create-ticket",
+          "ticketDescription": "Revision de envio y pagos para orden de Tiendanube.",
+          "ticketPriority": "2",
+          "ticketTitle": "Seguimiento de envio orden {{@tiendanube-get-order:Obtener Detalle Tiendanube.number}}"
+        },
+        "label": "Crear Ticket Linear",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "linear-ticket",
+      "position": {
+        "x": 1200,
+        "y": 600
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "github/create-issue",
+          "body": "Generado automaticamente por el flujo de seguimiento.",
+          "owner": "org",
+          "repo": "repo",
+          "title": "Incidencia de Envio o Pago - Orden {{@tiendanube-get-order:Obtener Detalle Tiendanube.number}}"
+        },
+        "label": "Crear Issue GitHub",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "github-issue",
+      "position": {
+        "x": 1570,
+        "y": 450
+      },
+      "type": "action"
+    }
+  ],
+  "shared": false,
+  "updatedAt": "2026-10-21T20:17:09.607Z",
+  "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+  "visibility": "private"
+}
