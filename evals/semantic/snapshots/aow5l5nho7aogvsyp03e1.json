@@ -1,0 +1,176 @@
+{
+ "name": "Reconciliación Diaria Stripe y Tiendanube",
+ "nodes": [
+  {
+   "id": "-dlHm7QYYuWOfHil3oX4k",
+   "data": {
+    "type": "trigger",
+    "label": "Programar 8:00 AM",
+    "config": {
+     "triggerType": "Schedule",
+     "scheduleCron": "0 8 * * *"
+    },
+    "status": "idle",
+    "description": "Disparador diario a las 8 de la mañana"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 100,
+    "y": 200
+   },
+   "selected": false
+  },
+  {
+   "id": "get-stripe-charges",
+   "data": {
+    "type": "action",
+    "label": "Traer Cobros Stripe",
+    "config": {
+     "limit": "100",
+     "actionType": "stripe/list-payments"
+    },
+    "status": "idle",
+    "description": "Obtiene los pagos de Stripe del día anterior"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 350,
+    "y": 200
+   }
+  },
+  {
+   "id": "get-tiendanube-orders",
+   "data": {
+    "type": "action",
+    "label": "Traer Órdenes Tiendanube",
+    "config": {
+     "limit": 100,
+     "actionType": "tiendanube/search-orders"
+    },
+    "status": "idle",
+    "description": "Obtiene las órdenes de Tiendanube del día anterior"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 600,
+    "y": 200
+   }
+  },
+  {
+   "id": "compare-data",
+   "data": {
+    "type": "action",
+    "label": "Comparar y Detectar Diferencias",
+    "config": {
+     "aiModel": "meta/llama-4-scout",
+     "aiFormat": "text",
+     "aiPrompt": "Compara estos cobros de Stripe ({{@get-stripe-charges:Traer Cobros Stripe.payments}}) con estas órdenes de Tiendanube ({{@get-tiendanube-orders:Traer Órdenes Tiendanube.orders}}). Detecta cobros sin orden y órdenes sin cobro. Devuelve un resumen detallado con las diferencias encontradas.",
+     "actionType": "ai-gateway/generate-text"
+    },
+    "status": "idle",
+    "description": "Compara ambos listados mediante IA para hallar discrepancias"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 850,
+    "y": 200
+   }
+  },
+  {
+   "id": "create-spreadsheet",
+   "data": {
+    "type": "action",
+    "label": "Crear Hoja Reconciliación Diaria",
+    "config": {
+     "tool": "GOOGLESHEETS_CREATE_GOOGLE_SHEET1",
+     "toolkit": "googlesheets",
+     "arguments": "{\"title\": \"Reconciliación Diaria\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle",
+    "description": "Crea una hoja nueva en Google Sheets llamada Reconciliación Diaria"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 1100,
+    "y": 200
+   }
+  },
+  {
+   "id": "send-finance-email",
+   "data": {
+    "type": "action",
+    "label": "Enviar Resumen por Gmail",
+    "config": {
+     "tool": "GMAIL_SEND_EMAIL",
+     "toolkit": "gmail",
+     "arguments": "{\"recipient_email\": \"finance-team@example.com\", \"subject\": \"Resumen de Reconciliación Diaria\", \"body\": \"Hola equipo de finanzas,\\n\\nAquí están las diferencias detectadas en la reconciliación diaria:\\n\\n{{@compare-data:Comparar y Detectar Diferencias.text}}\\n\\nHoja de cálculo creada: {{@create-spreadsheet:Crear Hoja Reconciliación Diaria.data}}.\"",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle",
+    "description": "Envía un correo con el resumen de diferencias al equipo de finanzas"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 1350,
+    "y": 200
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "edge-trigger-stripe",
+   "type": "animated",
+   "source": "-dlHm7QYYuWOfHil3oX4k",
+   "target": "get-stripe-charges"
+  },
+  {
+   "id": "edge-stripe-tiendanube",
+   "type": "animated",
+   "source": "get-stripe-charges",
+   "target": "get-tiendanube-orders"
+  },
+  {
+   "id": "edge-tiendanube-compare",
+   "type": "animated",
+   "source": "get-tiendanube-orders",
+   "target": "compare-data"
+  },
+  {
+   "id": "edge-compare-sheet",
+   "type": "animated",
+   "source": "compare-data",
+   "target": "create-spreadsheet"
+  },
+  {
+   "id": "edge-sheet-email",
+   "type": "animated",
+   "source": "create-spreadsheet",
+   "target": "send-finance-email"
+  }
+ ]
+}

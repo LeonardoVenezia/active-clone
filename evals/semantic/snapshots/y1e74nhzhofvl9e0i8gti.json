@@ -1,0 +1,267 @@
+{
+ "name": "Control de Stock Diario",
+ "nodes": [
+  {
+   "id": "AOJ2Scv_657HRV-LICeIY",
+   "data": {
+    "type": "trigger",
+    "label": "Programador diario",
+    "config": {
+     "triggerType": "Schedule",
+     "scheduleCron": "0 9 * * *"
+    },
+    "status": "idle",
+    "description": "Se ejecuta todos los días a las 9:00 AM"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 100,
+    "y": 200
+   },
+   "selected": false
+  },
+  {
+   "id": "search-tn",
+   "data": {
+    "type": "action",
+    "label": "Buscar productos Tiendanube",
+    "config": {
+     "limit": 50,
+     "status": "any",
+     "actionType": "tiendanube/search-orders",
+     "paymentStatus": "any",
+     "shippingStatus": "any"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 75
+   }
+  },
+  {
+   "id": "search-ml",
+   "data": {
+    "type": "action",
+    "label": "Buscar productos Mercado Libre",
+    "config": {
+     "limit": 50,
+     "status": "any",
+     "actionType": "mercadolibre/search-orders"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 325
+   }
+  },
+  {
+   "id": "create-sheet",
+   "data": {
+    "type": "action",
+    "label": "Crear Planilla Google Sheets",
+    "config": {
+     "tool": "GOOGLESHEETS_CREATE_GOOGLE_SHEET1",
+     "toolkit": "googlesheets",
+     "arguments": "{\"title\": \"Control de Stock Diario\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 600,
+    "y": 200
+   }
+  },
+  {
+   "id": "cond-slack",
+   "data": {
+    "type": "action",
+    "label": "Falta > 3 productos",
+    "config": {
+     "condition": "{{@append-sheet:Anotar en Google Sheets.data}} !== undefined",
+     "actionType": "Condition"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1100,
+    "y": 200
+   }
+  },
+  {
+   "id": "slack-alert",
+   "data": {
+    "type": "action",
+    "label": "Aviso Slack #compras",
+    "config": {
+     "actionType": "slack/send-message",
+     "slackChannel": "#compras",
+     "slackMessage": "Alerta: hay más de 3 productos con stock menor a 5 unidades."
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1350,
+    "y": 200
+   }
+  },
+  {
+   "id": "loop-tn",
+   "data": {
+    "type": "action",
+    "label": "Loop Tiendanube",
+    "config": {
+     "steps": [
+      {
+       "id": "check-stock-tn",
+       "config": {
+        "condition": "{{@item:Item.total}} < 5"
+       },
+       "actionType": "Condition"
+      }
+     ],
+     "source": "{{@search-tn:Buscar productos Tiendanube.orders}}",
+     "maxItems": 50,
+     "actionType": "Loop"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 850,
+    "y": 100
+   }
+  },
+  {
+   "id": "loop-ml",
+   "data": {
+    "type": "action",
+    "label": "Loop Mercado Libre",
+    "config": {
+     "steps": [
+      {
+       "id": "check-stock-ml",
+       "config": {
+        "condition": "{{@item:Item.total}} < 5"
+       },
+       "actionType": "Condition"
+      }
+     ],
+     "source": "{{@search-ml:Buscar productos Mercado Libre.orders}}",
+     "maxItems": 50,
+     "actionType": "Loop"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 850,
+    "y": 350
+   }
+  },
+  {
+   "id": "append-sheet",
+   "data": {
+    "type": "action",
+    "label": "Anotar en Google Sheets",
+    "config": {
+     "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+     "toolkit": "googlesheets",
+     "arguments": "{\"spreadsheetId\": \"{{@create-sheet:Crear Planilla Google Sheets.spreadsheetId}}\", \"range\": \"Sheet1!A1\", \"valueInputOption\": \"USER_ENTERED\", \"values\": [[\"{{@item:Item.title}}\", \"{{@item:Item.total}}\"]]}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 600,
+    "y": 325
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e-trig-tn",
+   "type": "animated",
+   "source": "AOJ2Scv_657HRV-LICeIY",
+   "target": "search-tn"
+  },
+  {
+   "id": "e-trig-ml",
+   "type": "animated",
+   "source": "AOJ2Scv_657HRV-LICeIY",
+   "target": "search-ml"
+  },
+  {
+   "id": "e-tn-sheet",
+   "type": "animated",
+   "source": "search-tn",
+   "target": "create-sheet"
+  },
+  {
+   "id": "e-ml-sheet",
+   "type": "animated",
+   "source": "search-ml",
+   "target": "create-sheet"
+  },
+  {
+   "id": "e-cond-slack",
+   "type": "animated",
+   "source": "cond-slack",
+   "target": "slack-alert"
+  },
+  {
+   "id": "e5",
+   "type": "animated",
+   "source": "search-tn",
+   "target": "loop-tn"
+  },
+  {
+   "id": "e6",
+   "type": "animated",
+   "source": "search-ml",
+   "target": "loop-ml"
+  },
+  {
+   "id": "e-loop-tn-cond",
+   "type": "animated",
+   "source": "loop-tn",
+   "target": "cond-slack"
+  },
+  {
+   "id": "e-loop-ml-cond",
+   "type": "animated",
+   "source": "loop-ml",
+   "target": "cond-slack"
+  },
+  {
+   "id": "e-loop-tn-sheet",
+   "type": "animated",
+   "source": "loop-tn",
+   "target": "append-sheet"
+  },
+  {
+   "id": "e-loop-ml-sheet",
+   "type": "animated",
+   "source": "loop-ml",
+   "target": "append-sheet"
+  },
+  {
+   "id": "e-sheet-cond",
+   "type": "animated",
+   "source": "append-sheet",
+   "target": "cond-slack"
+  }
+ ]
+}

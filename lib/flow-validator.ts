@@ -334,11 +334,18 @@ export function validateFlow(
         const refId = match[1];
         if (refId === "index") continue;
         if (refId === "item") {
+          const rest = match[2];
+          // {{@item:Item}} (the whole item) is always fine.
+          if (rest === "Item" || !rest.includes(".")) continue;
+          // @item only exists inside Loop nodes.
+          if (actionType !== "Loop") {
+            errors.push(`semántica: node "${n.id}" (${label}) uses "{{@item:...}}" but @item only exists inside a Loop's inner steps; put that logic inside a Loop or reference a real step output`);
+            continue;
+          }
           // {{@item:Item.field}} inside a Loop: check the field against the
           // source array's item shape when the action describes it.
           if (!loopItemFields) continue;
-          const rest = match[2];
-          const itemPath = rest.startsWith("Item.") ? rest.slice(5) : (rest.includes(".") ? rest.slice(rest.indexOf(".") + 1) : rest);
+          const itemPath = rest.slice(5); // empieza con "Item." (chequeado arriba)
           const firstField = itemPath.split(".")[0]?.split("[")[0];
           if (firstField && !loopItemFields.includes(firstField)) {
             errors.push(`semántica: Loop "${n.id}" (${label}) references "{{@item:Item.${firstField}}}" but items from ${loopSourceDesc} only have: ${loopItemFields.join(", ")}`);
