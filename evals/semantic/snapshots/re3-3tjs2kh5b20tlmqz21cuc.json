@@ -1,0 +1,176 @@
+{
+  "active": false,
+  "canEdit": true,
+  "createdAt": "2026-10-21T19:48:16.102Z",
+  "description": "Maqueta de soporte automático: recibe WhatsApp, busca última orden en Tiendanube, lee FAQ de Google Docs, redacta respuesta con IA y envía por WhatsApp.",
+  "edges": [
+    {
+      "id": "e1",
+      "source": "ONVjD-vDk_ixmR-b6EFNq",
+      "target": "search-orders",
+      "type": "animated"
+    },
+    {
+      "id": "e2",
+      "source": "ONVjD-vDk_ixmR-b6EFNq",
+      "target": "get-faq",
+      "type": "animated"
+    },
+    {
+      "id": "e3",
+      "source": "search-orders",
+      "target": "draft-response",
+      "type": "animated"
+    },
+    {
+      "id": "e4",
+      "source": "get-faq",
+      "target": "draft-response",
+      "type": "animated"
+    },
+    {
+      "id": "e5",
+      "source": "draft-response",
+      "target": "send-reply",
+      "type": "animated"
+    },
+    {
+      "id": "e-search-get",
+      "source": "search-orders",
+      "target": "get-order-detail",
+      "type": "animated"
+    },
+    {
+      "id": "e-get-draft",
+      "source": "get-order-detail",
+      "target": "draft-response",
+      "type": "animated"
+    }
+  ],
+  "id": "3tjs2kh5b20tlmqz21cuc",
+  "isOwner": true,
+  "name": "Soporte al Cliente Automático con WhatsApp y Tiendanube",
+  "nodes": [
+    {
+      "data": {
+        "config": {
+          "triggerType": "whatsapp/incoming-message"
+        },
+        "description": "Recibe el mensaje de WhatsApp de prueba del cliente.",
+        "label": "Mensaje de WhatsApp Recibido",
+        "status": "idle",
+        "type": "trigger"
+      },
+      "id": "ONVjD-vDk_ixmR-b6EFNq",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 228
+      },
+      "selected": false,
+      "type": "trigger"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "tiendanube/search-orders",
+          "limit": 1,
+          "query": "{{@ONVjD-vDk_ixmR-b6EFNq:Mensaje de WhatsApp Recibido.from}}"
+        },
+        "description": "Busca la última orden del cliente en Tiendanube usando datos de ejemplo.",
+        "label": "Buscar Última Orden Tiendanube",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "search-orders",
+      "position": {
+        "x": 460,
+        "y": 303
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "composio/run-tool",
+          "arguments": "{\"document_id\": \"doc_faq_ejemplo_123\"}",
+          "tool": "GOOGLEDOCS_GET_DOCUMENT_PLAINTEXT",
+          "toolkit": "googledocs"
+        },
+        "description": "Lee el contenido completo del Google Doc ficticio de preguntas frecuentes.",
+        "label": "Leer FAQ Google Docs",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "get-faq",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Eres un asistente de soporte al cliente. Redacta una respuesta amable al cliente basada en su mensaje: '{{@ONVjD-vDk_ixmR-b6EFNq:Mensaje de WhatsApp Recibido.text}}', el estado de su orden de Tiendanube: '{{@get-order-detail:Obtener Detalle de Orden.status}}' (total: '{{@get-order-detail:Obtener Detalle de Orden.total}}'), y la siguiente información de las FAQ: '{{@get-faq:Leer FAQ Google Docs.data}}'."
+        },
+        "description": "Redacta la respuesta combinando las FAQ y el estado de la orden.",
+        "label": "Redactar Respuesta IA",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "draft-response",
+      "position": {
+        "x": 1200,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "whatsapp/send-message",
+          "text": "{{@draft-response:Redactar Respuesta IA.text}}",
+          "to": "{{@ONVjD-vDk_ixmR-b6EFNq:Mensaje de WhatsApp Recibido.from}}"
+        },
+        "description": "Envía la respuesta redactada de vuelta por WhatsApp al cliente.",
+        "label": "Enviar Respuesta WhatsApp",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "send-reply",
+      "position": {
+        "x": 1570,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "tiendanube/get-order",
+          "orderId": "{{@search-orders:Buscar Última Orden Tiendanube.orders[0].id}}"
+        },
+        "label": "Obtener Detalle de Orden - Tiendanube",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "get-order-detail",
+      "position": {
+        "x": 830,
+        "y": 260
+      },
+      "type": "action"
+    }
+  ],
+  "shared": false,
+  "updatedAt": "2026-10-21T19:53:00.905Z",
+  "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+  "visibility": "private"
+}
