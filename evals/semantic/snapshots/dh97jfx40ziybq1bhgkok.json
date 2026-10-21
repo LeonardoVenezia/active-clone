@@ -1,0 +1,279 @@
+{
+ "name": "Control de stock diario",
+ "nodes": [
+  {
+   "id": "LZlo-qHHpO1C2aL40zD0K",
+   "data": {
+    "type": "trigger",
+    "label": "Todos los días a las 9:00",
+    "config": {
+     "triggerType": "Schedule",
+     "scheduleCron": "0 9 * * *"
+    },
+    "status": "idle",
+    "description": "Ejecuta todos los días a las 9 am"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 100,
+    "y": 200
+   },
+   "selected": false
+  },
+  {
+   "id": "search-tn",
+   "data": {
+    "type": "action",
+    "label": "Buscar productos Tiendanube",
+    "config": {
+     "limit": 50,
+     "status": "any",
+     "actionType": "tiendanube/search-orders"
+    },
+    "status": "idle",
+    "description": "Obtiene los productos de Tiendanube"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 75
+   }
+  },
+  {
+   "id": "search-ml",
+   "data": {
+    "type": "action",
+    "label": "Buscar productos Mercado Libre",
+    "config": {
+     "limit": 50,
+     "status": "any",
+     "actionType": "mercadolibre/search-orders"
+    },
+    "status": "idle",
+    "description": "Obtiene los productos de Mercado Libre"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 325
+   }
+  },
+  {
+   "id": "check-count",
+   "data": {
+    "type": "action",
+    "label": "Mas de 3 productos en falta",
+    "config": {
+     "condition": "({{@count-tn:Contar faltantes Tiendanube.result}} + {{@count-ml:Contar faltantes Mercado Libre.result}}) > 3",
+     "actionType": "Condition"
+    },
+    "status": "idle",
+    "description": "Verifica si hay más de 3 productos en falta"
+   },
+   "type": "action",
+   "position": {
+    "x": 600,
+    "y": 200
+   }
+  },
+  {
+   "id": "slack-alert",
+   "data": {
+    "type": "action",
+    "label": "Avisar por Slack",
+    "config": {
+     "actionType": "slack/send-message",
+     "slackChannel": "#compras",
+     "slackMessage": "Alerta: hay más de 3 productos con stock bajo."
+    },
+    "status": "idle",
+    "description": "Envía aviso al canal #compras"
+   },
+   "type": "action",
+   "position": {
+    "x": 1100,
+    "y": 200
+   }
+  },
+  {
+   "id": "loop-tn",
+   "data": {
+    "type": "action",
+    "label": "Procesar Tiendanube",
+    "config": {
+     "steps": [
+      {
+       "id": "check-stock-tn",
+       "config": {
+        "condition": "{{@item:Item.total}} < 5"
+       },
+       "actionType": "Condition"
+      },
+      {
+       "id": "append-sheet-tn",
+       "config": {
+        "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+        "toolkit": "googlesheets",
+        "arguments": "{\"spreadsheetId\": \"Stock bajo (mock)\", \"range\": \"A1\", \"valueInputOption\": \"USER_ENTERED\", \"values\": [[\"Tiendanube\", \"{{@item:Item.id}}\", \"{{@item:Item.total}}\"]]}"
+       },
+       "actionType": "composio/run-tool"
+      }
+     ],
+     "source": "{{@search-tn:Buscar productos Tiendanube.orders}}",
+     "maxItems": 50,
+     "actionType": "Loop"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 600,
+    "y": 75
+   }
+  },
+  {
+   "id": "loop-ml",
+   "data": {
+    "type": "action",
+    "label": "Procesar Mercado Libre",
+    "config": {
+     "steps": [
+      {
+       "id": "check-stock-ml",
+       "config": {
+        "condition": "{{@item:Item.total}} < 5"
+       },
+       "actionType": "Condition"
+      },
+      {
+       "id": "append-sheet-ml",
+       "config": {
+        "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+        "toolkit": "googlesheets",
+        "arguments": "{\"spreadsheetId\": \"Stock bajo (mock)\", \"range\": \"A1\", \"valueInputOption\": \"USER_ENTERED\", \"values\": [[\"Mercado Libre\", \"{{@item:Item.id}}\", \"{{@item:Item.total}}\"]]}"
+       },
+       "actionType": "composio/run-tool"
+      }
+     ],
+     "source": "{{@search-ml:Buscar productos Mercado Libre.orders}}",
+     "maxItems": 50,
+     "actionType": "Loop"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 600,
+    "y": 325
+   }
+  },
+  {
+   "id": "count-tn",
+   "data": {
+    "type": "action",
+    "label": "Contar faltantes Tiendanube",
+    "config": {
+     "input": "{\"orders\": {{@loop-tn:Procesar Tiendanube.results}}}",
+     "actionType": "Fórmula",
+     "expression": "$count(orders)"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 75
+   }
+  },
+  {
+   "id": "count-ml",
+   "data": {
+    "type": "action",
+    "label": "Contar faltantes Mercado Libre",
+    "config": {
+     "input": "{\"orders\": {{@loop-ml:Procesar Mercado Libre.results}}}",
+     "actionType": "Fórmula",
+     "expression": "$count(orders)"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 325
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "LZlo-qHHpO1C2aL40zD0K",
+   "target": "search-tn"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "LZlo-qHHpO1C2aL40zD0K",
+   "target": "search-ml"
+  },
+  {
+   "id": "e6",
+   "type": "animated",
+   "source": "check-count",
+   "target": "slack-alert"
+  },
+  {
+   "id": "e3",
+   "type": "animated",
+   "source": "search-tn",
+   "target": "loop-tn"
+  },
+  {
+   "id": "e4",
+   "type": "animated",
+   "source": "search-ml",
+   "target": "loop-ml"
+  },
+  {
+   "id": "e5",
+   "type": "animated",
+   "source": "loop-tn",
+   "target": "check-count"
+  },
+  {
+   "id": "e6",
+   "type": "animated",
+   "source": "loop-ml",
+   "target": "check-count"
+  },
+  {
+   "id": "e-loop-tn-count",
+   "type": "animated",
+   "source": "loop-tn",
+   "target": "count-tn"
+  },
+  {
+   "id": "e-loop-ml-count",
+   "type": "animated",
+   "source": "loop-ml",
+   "target": "count-ml"
+  },
+  {
+   "id": "e-count-tn-check",
+   "type": "animated",
+   "source": "count-tn",
+   "target": "check-count"
+  },
+  {
+   "id": "e-count-ml-check",
+   "type": "animated",
+   "source": "count-ml",
+   "target": "check-count"
+  }
+ ]
+}

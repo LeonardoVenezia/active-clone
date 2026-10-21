@@ -1,0 +1,201 @@
+{
+ "name": "Reconciliación Diaria Stripe y Tiendanube",
+ "nodes": [
+  {
+   "id": "jzypebmrmEqYvJM9ATXJE",
+   "data": {
+    "type": "trigger",
+    "label": "Horario Diario 8 AM",
+    "config": {
+     "triggerType": "Schedule",
+     "scheduleCron": "0 8 * * *"
+    },
+    "status": "idle",
+    "description": "Ejecuta todos los días a las 8 de la mañana"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 100,
+    "y": 200
+   },
+   "selected": false
+  },
+  {
+   "id": "stripe-payments",
+   "data": {
+    "type": "action",
+    "label": "Buscar Cobros Stripe",
+    "config": {
+     "limit": "50",
+     "actionType": "stripe/list-payments"
+    },
+    "status": "idle",
+    "description": "Obtiene los cobros de Stripe del día anterior"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 75
+   }
+  },
+  {
+   "id": "tiendanube-orders",
+   "data": {
+    "type": "action",
+    "label": "Buscar Órdenes Tiendanube",
+    "config": {
+     "limit": 50,
+     "status": "any",
+     "actionType": "tiendanube/search-orders",
+     "paymentStatus": "any",
+     "shippingStatus": "any"
+    },
+    "status": "idle",
+    "description": "Obtiene las órdenes de Tiendanube del día anterior"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 325
+   }
+  },
+  {
+   "id": "loop-stripe",
+   "data": {
+    "type": "action",
+    "label": "Procesar Cobros Stripe",
+    "config": {
+     "steps": [
+      {
+       "id": "check-match",
+       "config": {
+        "input": "{\"paymentId\": \"{{@item:Item.id}}\"}",
+        "expression": "paymentId"
+       },
+       "actionType": "Fórmula"
+      }
+     ],
+     "source": "{{@stripe-payments:Buscar Cobros Stripe.payments}}",
+     "maxItems": 50,
+     "actionType": "Loop"
+    }
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 75
+   }
+  },
+  {
+   "id": "loop-tiendanube",
+   "data": {
+    "type": "action",
+    "label": "Procesar Órdenes Tiendanube",
+    "config": {
+     "steps": [
+      {
+       "id": "check-order",
+       "config": {
+        "input": "{\"orderId\": \"{{@item:Item.id}}\"}",
+        "expression": "orderId"
+       },
+       "actionType": "Fórmula"
+      }
+     ],
+     "source": "{{@tiendanube-orders:Buscar Órdenes Tiendanube.orders}}",
+     "maxItems": 50,
+     "actionType": "Loop"
+    }
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 325
+   }
+  },
+  {
+   "id": "googlesheets-append",
+   "data": {
+    "type": "action",
+    "label": "Anotar en Google Sheets",
+    "config": {
+     "tool": "GOOGLESHEETS_BATCH_UPDATE",
+     "toolkit": "googlesheets",
+     "arguments": "{\"spreadsheet_id\": \"mock_spreadsheet_id\", \"sheet_name\": \"Diferencias\", \"values\": [[\"Procesamiento completado Stripe y Tiendanube\"]]}",
+     "actionType": "composio/run-tool"
+    }
+   },
+   "type": "action",
+   "position": {
+    "x": 600,
+    "y": 200
+   }
+  },
+  {
+   "id": "gmail-summary",
+   "data": {
+    "type": "action",
+    "label": "Enviar Resumen por Gmail",
+    "config": {
+     "tool": "GMAIL_SEND_EMAIL",
+     "toolkit": "gmail",
+     "arguments": "{\"recipient_email\": \"finanzas@example.com\", \"subject\": \"Resumen de Reconciliación Diaria\", \"body\": \"Se adjunta el reporte de diferencias entre Stripe y Tiendanube.\"}",
+     "actionType": "composio/run-tool"
+    }
+   },
+   "type": "action",
+   "position": {
+    "x": 850,
+    "y": 200
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "jzypebmrmEqYvJM9ATXJE",
+   "target": "stripe-payments"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "jzypebmrmEqYvJM9ATXJE",
+   "target": "tiendanube-orders"
+  },
+  {
+   "id": "e3",
+   "type": "animated",
+   "source": "stripe-payments",
+   "target": "loop-stripe"
+  },
+  {
+   "id": "e4",
+   "type": "animated",
+   "source": "tiendanube-orders",
+   "target": "loop-tiendanube"
+  },
+  {
+   "id": "e5",
+   "type": "animated",
+   "source": "loop-stripe",
+   "target": "googlesheets-append"
+  },
+  {
+   "id": "e6",
+   "type": "animated",
+   "source": "loop-tiendanube",
+   "target": "googlesheets-append"
+  },
+  {
+   "id": "e7",
+   "type": "animated",
+   "source": "googlesheets-append",
+   "target": "gmail-summary"
+  }
+ ]
+}

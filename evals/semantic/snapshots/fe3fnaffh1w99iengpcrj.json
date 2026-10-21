@@ -1,0 +1,169 @@
+{
+ "name": "Reconciliación diaria de Stripe y Tiendanube",
+ "nodes": [
+  {
+   "id": "jHf4RfrQLUhSdPcU6bho-",
+   "data": {
+    "type": "trigger",
+    "label": "Programar Reconciliación",
+    "config": {
+     "triggerType": "Schedule",
+     "scheduleCron": "0 8 * * *"
+    },
+    "status": "idle",
+    "description": "Se ejecuta todos los días a las 8 de la mañana."
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 100,
+    "y": 200
+   },
+   "selected": false
+  },
+  {
+   "id": "get-stripe",
+   "data": {
+    "type": "action",
+    "label": "Obtener Cobros de Stripe",
+    "config": {
+     "limit": 100,
+     "actionType": "stripe/list-payments"
+    },
+    "status": "idle",
+    "description": "Traer los cobros de Stripe del día anterior."
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 75
+   }
+  },
+  {
+   "id": "get-tiendanube",
+   "data": {
+    "type": "action",
+    "label": "Obtener Órdenes de Tiendanube",
+    "config": {
+     "limit": 100,
+     "status": "any",
+     "actionType": "tiendanube/search-orders"
+    },
+    "status": "idle",
+    "description": "Traer las órdenes de Tiendanube del día anterior."
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 325
+   }
+  },
+  {
+   "id": "save-sheets",
+   "data": {
+    "type": "action",
+    "label": "Anotar en Google Sheets",
+    "config": {
+     "tool": "GOOGLESHEETS_BATCH_UPDATE",
+     "toolkit": "googlesheets",
+     "arguments": "{\"spreadsheet_id\": \"mock-spreadsheet-id\", \"sheet_name\": \"Diferencias (mock)\", \"values\": [[\"{{@compare-loop:Procesar y Comparar Listados.completed}}\"]]",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 600,
+    "y": 200
+   }
+  },
+  {
+   "id": "send-gmail",
+   "data": {
+    "type": "action",
+    "label": "Enviar Resumen por Gmail",
+    "config": {
+     "tool": "GMAIL_SEND_EMAIL",
+     "toolkit": "gmail",
+     "arguments": "{\"recipient_email\": \"finanzas@example.com\", \"subject\": \"Resumen de Reconciliación Diaria\", \"body\": \"Hola equipo,\\n\\nSe adjuntan las diferencias detectadas:\\n{{@compare-loop:Procesar y Comparar Listados.completed}}\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 850,
+    "y": 200
+   }
+  },
+  {
+   "id": "compare-loop",
+   "data": {
+    "type": "action",
+    "label": "Procesar y Comparar Listados",
+    "config": {
+     "steps": [
+      {
+       "id": "check-order",
+       "config": {
+        "query": "{{@item:Item.externalReference}}"
+       },
+       "actionType": "tiendanube/search-orders"
+      },
+      {
+       "id": "has-no-order",
+       "config": {
+        "condition": "{{@check-order:Buscar Órdenes.count}} === 0"
+       },
+       "actionType": "Condition"
+      }
+     ],
+     "source": "{{@get-stripe:Obtener Cobros de Stripe.payments}}",
+     "maxItems": 50,
+     "actionType": "Loop"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 325
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e-trig-stripe",
+   "type": "animated",
+   "source": "jHf4RfrQLUhSdPcU6bho-",
+   "target": "get-stripe"
+  },
+  {
+   "id": "e-trig-tn",
+   "type": "animated",
+   "source": "jHf4RfrQLUhSdPcU6bho-",
+   "target": "get-tiendanube"
+  },
+  {
+   "id": "e6",
+   "type": "animated",
+   "source": "save-sheets",
+   "target": "send-gmail"
+  },
+  {
+   "id": "e-stripe-loop",
+   "type": "animated",
+   "source": "get-stripe",
+   "target": "compare-loop"
+  },
+  {
+   "id": "e-loop-sheets",
+   "type": "animated",
+   "source": "compare-loop",
+   "target": "save-sheets"
+  }
+ ]
+}

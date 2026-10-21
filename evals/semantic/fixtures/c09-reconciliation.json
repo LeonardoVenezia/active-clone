@@ -1,0 +1,26 @@
+{
+ "case": "C-09",
+ "descripcion": "Reconciliación Stripe vs Tiendanube. Mundo: 2 pares que matchean por monto, 1 cobro sin orden (pay_3), 1 orden sin cobro (ord_7). Formas = outputs reales de los steps (plugins/stripe/steps/list-payments.ts, plugins/tiendanube/steps/search-orders.ts). OJO: list-payments NO expone externalReference ni metadata; el único cruce posible con estos outputs es por monto (+fecha). Los montos son únicos por par para que el cruce por monto sea no ambiguo.",
+ "sources": {
+  "stripe/list-payments": {
+   "payments": [
+    {"id": "pay_1", "status": "succeeded", "amount": 15000, "currency": "ars", "customerId": "cus_1", "created": 1761000000},
+    {"id": "pay_2", "status": "succeeded", "amount": 22000, "currency": "ars", "customerId": "cus_2", "created": 1761000100},
+    {"id": "pay_3", "status": "succeeded", "amount": 9900, "currency": "ars", "customerId": "cus_9", "created": 1761000200}
+   ]
+  },
+  "tiendanube/search-orders": {
+   "orders": [
+    {"id": "ord_1", "number": "1001", "status": "open", "total": "15000.00", "email": "ana@example.com", "customer_name": "Ana Paz", "created_at": "2026-10-20T10:00:00-03:00"},
+    {"id": "ord_2", "number": "1002", "status": "open", "total": "22000.00", "email": "beto@example.com", "customer_name": "Beto Ruiz", "created_at": "2026-10-20T11:00:00-03:00"},
+    {"id": "ord_7", "number": "1007", "status": "open", "total": "31000.00", "email": "gabi@example.com", "customer_name": "Gabi Sosa", "created_at": "2026-10-20T12:00:00-03:00"}
+   ]
+  }
+ },
+ "expect": {
+  "paymentsWithoutOrder": ["pay_3"],
+  "ordersWithoutPayment": ["ord_7"],
+  "joinFieldsValidos": ["amount", "total", "created", "created_at", "customerId", "email"],
+  "nota": "El identificador de cruce debe existir en AMBOS datasets tal como los devuelven los steps. externalReference NO existe en el output de list-payments."
+ }
+}

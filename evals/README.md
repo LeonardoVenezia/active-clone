@@ -29,3 +29,17 @@ todo el set como regresión ante cada cambio de prompt, tool o modelo.
 
 Todavía no hay runner automático: los casos se corren a mano por el chat en la
 cuenta QA (modo maqueta, sin ejecutar). El runner es la Etapa 1 pendiente.
+
+## Dos niveles de aceptación
+
+1. **PASS estructural** — los `expect` de `cases.jsonl` sobre el grafo
+   (tipos de nodo, toolkits, sin huérfanos/placeholders/HTTP manual).
+2. **Aceptación semántica** — `evals/semantic/`: simulación determinística
+   del flujo contra un fixture con datos conocidos; verifica que la salida
+   efectiva (Sheets/email/Slack) sea la pedida. Hoy cubre C-09 y C-12.
+
+Al reportar una medición, separar los dos niveles y citar el set completo:
+la medición estructural completa vigente es run 3
+(`2026-10-21-first-try-rerun2.jsonl`, 10/12 casos, 18/24 corridas); las
+re-mediciones dirigidas posteriores (p.ej. `2026-10-21-targeted-rerun.jsonl`,
+6 corridas sobre 3 casos) no son una medición completa.
