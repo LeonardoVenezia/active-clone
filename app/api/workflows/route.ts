@@ -6,12 +6,13 @@ import { members, workflowShares, workflows } from "@/lib/db/schema";
 
 export async function GET(request: Request) {
   try {
+    const buildSha = process.env.VERCEL_GIT_COMMIT_SHA ?? "local";
     const session = await auth.api.getSession({
       headers: request.headers,
     });
 
     if (!session?.user) {
-      return NextResponse.json([], { status: 200 });
+      return NextResponse.json([], { status: 200, headers: { "x-build-sha": buildSha } });
     }
 
     const userWorkflows = await db
