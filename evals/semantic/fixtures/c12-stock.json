@@ -1,6 +1,6 @@
 {
  "case": "C-12",
- "descripcion": "Alerta de stock bajo TN+ML. Verdad de productos en productsTruth: 4 productos únicos con stock<5 (tn_p1, tn_p3, ml_p1, ml_p3) -> Slack esperado (>3). Las fuentes que el catálogo ofrece para 'listar' son search-orders (órdenes, sin stock): la orden ord_tn_2 con total 4.00 es la trampa (una orden barata NO es un producto sin stock). No existe acción 'listar productos' en tiendanube ni mercadolibre (solo get-product/get-item por ID): gap de catálogo.",
+ "descripcion": "Alerta de stock bajo TN+ML. Verdad de productos en productsTruth: 4 productos únicos con stock<5 (tn_p1, tn_p3, ml_p1, ml_p3) -> Slack esperado (>3). Ahora el catálogo TIENE list-products/list-items (implementado en 7dba8f1); las fuentes search-orders quedan como trampa (ord_tn_2 total 4.00: una orden barata NO es un producto sin stock).",
  "sources": {
   "tiendanube/search-orders": {
    "orders": [
@@ -59,6 +59,74 @@
      "currency": "ARS",
      "buyerNickname": "CLIENTE_CINCO",
      "dateCreated": "2026-10-20T08:30:00-03:00"
+    }
+   ]
+  },
+  "tiendanube/list-products": {
+   "products": [
+    {
+     "id": "tn_p1",
+     "name": "Remera Negra",
+     "totalStock": 2,
+     "variants": [
+      {
+       "id": "tn_p1_v1",
+       "sku": "SKU-tn_p1",
+       "price": "1000.00",
+       "stock": 2
+      }
+     ]
+    },
+    {
+     "id": "tn_p2",
+     "name": "Remera Blanca",
+     "totalStock": 12,
+     "variants": [
+      {
+       "id": "tn_p2_v1",
+       "sku": "SKU-tn_p2",
+       "price": "1000.00",
+       "stock": 12
+      }
+     ]
+    },
+    {
+     "id": "tn_p3",
+     "name": "Gorra Trucker",
+     "totalStock": 4,
+     "variants": [
+      {
+       "id": "tn_p3_v1",
+       "sku": "SKU-tn_p3",
+       "price": "1000.00",
+       "stock": 4
+      }
+     ]
+    }
+   ]
+  },
+  "mercadolibre/list-items": {
+   "items": [
+    {
+     "id": "ml_p1",
+     "title": "Remera Negra ML",
+     "availableQuantity": 1,
+     "price": 1000,
+     "status": "active"
+    },
+    {
+     "id": "ml_p2",
+     "title": "Short Deportivo",
+     "availableQuantity": 7,
+     "price": 1000,
+     "status": "active"
+    },
+    {
+     "id": "ml_p3",
+     "title": "Medias Pack x3",
+     "availableQuantity": 3,
+     "price": 1000,
+     "status": "active"
     }
    ]
   }
