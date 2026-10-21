@@ -1,0 +1,148 @@
+{
+ "name": "Tracking Proactivo de Envíos Tiendanube y Zipnova",
+ "nodes": [
+  {
+   "id": "wICG8cHdE9yUlt4dlDIp-",
+   "data": {
+    "type": "trigger",
+    "label": "Iniciar Prueba Manual",
+    "config": {
+     "triggerType": "Manual"
+    },
+    "status": "idle",
+    "description": "Inicia la ejecución del flujo de prueba"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 100,
+    "y": 200
+   },
+   "selected": false
+  },
+  {
+   "id": "search-orders",
+   "data": {
+    "type": "action",
+    "label": "Buscar Órdenes Enviadas",
+    "config": {
+     "limit": 10,
+     "status": "shipped",
+     "actionType": "tiendanube/search-orders",
+     "shippingStatus": "shipped"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 200
+   }
+  },
+  {
+   "id": "get-shipment",
+   "data": {
+    "type": "action",
+    "label": "Consultar Envío en Zipnova",
+    "config": {
+     "actionType": "zipnova/get-shipment",
+     "shipmentId": "{{@search-orders:Buscar Órdenes Enviadas.orders[0].shipping_id}}"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 600,
+    "y": 200
+   }
+  },
+  {
+   "id": "cond-delayed",
+   "data": {
+    "type": "action",
+    "label": "Si Envío Demorado",
+    "config": {
+     "condition": "{{@get-shipment:Consultar Envío en Zipnova.raw}} === 'delayed' || {{@get-shipment:Consultar Envío en Zipnova.raw}} === 'problem'",
+     "actionType": "Condition"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 850,
+    "y": 75
+   }
+  },
+  {
+   "id": "slack-alert",
+   "data": {
+    "type": "action",
+    "label": "Avisar en Slack",
+    "config": {
+     "actionType": "slack/send-message",
+     "slackChannel": "#envios",
+     "slackMessage": "El envío de la orden {{@search-orders:Buscar Órdenes Enviadas.orders[0].id}} presenta demoras o problemas."
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1100,
+    "y": 75
+   }
+  },
+  {
+   "id": "whatsapp-client",
+   "data": {
+    "type": "action",
+    "label": "Enviar WhatsApp a Cliente",
+    "config": {
+     "to": "{{@search-orders:Buscar Órdenes Enviadas.orders[0].customerPhone}}",
+     "text": "Hola {{@search-orders:Buscar Órdenes Enviadas.orders[0].customerName}}, tu pedido está en camino. Estado del envío: {{@get-shipment:Consultar Envío en Zipnova.raw}}.",
+     "actionType": "whatsapp/send-message"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 850,
+    "y": 325
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "wICG8cHdE9yUlt4dlDIp-",
+   "target": "search-orders"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "search-orders",
+   "target": "get-shipment"
+  },
+  {
+   "id": "e3",
+   "type": "animated",
+   "source": "get-shipment",
+   "target": "cond-delayed"
+  },
+  {
+   "id": "e4",
+   "type": "animated",
+   "source": "get-shipment",
+   "target": "whatsapp-client"
+  },
+  {
+   "id": "e5",
+   "type": "animated",
+   "source": "cond-delayed",
+   "target": "slack-alert"
+  }
+ ]
+}

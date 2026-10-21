@@ -1,0 +1,95 @@
+{
+ "name": "Tracking Proactivo de Mercado Libre",
+ "nodes": [
+  {
+   "id": "9OoSAIujqWoFw0Vi0R2UW",
+   "data": {
+    "type": "trigger",
+    "label": "Webhook Mercado Libre",
+    "config": {
+     "triggerType": "mercadolibre/order-updated"
+    },
+    "status": "idle",
+    "description": "Disparador de nueva venta en Mercado Libre"
+   },
+   "type": "trigger",
+   "position": {
+    "x": 100,
+    "y": 200
+   },
+   "selected": false
+  },
+  {
+   "id": "get-order-details",
+   "data": {
+    "type": "action",
+    "label": "Obtener Detalle de Orden",
+    "config": {
+     "orderId": "{{@9OoSAIujqWoFw0Vi0R2UW:Webhook Mercado Libre.orderId}}",
+     "actionType": "mercadolibre/get-order"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 200
+   }
+  },
+  {
+   "id": "get-shipment-status",
+   "data": {
+    "type": "action",
+    "label": "Consultar Envío Mercado Envíos",
+    "config": {
+     "actionType": "mercadolibre/get-shipment",
+     "shipmentId": "{{@get-order-details:Obtener Detalle de Orden.shippingId}}"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 600,
+    "y": 200
+   }
+  },
+  {
+   "id": "send-postsale-message",
+   "data": {
+    "type": "action",
+    "label": "Enviar Mensaje Postventa",
+    "config": {
+     "text": "¡Hola! Tu pedido ya está en camino. El estado actual de tu envío es: {{@get-shipment-status:Consultar Envío Mercado Envíos.status}}.",
+     "orderId": "{{@get-order-details:Obtener Detalle de Orden.id}}",
+     "actionType": "mercadolibre/send-message"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 850,
+    "y": 200
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "edge-trigger-to-order",
+   "type": "animated",
+   "source": "9OoSAIujqWoFw0Vi0R2UW",
+   "target": "get-order-details"
+  },
+  {
+   "id": "edge-order-to-shipment",
+   "type": "animated",
+   "source": "get-order-details",
+   "target": "get-shipment-status"
+  },
+  {
+   "id": "edge-shipment-to-message",
+   "type": "animated",
+   "source": "get-shipment-status",
+   "target": "send-postsale-message"
+  }
+ ]
+}

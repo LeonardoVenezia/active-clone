@@ -1,0 +1,219 @@
+{
+ "name": "Recupero de Carritos Abandonados Tiendanube",
+ "nodes": [
+  {
+   "id": "deH-Et4Wkvq9qXmEEHlYn",
+   "data": {
+    "type": "trigger",
+    "label": "Iniciar Recupero",
+    "config": {
+     "triggerType": "Manual"
+    },
+    "status": "idle",
+    "description": "Inicia el flujo de recupero de carritos abandonados"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 100,
+    "y": 200
+   },
+   "selected": false
+  },
+  {
+   "id": "delay-2h",
+   "data": {
+    "type": "action",
+    "label": "Esperar 2 Horas",
+    "config": {
+     "actionType": "Delay",
+     "durationMinutes": 120
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 200
+   }
+  },
+  {
+   "id": "get-cart",
+   "data": {
+    "type": "action",
+    "label": "Obtener Carrito",
+    "config": {
+     "orderId": "123456789",
+     "actionType": "tiendanube/get-order"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 600,
+    "y": 200
+   }
+  },
+  {
+   "id": "cond-high",
+   "data": {
+    "type": "action",
+    "label": "Total Mayor a $50000",
+    "config": {
+     "condition": "{{@get-cart:Obtener Carrito.total}} > 50000",
+     "actionType": "Condition"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 850,
+    "y": 75
+   }
+  },
+  {
+   "id": "cond-low",
+   "data": {
+    "type": "action",
+    "label": "Total Menor o Igual a $50000",
+    "config": {
+     "condition": "{{@get-cart:Obtener Carrito.total}} <= 50000",
+     "actionType": "Condition"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 850,
+    "y": 325
+   }
+  },
+  {
+   "id": "msg-coupon",
+   "data": {
+    "type": "action",
+    "label": "Armar Mensaje con Cupón",
+    "config": {
+     "aiModel": "meta/llama-4-scout",
+     "aiFormat": "text",
+     "aiPrompt": "Hola {{@get-cart:Obtener Carrito.customerName}}, notamos que dejaste productos en tu carrito por un total de ${{@get-cart:Obtener Carrito.total}}. Te regalamos un 10% de descuento con el cupón VOLVER10 para que completes tu compra.",
+     "actionType": "ai-gateway/generate-text"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1100,
+    "y": 75
+   }
+  },
+  {
+   "id": "msg-simple",
+   "data": {
+    "type": "action",
+    "label": "Armar Mensaje Simple",
+    "config": {
+     "aiModel": "meta/llama-4-scout",
+     "aiFormat": "text",
+     "aiPrompt": "Hola {{@get-cart:Obtener Carrito.customerName}}, notamos que dejaste productos en tu carrito. ¿Te podemos ayudar en algo para finalizar tu compra?",
+     "actionType": "ai-gateway/generate-text"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1100,
+    "y": 325
+   }
+  },
+  {
+   "id": "send-wa-coupon",
+   "data": {
+    "type": "action",
+    "label": "Enviar WhatsApp con Cupón",
+    "config": {
+     "to": "{{@get-cart:Obtener Carrito.customerPhone}}",
+     "text": "{{@msg-coupon:Armar Mensaje con Cupón.text}}",
+     "actionType": "whatsapp/send-message"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1350,
+    "y": 75
+   }
+  },
+  {
+   "id": "send-wa-simple",
+   "data": {
+    "type": "action",
+    "label": "Enviar WhatsApp Simple",
+    "config": {
+     "to": "{{@get-cart:Obtener Carrito.customerPhone}}",
+     "text": "{{@msg-simple:Armar Mensaje Simple.text}}",
+     "actionType": "whatsapp/send-message"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1350,
+    "y": 325
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "deH-Et4Wkvq9qXmEEHlYn",
+   "target": "delay-2h"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "delay-2h",
+   "target": "get-cart"
+  },
+  {
+   "id": "e3",
+   "type": "animated",
+   "source": "get-cart",
+   "target": "cond-high"
+  },
+  {
+   "id": "e4",
+   "type": "animated",
+   "source": "get-cart",
+   "target": "cond-low"
+  },
+  {
+   "id": "e5",
+   "type": "animated",
+   "source": "cond-high",
+   "target": "msg-coupon"
+  },
+  {
+   "id": "e6",
+   "type": "animated",
+   "source": "cond-low",
+   "target": "msg-simple"
+  },
+  {
+   "id": "e7",
+   "type": "animated",
+   "source": "msg-coupon",
+   "target": "send-wa-coupon"
+  },
+  {
+   "id": "e8",
+   "type": "animated",
+   "source": "msg-simple",
+   "target": "send-wa-simple"
+  }
+ ]
+}

@@ -1,0 +1,271 @@
+{
+ "name": "Tiendanube Order Workflow with Stock Check & Approval",
+ "nodes": [
+  {
+   "id": "bdmXwIRkPbJEOk57fOQbr",
+   "data": {
+    "type": "trigger",
+    "label": "Webhook Tiendanube",
+    "config": {
+     "triggerType": "tiendanube/order-created"
+    },
+    "status": "idle",
+    "description": "Se dispara cuando entra una nueva orden en Tiendanube"
+   },
+   "type": "trigger",
+   "position": {
+    "x": 100,
+    "y": 200
+   },
+   "selected": false
+  },
+  {
+   "id": "get-order-details",
+   "data": {
+    "type": "action",
+    "label": "Traer Detalle de Orden",
+    "config": {
+     "orderId": "{{@bdmXwIRkPbJEOk57fOQbr:Webhook Tiendanube.orderId}}",
+     "actionType": "tiendanube/get-order"
+    },
+    "status": "idle",
+    "description": "Obtiene los detalles completos y productos de la orden"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 200
+   }
+  },
+  {
+   "id": "loop-items",
+   "data": {
+    "type": "action",
+    "label": "Chequear Stock Ítems",
+    "config": {
+     "steps": [
+      {
+       "id": "get-product",
+       "config": {
+        "productId": "{{@item:Item.id}}"
+       },
+       "actionType": "tiendanube/get-product"
+      },
+      {
+       "id": "stock-zero",
+       "config": {
+        "condition": "{{@get-product:Get Product.variants[0].stock}} === 0"
+       },
+       "actionType": "Condition"
+      },
+      {
+       "id": "slack-alert",
+       "config": {
+        "slackChannel": "#deposito",
+        "slackMessage": "Alerta: El producto {{@item:Item.name}} se quedó sin stock (stock 0)."
+       },
+       "actionType": "slack/send-message"
+      }
+     ],
+     "source": "{{@get-order-details:Traer Detalle de Orden.products}}",
+     "maxItems": 50,
+     "actionType": "Loop"
+    },
+    "status": "idle",
+    "description": "Recorre cada ítem para verificar stock y avisar a Slack si es cero"
+   },
+   "type": "action",
+   "position": {
+    "x": 600,
+    "y": 200
+   }
+  },
+  {
+   "id": "check-amount",
+   "data": {
+    "type": "action",
+    "label": "Supera $500.000?",
+    "config": {
+     "condition": "{{@get-order-details:Traer Detalle de Orden.total}} > 500000",
+     "actionType": "Condition"
+    },
+    "status": "idle",
+    "description": "Verifica si el total de la orden supera los $500.000"
+   },
+   "type": "action",
+   "position": {
+    "x": 850,
+    "y": 75
+   }
+  },
+  {
+   "id": "approval-step",
+   "data": {
+    "type": "action",
+    "label": "Aprobación Manual",
+    "config": {
+     "message": "La orden supera los $500.000. Por favor autorice para continuar.",
+     "actionType": "Approval"
+    },
+    "status": "idle",
+    "description": "Requiere aprobación manual del equipo"
+   },
+   "type": "action",
+   "position": {
+    "x": 1100,
+    "y": 75
+   }
+  },
+  {
+   "id": "create-shipment",
+   "data": {
+    "type": "action",
+    "label": "Crear Envío Zipnova",
+    "config": {
+     "city": "CABA",
+     "state": "Capital Federal",
+     "sortBy": "price",
+     "street": "Av. Corrientes",
+     "zipcode": "1405",
+     "originId": "auto",
+     "carrierId": "5",
+     "actionType": "zipnova/create-shipment",
+     "externalId": "{{@get-order-details:Traer Detalle de Orden.id}}",
+     "serviceType": "pickup_point",
+     "weightGrams": "1000",
+     "logisticType": "ship_drop",
+     "streetNumber": "1234",
+     "declaredValue": "{{@get-order-details:Traer Detalle de Orden.total}}",
+     "recipientName": "{{@get-order-details:Traer Detalle de Orden.customerName}}",
+     "packageWidthCm": "15",
+     "recipientEmail": "{{@get-order-details:Traer Detalle de Orden.customerEmail}}",
+     "recipientPhone": "{{@get-order-details:Traer Detalle de Orden.customerPhone}}",
+     "packageHeightCm": "10",
+     "packageLengthCm": "20",
+     "recipientDocument": "30123456",
+     "packageDescription": "Productos Tiendanube",
+     "processImmediately": "0"
+    },
+    "status": "idle",
+    "description": "Crea el envío en Zipnova sin procesarlo"
+   },
+   "type": "action",
+   "position": {
+    "x": 1350,
+    "y": 200
+   }
+  },
+  {
+   "id": "send-whatsapp",
+   "data": {
+    "type": "action",
+    "label": "Enviar WhatsApp Tracking",
+    "config": {
+     "to": "{{@get-order-details:Traer Detalle de Orden.customerPhone}}",
+     "text": "¡Hola {{@get-order-details:Traer Detalle de Orden.customerName}}! Tu pedido ha sido registrado. Envío ID: {{@create-shipment:Crear Envío Zipnova.shipmentId}}",
+     "actionType": "whatsapp/send-message"
+    },
+    "status": "idle",
+    "description": "Envía WhatsApp al cliente con la información de su pedido y envío"
+   },
+   "type": "action",
+   "position": {
+    "x": 1600,
+    "y": 200
+   }
+  },
+  {
+   "id": "append-sheets",
+   "data": {
+    "type": "action",
+    "label": "Anotar en Google Sheets",
+    "config": {
+     "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+     "toolkit": "googlesheets",
+     "arguments": "{\"spreadsheetId\": \"mock-spreadsheet-id\", \"range\": \"Sheet1!A:D\", \"valueInputOption\": \"USER_ENTERED\", \"values\": [[\"2026-10-15\", \"{{@get-order-details:Traer Detalle de Orden.customerName}}\", \"{{@get-order-details:Traer Detalle de Orden.total}}\", \"{{@create-shipment:Crear Envío Zipnova.shipmentId}}\"]]}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle",
+    "description": "Registra los datos de la venta en la planilla mock de Google Sheets"
+   },
+   "type": "action",
+   "position": {
+    "x": 1850,
+    "y": 200
+   }
+  },
+  {
+   "id": "check-amount-not",
+   "data": {
+    "type": "action",
+    "label": "No Supera $500.000?",
+    "config": {
+     "condition": "{{@get-order-details:Traer Detalle de Orden.total}} <= 500000",
+     "actionType": "Condition"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 850,
+    "y": 325
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "bdmXwIRkPbJEOk57fOQbr",
+   "target": "get-order-details"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "get-order-details",
+   "target": "loop-items"
+  },
+  {
+   "id": "e3",
+   "type": "animated",
+   "source": "loop-items",
+   "target": "check-amount"
+  },
+  {
+   "id": "e4",
+   "type": "animated",
+   "source": "check-amount",
+   "target": "approval-step"
+  },
+  {
+   "id": "e7",
+   "type": "animated",
+   "source": "create-shipment",
+   "target": "send-whatsapp"
+  },
+  {
+   "id": "e8",
+   "type": "animated",
+   "source": "send-whatsapp",
+   "target": "append-sheets"
+  },
+  {
+   "id": "e-cond-2",
+   "type": "animated",
+   "source": "loop-items",
+   "target": "check-amount-not"
+  },
+  {
+   "id": "e-ship-1",
+   "type": "animated",
+   "source": "approval-step",
+   "target": "create-shipment"
+  },
+  {
+   "id": "e-ship-2",
+   "type": "animated",
+   "source": "check-amount-not",
+   "target": "create-shipment"
+  }
+ ]
+}
