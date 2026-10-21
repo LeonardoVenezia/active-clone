@@ -14,7 +14,7 @@ type ShipmentOutput = {
   estimatedDelivery: string;
   externalId: string;
 };
-type Result = { success: true } & ShipmentOutput & { shipment: unknown } | { success: false; error: string };
+type Result = { success: true } & ShipmentOutput & { raw: unknown } | { success: false; error: string };
 type Input = StepInput & { shipmentId: string; integrationId?: string };
 
 const str = (v: unknown): string => (v === null || v === undefined ? "" : String(v));
@@ -42,7 +42,7 @@ async function stepHandler(input: Input, credentials: ZipnovaCredentials): Promi
   if (!input.shipmentId) return { success: false, error: "shipmentId is required" };
   try {
     const shipment = await zipnovaRequest(credentials, "GET", `/shipments/${input.shipmentId}`);
-    return { success: true, ...mapShipment(shipment), shipment };
+    return { success: true, ...mapShipment(shipment), raw: shipment };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
