@@ -139,6 +139,34 @@ const tiendanubePlugin: IntegrationPlugin = {
       ],
     },
     {
+      slug: "list-products",
+      label: "List Products",
+      description: "List store products with stock per variant",
+      category: "Tiendanube",
+      stepFunction: "listProductsStep",
+      stepImportPath: "list-products",
+      outputFields: [
+        { field: "products", description: "List of products (id, name, totalStock, variants: id, sku, price, stock)" },
+        { field: "count", description: "Products returned" },
+      ],
+      configFields: [
+        {
+          key: "query",
+          label: "Search",
+          type: "template-input",
+          placeholder: "Product name",
+          example: "remera",
+        },
+        {
+          key: "limit",
+          label: "Limit",
+          type: "template-input",
+          placeholder: "50",
+          example: "50",
+        },
+      ],
+    },
+    {
       slug: "search-orders",
       label: "Search Orders",
       description: "Search orders by text, status or date",

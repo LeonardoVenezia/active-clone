@@ -208,6 +208,46 @@ const mercadolibrePlugin: IntegrationPlugin = {
       ],
     },
     {
+      slug: "list-items",
+      label: "List Items",
+      description: "List the seller's items with stock and price",
+      category: "Mercado Libre",
+      stepFunction: "listItemsStep",
+      stepImportPath: "list-items",
+      outputFields: [
+        { field: "items", description: "List of items (id, title, availableQuantity, price, status)" },
+        { field: "count", description: "Items returned" },
+      ],
+      configFields: [
+        {
+          key: "query",
+          label: "Search",
+          type: "template-input",
+          placeholder: "Item title",
+          example: "zapatillas",
+        },
+        {
+          key: "status",
+          label: "Status",
+          type: "select",
+          options: [
+            { value: "any", label: "Any" },
+            { value: "active", label: "Active" },
+            { value: "paused", label: "Paused" },
+            { value: "closed", label: "Closed" },
+          ],
+          defaultValue: "any",
+        },
+        {
+          key: "limit",
+          label: "Limit",
+          type: "template-input",
+          placeholder: "50",
+          example: "50",
+        },
+      ],
+    },
+    {
       slug: "get-item",
       label: "Get Listing",
       description: "Get a listing (price, stock, status)",

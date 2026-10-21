@@ -91,14 +91,14 @@ Visit [http://localhost:3000](http://localhost:3000) to get started.
 - **Firecrawl**: Scrape URL, Search Web
 - **GitHub**: Create Issue, List Issues, Get Issue, Update Issue
 - **Linear**: Create Ticket, Find Issues
-- **Mercado Libre**: Get Order, Search Orders, Get Question, Answer Question, Get Listing, Update Listing, Get Shipment, Get Shipping Label, Send Post-Sale Message
+- **Mercado Libre**: Get Order, Search Orders, Get Question, Answer Question, List Items, Get Listing, Update Listing, Get Shipment, Get Shipping Label, Send Post-Sale Message
 - **Mercado Pago**: Create Payment Link, Get Payment, Search Payments, Refund Payment, Create Customer, Search Customers, List Customer Cards
 - **Perplexity**: Search Web, Ask Question, Research Topic
 - **Resend**: Send Email, Get Email Status
 - **Slack**: Send Slack Message, List Channels, Get Channel History, List Users, Update Message, Delete Message
 - **Stripe**: Create Customer, Get Customer, Create Invoice, Search Customers, Get Payment, List Payments, Create Payment Link
 - **Superagent**: Guard, Redact
-- **Tiendanube**: Get Order, Search Orders, Get Product, Update Stock, Search Customers, Get Customer, Create Customer
+- **Tiendanube**: Get Order, List Products, Search Orders, Get Product, Update Stock, Search Customers, Get Customer, Create Customer
 - **v0**: Create Chat, Send Message
 - **VTEX**: Setup Order Hook, Get Order, List Orders, Start Handling
 - **Webflow**: List Sites, Get Site, Publish Site
