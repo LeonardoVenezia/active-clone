@@ -1,0 +1,237 @@
+{
+  "active": false,
+  "canEdit": true,
+  "createdAt": "2026-10-21T19:38:44.593Z",
+  "description": "",
+  "edges": [
+    {
+      "id": "e-trig-delay",
+      "source": "vqJw3_sPS-azbpLHYboom",
+      "target": "esperar-2-horas",
+      "type": "animated"
+    },
+    {
+      "id": "e-delay-get",
+      "source": "esperar-2-horas",
+      "target": "obtener-orden",
+      "type": "animated"
+    },
+    {
+      "id": "e-get-cond1",
+      "source": "obtener-orden",
+      "target": "condicion-mayor-50k",
+      "type": "animated"
+    },
+    {
+      "id": "e-get-cond2",
+      "source": "obtener-orden",
+      "target": "condicion-menor-50k",
+      "type": "animated"
+    },
+    {
+      "id": "e-cond1-msg",
+      "source": "condicion-mayor-50k",
+      "target": "mensaje-cupon",
+      "type": "animated"
+    },
+    {
+      "id": "e-cond2-msg",
+      "source": "condicion-menor-50k",
+      "target": "mensaje-simple",
+      "type": "animated"
+    },
+    {
+      "id": "e-msg1-wa",
+      "source": "mensaje-cupon",
+      "target": "enviar-whatsapp-cupon",
+      "type": "animated"
+    },
+    {
+      "id": "e-msg2-wa",
+      "source": "mensaje-simple",
+      "target": "enviar-whatsapp-simple",
+      "type": "animated"
+    }
+  ],
+  "id": "hoyib6tvok22mjo88ou8m",
+  "isOwner": true,
+  "name": "Untitled 159",
+  "nodes": [
+    {
+      "data": {
+        "config": {
+          "triggerType": "tiendanube/order-created"
+        },
+        "description": "Se dispara cuando se registra un carrito abandonado",
+        "label": "Carrito Abandonado Tiendanube",
+        "status": "idle",
+        "type": "trigger"
+      },
+      "id": "vqJw3_sPS-azbpLHYboom",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "selected": false,
+      "type": "trigger"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Delay",
+          "durationMinutes": 120
+        },
+        "description": "Pausa la ejecución por 2 horas",
+        "label": "Esperar 2 horas",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "esperar-2-horas",
+      "position": {
+        "x": 460,
+        "y": 185
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "tiendanube/get-order",
+          "orderId": "{{@vqJw3_sPS-azbpLHYboom:Carrito Abandonado Tiendanube.orderId}}"
+        },
+        "description": "Consulta el monto y datos del carrito en Tiendanube",
+        "label": "Obtener Detalle del Carrito - Tiendanube",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "obtener-orden",
+      "position": {
+        "x": 830,
+        "y": 185
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@obtener-orden:Obtener Detalle del Carrito.total}} > 50000"
+        },
+        "description": "Verifica si el total es mayor a $50.000",
+        "label": "Total > $50.000",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "condicion-mayor-50k",
+      "position": {
+        "x": 1200,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@obtener-orden:Obtener Detalle del Carrito.total}} <= 50000"
+        },
+        "description": "Verifica si el total es menor o igual a $50.000",
+        "label": "Total <= $50.000",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "condicion-menor-50k",
+      "position": {
+        "x": 1200,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Escribe un mensaje de WhatsApp amigable para recuperar un carrito abandonado de {{@obtener-orden:Obtener Detalle del Carrito.customerName}}, ofreciendo un cupón del 10% de descuento. El total de su carrito es {{@obtener-orden:Obtener Detalle del Carrito.total}}."
+        },
+        "description": "Crea el mensaje con 10% de descuento",
+        "label": "Generar Mensaje con Cupón",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "mensaje-cupon",
+      "position": {
+        "x": 1570,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Escribe un mensaje de WhatsApp amigable para recordarle a {{@obtener-orden:Obtener Detalle del Carrito.customerName}} que dejó productos en su carrito."
+        },
+        "description": "Crea un mensaje simple de recordatorio",
+        "label": "Generar Mensaje Simple",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "mensaje-simple",
+      "position": {
+        "x": 1570,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "whatsapp/send-message",
+          "text": "{{@mensaje-cupon:Generar Mensaje con Cupón.text}}",
+          "to": "{{@obtener-orden:Obtener Detalle del Carrito.customerPhone}}"
+        },
+        "description": "Envía el mensaje con descuento por WhatsApp",
+        "label": "Enviar WhatsApp (Cupón)",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "enviar-whatsapp-cupon",
+      "position": {
+        "x": 1940,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "whatsapp/send-message",
+          "text": "{{@mensaje-simple:Generar Mensaje Simple.text}}",
+          "to": "{{@obtener-orden:Obtener Detalle del Carrito.customerPhone}}"
+        },
+        "description": "Envía el mensaje simple por WhatsApp",
+        "label": "Enviar WhatsApp (Simple)",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "enviar-whatsapp-simple",
+      "position": {
+        "x": 1940,
+        "y": 110
+      },
+      "type": "action"
+    }
+  ],
+  "shared": false,
+  "updatedAt": "2026-10-21T19:39:31.189Z",
+  "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+  "visibility": "private"
+}
