@@ -227,7 +227,7 @@ export async function POST(request: Request) {
     if (!prompt) return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     if (!llmRoutes().length) return NextResponse.json({ error: "AI API key not configured on server." }, { status: 500 });
     let composioCatalog = "";
-    const toolkitPatterns: Record<string, RegExp> = { outlook: /outlook|hotmail|microsoft/i, gmail: /gmail|e-?mail|mail/i, slack: /slack/i, notion: /notion/i, airtable: /airtable/i, googlesheets: /sheets|spreadsheet|planilla/i, googledrive: /drive/i, github: /github/i, linear: /linear/i, stripe: /stripe/i, hubspot: /hubspot/i, jira: /jira/i, hackernews: /hacker\s*news/i };
+    const toolkitPatterns: Record<string, RegExp> = { outlook: /outlook|hotmail|microsoft/i, gmail: /gmail|e-?mail|mail/i, slack: /slack/i, notion: /notion/i, airtable: /airtable/i, googlesheets: /sheets|spreadsheet|planilla/i, googledocs: /google\s+docs?\b|doc(umento)? de google/i, googledrive: /drive/i, github: /github/i, linear: /linear/i, stripe: /stripe/i, hubspot: /hubspot/i, jira: /jira/i, hackernews: /hacker\s*news/i };
     const promptText = String(prompt);
     const requestedToolkits = Object.keys(toolkitPatterns).filter(k => toolkitPatterns[k].test(promptText)).slice(0, 4);
     if (requestedToolkits.length && !/REAL COMPOSIO ACTIONS/.test(promptText)) {
@@ -329,7 +329,17 @@ export async function POST(request: Request) {
             const orphans = shadow.nodes.filter(n => !reachable.has(n.id));
             if (!orphans.length) break;
             const referenced = new Set<string>();
-            for (const n of shadow.nodes) { const txt = JSON.stringify(n.data ?? {}); for (const m of txt.matchAll(/\{\{@([\w-]+):/g)) referenced.add(m[1]); }
+            // Refs inside a Loop's inner steps resolve within the loop body first:
+            // an inner step id must not protect a top-level orphan that shares it.
+            for (const n of shadow.nodes) {
+              const nodeData = n.data as { config?: Record<string, unknown> } | undefined;
+              const cfg = nodeData?.config;
+              const steps = cfg && Array.isArray(cfg.steps) ? (cfg.steps as { id?: string; config?: unknown }[]) : null;
+              const innerIds = new Set((steps ?? []).map(s => s?.id).filter((v): v is string => typeof v === "string"));
+              const outerTxt = JSON.stringify(steps ? { ...(nodeData ?? {}), config: { ...(cfg ?? {}), steps: undefined } } : (nodeData ?? {}));
+              for (const m of outerTxt.matchAll(/\{\{@([\w-]+):/g)) referenced.add(m[1]);
+              if (steps) for (const st of steps) { const stTxt = JSON.stringify(st?.config ?? {}); for (const m of stTxt.matchAll(/\{\{@([\w-]+):/g)) if (!innerIds.has(m[1])) referenced.add(m[1]); }
+            }
             const removable = orphans.filter(o => !referenced.has(o.id) && !shadow.edges.some(e => e.source === o.id && reachable.has(e.target)));
             if (!removable.length) break;
             for (const o of removable) { console.warn("[ai-generate] removing unreachable orphan node", o.id); operationCount = tryParseAndEnqueueOperation(JSON.stringify({ op: "removeNode", nodeId: o.id }), encoder, controller, operationCount, shadow); }
