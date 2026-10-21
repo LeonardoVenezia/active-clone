@@ -126,7 +126,16 @@ const zipnovaPlugin: IntegrationPlugin = {
   category: "Zipnova",
   stepFunction: "zipnovaGetShipment",
   stepImportPath: "get-shipment",
-  outputFields: [{ field: "raw", description: "Full shipment data" }],
+  outputFields: [
+    { field: "id", description: "Shipment ID" },
+    { field: "status", description: "Shipment status (e.g. pending, in_transit, delivered, delayed)" },
+    { field: "statusDetail", description: "Human-readable status detail" },
+    { field: "tracking", description: "Tracking number" },
+    { field: "carrier", description: "Carrier name" },
+    { field: "estimatedDelivery", description: "Estimated delivery date" },
+    { field: "externalId", description: "Store order id the shipment maps to" },
+    { field: "raw", description: "Full shipment data" },
+  ],
   configFields: [field("shipmentId", "Shipment ID", "123456", true)],
 },
 {

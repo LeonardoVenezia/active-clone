@@ -691,6 +691,35 @@ export function questionActionError(promptText: string, nodes: FlowNode[]): stri
   return null;
 }
 
+const LIST_ACTION_RE = /search-|list-|get-question/;
+
+/**
+ * Crossing two lists (reconciliation, "detect cobros sin orden") is a
+ * deterministic join: Loop over one list with inner compare steps, or a
+ * Fórmula. An AI text node reading both raw lists cannot do it reliably.
+ */
+export function listCrossingError(promptText: string, nodes: FlowNode[]): string | null {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const isList = (n: FlowNode | undefined): boolean => !!n && LIST_ACTION_RE.test(actionTypeOf(n));
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "ai-gateway/generate-text") continue;
+    const txt = JSON.stringify(n.data?.config ?? {});
+    const refs = new Set([...txt.matchAll(/\{\{@([\w-]+):/g)].map((m) => m[1]));
+    const listRefs = [...refs].filter((id) => isList(byId.get(id)));
+    if (listRefs.length >= 2) {
+      const label = n.data?.label ?? n.id;
+      return `consistencia: node "${n.id}" (${label}) crosses TWO list outputs in an AI text node; crossing lists MUST be deterministic: a Loop over one list whose inner steps look up / compare each element against the other list (Condition/Fórmula inside the Loop), or a single Fórmula joining both - not LLM prose over serialized lists`;
+    }
+  }
+  const wantsCross = /compar|cruz|reconcil|sin orden|sin cobro|sin pago|diferenc/i.test(promptText);
+  if (!wantsCross) return null;
+  const listCount = nodes.filter((n) => isList(n)).length;
+  if (listCount < 2) return null;
+  const hasJoiner = nodes.some((n) => ["Loop", "Fórmula", "Formula"].includes(actionTypeOf(n)));
+  if (hasJoiner) return null;
+  return `consistencia: the request asks to compare/cross two lists but the canvas has no Loop or Fórmula to do it deterministically; add a Loop over one list with inner compare steps against the other (or a Fórmula that joins both), then write/notify the differences`;
+}
+
 export function channelConsistencyError(promptText: string, nodes: FlowNode[]): string | null {
   const prompt = promptText.toLowerCase();
   const trigger = nodes.find(isTrigger);
