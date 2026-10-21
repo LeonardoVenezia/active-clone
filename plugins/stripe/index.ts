@@ -262,7 +262,7 @@ const stripePlugin: IntegrationPlugin = {
       stepFunction: "listPaymentsStep",
       stepImportPath: "list-payments",
       outputFields: [
-        { field: "payments", description: "Payments (id, status, amount, currency)" },
+        { field: "payments", description: "Payments (id, status, amount, currency, customerId, created)" },
         { field: "count", description: "Payments returned" },
         { field: "hasMore", description: "Whether more results exist" },
       ],

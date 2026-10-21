@@ -4,33 +4,109 @@
  "sources": {
   "tiendanube/search-orders": {
    "orders": [
-    {"id": "ord_tn_1", "number": "2001", "status": "open", "total": "12500.00", "email": "c1@example.com", "customer_name": "Cliente Uno", "created_at": "2026-10-20T09:00:00-03:00"},
-    {"id": "ord_tn_2", "number": "2002", "status": "open", "total": "4.00", "email": "c2@example.com", "customer_name": "Cliente Dos", "created_at": "2026-10-20T09:30:00-03:00"},
-    {"id": "ord_tn_3", "number": "2003", "status": "open", "total": "8900.00", "email": "c3@example.com", "customer_name": "Cliente Tres", "created_at": "2026-10-20T10:00:00-03:00"}
+    {
+     "id": "ord_tn_1",
+     "number": "2001",
+     "status": "open",
+     "paymentStatus": "paid",
+     "shippingStatus": "fulfilled",
+     "total": "12500.00",
+     "currency": "ARS",
+     "customerEmail": "c1@example.com",
+     "customerName": "Cliente Uno",
+     "createdAt": "2026-10-20T09:00:00-03:00"
+    },
+    {
+     "id": "ord_tn_2",
+     "number": "2002",
+     "status": "open",
+     "paymentStatus": "paid",
+     "shippingStatus": "unpacked",
+     "total": "4.00",
+     "currency": "ARS",
+     "customerEmail": "c2@example.com",
+     "customerName": "Cliente Dos",
+     "createdAt": "2026-10-20T09:30:00-03:00"
+    },
+    {
+     "id": "ord_tn_3",
+     "number": "2003",
+     "status": "open",
+     "paymentStatus": "paid",
+     "shippingStatus": "unpacked",
+     "total": "8900.00",
+     "currency": "ARS",
+     "customerEmail": "c3@example.com",
+     "customerName": "Cliente Tres",
+     "createdAt": "2026-10-20T10:00:00-03:00"
+    }
    ]
   },
   "mercadolibre/search-orders": {
    "orders": [
-    {"id": "ord_ml_1", "number": "3001", "status": "paid", "total": "45000.00", "email": "c4@example.com", "customer_name": "Cliente Cuatro", "created_at": "2026-10-20T08:00:00-03:00"},
-    {"id": "ord_ml_2", "number": "3002", "status": "paid", "total": "7300.00", "email": "c5@example.com", "customer_name": "Cliente Cinco", "created_at": "2026-10-20T08:30:00-03:00"}
+    {
+     "id": "ord_ml_1",
+     "status": "paid",
+     "total": 45000,
+     "currency": "ARS",
+     "buyerNickname": "CLIENTE_CUATRO",
+     "dateCreated": "2026-10-20T08:00:00-03:00"
+    },
+    {
+     "id": "ord_ml_2",
+     "status": "paid",
+     "total": 7300,
+     "currency": "ARS",
+     "buyerNickname": "CLIENTE_CINCO",
+     "dateCreated": "2026-10-20T08:30:00-03:00"
+    }
    ]
   }
  },
  "productsTruth": {
   "tiendanube": [
-   {"id": "tn_p1", "name": "Remera Negra", "stock": 2},
-   {"id": "tn_p2", "name": "Remera Blanca", "stock": 12},
-   {"id": "tn_p3", "name": "Gorra Trucker", "stock": 4}
+   {
+    "id": "tn_p1",
+    "name": "Remera Negra",
+    "stock": 2
+   },
+   {
+    "id": "tn_p2",
+    "name": "Remera Blanca",
+    "stock": 12
+   },
+   {
+    "id": "tn_p3",
+    "name": "Gorra Trucker",
+    "stock": 4
+   }
   ],
   "mercadolibre": [
-   {"id": "ml_p1", "name": "Remera Negra ML", "stock": 1},
-   {"id": "ml_p2", "name": "Short Deportivo", "stock": 7},
-   {"id": "ml_p3", "name": "Medias Pack x3", "stock": 3}
+   {
+    "id": "ml_p1",
+    "name": "Remera Negra ML",
+    "stock": 1
+   },
+   {
+    "id": "ml_p2",
+    "name": "Short Deportivo",
+    "stock": 7
+   },
+   {
+    "id": "ml_p3",
+    "name": "Medias Pack x3",
+    "stock": 3
+   }
   ]
  },
  "expect": {
   "lowStockThreshold": 5,
-  "lowStockProducts": ["tn_p1", "tn_p3", "ml_p1", "ml_p3"],
+  "lowStockProducts": [
+   "tn_p1",
+   "tn_p3",
+   "ml_p1",
+   "ml_p3"
+  ],
   "uniqueExpected": 4,
   "slackExpected": true
  }

@@ -146,7 +146,7 @@ const tiendanubePlugin: IntegrationPlugin = {
       stepFunction: "searchOrdersStep",
       stepImportPath: "search-orders",
       outputFields: [
-        { field: "orders", description: "List of orders" },
+        { field: "orders", description: "List of orders (id, number, status, paymentStatus, shippingStatus, total, currency, customerEmail, customerName, createdAt)" },
         { field: "count", description: "Orders returned" },
       ],
       configFields: [

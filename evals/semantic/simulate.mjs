@@ -210,7 +210,7 @@ export async function simulate(workflow, fixture) {
     const orders = src.orders || [];
     const query = (config.query ?? "").toString().trim().toLowerCase();
     const filtered = query
-      ? orders.filter((o) => [o.number, o.email, o.customer_name, o.id]
+      ? orders.filter((o) => [o.number, o.email, o.customerEmail, o.customerName, o.customer_name, o.id]
           .filter((v) => v !== undefined && v !== null)
           .some((v) => String(v).toLowerCase().includes(query)))
       : orders;

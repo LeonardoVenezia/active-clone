@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
-import { generateAITriggerPrompts, getActionOutputFields, getAllActions, getAllTriggers } from "@/plugins/registry";
+import { generateAITriggerPrompts, getActionOutputFields, getActionOutputItemFields, getAllActions, getAllTriggers } from "@/plugins/registry";
 import { type FlowEdge, type FlowNode, planCoverageError, requestCoverageError, validateFlow } from "@/lib/flow-validator";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
 
@@ -314,7 +314,7 @@ export async function POST(request: Request) {
     const streamState = { truncated: false };
     const shadow: Shadow = { nodes: [...((existingWorkflow?.nodes ?? []) as FlowNode[])], edges: [...((existingWorkflow?.edges ?? []) as FlowEdge[])] };
     const computeErrors = (): string[] => {
-      const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes(), { validTriggerTypes: getValidTriggerTypes(), composioCatalog: composioCatalogMap });
+      const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes(), { validTriggerTypes: getValidTriggerTypes(), composioCatalog: composioCatalogMap, actionItemFields: getActionOutputItemFields() });
       const coverage = planCoverageError(userPrompt, shadow.nodes);
       if (coverage) errs.push(coverage);
       const appCoverage = requestCoverageError(userPrompt, shadow.nodes);

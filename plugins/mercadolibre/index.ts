@@ -119,7 +119,7 @@ const mercadolibrePlugin: IntegrationPlugin = {
       stepFunction: "searchOrdersStep",
       stepImportPath: "search-orders",
       outputFields: [
-        { field: "orders", description: "List of orders" },
+        { field: "orders", description: "List of orders (id, status, total, currency, buyerNickname, dateCreated)" },
         { field: "count", description: "Orders returned" },
         { field: "total", description: "Total matches" },
       ],

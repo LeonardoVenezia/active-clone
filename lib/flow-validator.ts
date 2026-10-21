@@ -72,6 +72,8 @@ export type ValidateFlowOptions = {
   validTriggerTypes?: ReadonlySet<string>;
   // "toolkit/slug" -> required argument names, from the loaded Composio catalog
   composioCatalog?: ReadonlyMap<string, string[]>;
+  // actionId -> array output field -> item field names (for {{@item:Item.x}} checks)
+  actionItemFields?: Record<string, Record<string, string[]>>;
 };
 
 export function validateFlow(
@@ -287,6 +289,32 @@ export function validateFlow(
     }
 
     // Placeholders + template reference integrity (recurses into Loop inner steps)
+    // Loop context: source array's item fields (when the source action
+    // describes them) and sibling inner-step ids, for {{@item:...}} and
+    // inner-step reference checks.
+    let loopItemFields: string[] | undefined;
+    let loopSourceDesc = "";
+    const innerStepActions = new Map<string, string>();
+    if (actionType === "Loop") {
+      const srcMatch = typeof cfg.source === "string" ? /^\s*\{\{@([\w-]+):([^}]+)\}\}\s*$/.exec(cfg.source) : null;
+      if (srcMatch) {
+        const srcNode = byId.get(srcMatch[1]);
+        const srcAction = srcNode ? actionTypeOf(srcNode) : "";
+        const rest = srcMatch[2];
+        const arrayField = rest.includes(".") ? rest.slice(rest.indexOf(".") + 1).split(".")[0]?.split("[")[0] : "";
+        loopSourceDesc = `${srcAction}.${arrayField}`;
+        loopItemFields = options.actionItemFields?.[srcAction]?.[arrayField ?? ""];
+      }
+      const rawSteps = Array.isArray(cfg.steps) ? cfg.steps : [];
+      for (const [i, st] of rawSteps.entries()) {
+        const step = st as { id?: unknown; actionType?: unknown };
+        const stepId = typeof step.id === "string" && step.id ? step.id : `step-${i + 1}`;
+        if (typeof step.actionType === "string" && step.actionType) {
+          innerStepActions.set(stepId, step.actionType);
+        }
+      }
+    }
+
     const strings: Array<{ path: string; value: string }> = [];
     collectStrings(cfg, "", strings);
     for (const { path, value } of strings) {
@@ -304,9 +332,33 @@ export function validateFlow(
       }
       for (const match of value.matchAll(TEMPLATE_RE)) {
         const refId = match[1];
-        if (refId === "item" || refId === "index") continue;
+        if (refId === "index") continue;
+        if (refId === "item") {
+          // {{@item:Item.field}} inside a Loop: check the field against the
+          // source array's item shape when the action describes it.
+          if (!loopItemFields) continue;
+          const rest = match[2];
+          const itemPath = rest.startsWith("Item.") ? rest.slice(5) : (rest.includes(".") ? rest.slice(rest.indexOf(".") + 1) : rest);
+          const firstField = itemPath.split(".")[0]?.split("[")[0];
+          if (firstField && !loopItemFields.includes(firstField)) {
+            errors.push(`semántica: Loop "${n.id}" (${label}) references "{{@item:Item.${firstField}}}" but items from ${loopSourceDesc} only have: ${loopItemFields.join(", ")}`);
+          }
+          continue;
+        }
         const target = byId.get(refId);
         if (!target) {
+          const stepAction = innerStepActions.get(refId);
+          if (stepAction) {
+            // Reference to a sibling inner step: validate its output field.
+            const rest = match[2];
+            const fieldPath = rest.includes(".") ? rest.slice(rest.indexOf(".") + 1) : rest;
+            const firstField = fieldPath.split(".")[0]?.split("[")[0];
+            const known = outputsOf(stepAction);
+            if (known && firstField && !known.includes(firstField)) {
+              errors.push(`semántica: node "${n.id}" (${label}) references "${refId}.${firstField}" but ${stepAction} only outputs: ${known.join(", ")}`);
+            }
+            continue;
+          }
           errors.push(`grafo: node "${n.id}" (${label}) field "${path}" references node "${refId}" which was never added`);
           continue;
         }

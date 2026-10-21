@@ -691,3 +691,34 @@ export function getActionOutputFields(): Record<string, string[]> {
   }
   return map;
 }
+
+/**
+ * Item fields of array outputs, parsed from output descriptions that list
+ * them in parentheses, e.g. "List of orders (id, number, total)".
+ * Used by the flow validator to check {{@item:Item.field}} references
+ * inside Loops against the real shape of the source action's items.
+ */
+export function getActionOutputItemFields(): Record<
+  string,
+  Record<string, string[]>
+> {
+  const map: Record<string, Record<string, string[]>> = {};
+  for (const plugin of integrationRegistry.values()) {
+    for (const action of plugin.actions) {
+      if (!action.outputFields?.length) continue;
+      const actionId = computeActionId(plugin.type, action.slug);
+      for (const f of action.outputFields) {
+        const match = /\(([a-zA-Z0-9_,\s]+)\)/.exec(f.description ?? "");
+        if (!match) continue;
+        const fields = match[1]
+          .split(",")
+          .map((x) => x.trim())
+          .filter((x) => /^[a-zA-Z][a-zA-Z0-9_]*$/.test(x));
+        if (fields.length === 0) continue;
+        if (!map[actionId]) map[actionId] = {};
+        (map[actionId] as Record<string, string[]>)[f.field] = fields;
+      }
+    }
+  }
+  return map;
+}
