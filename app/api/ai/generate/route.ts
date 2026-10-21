@@ -399,7 +399,10 @@ export async function POST(request: Request) {
       }
       let graphName = graph.name;
       const loadGraph = (g: { nodes?: FlowNode[]; edges?: FlowEdge[] }) => {
-        shadow.nodes = (g.nodes ?? []).filter((n) => n?.id && n.data).map((n, i) => ({ ...n, position: (n as { position?: { x: number; y: number } }).position ?? { x: 120 + i * 260, y: 120 } }));
+        const rawNodes = g.nodes ?? [];
+        const dropped = rawNodes.filter((n) => !(n?.id && n.data));
+        if (dropped.length) console.warn("[ai-generate] fullJson dropped nodes without id/data:", dropped.length, "of", rawNodes.length, "first keys:", JSON.stringify(Object.keys((dropped[0] ?? {}) as object)));
+        shadow.nodes = rawNodes.filter((n) => n?.id && n.data).map((n, i) => ({ ...n, position: (n as { position?: { x: number; y: number } }).position ?? { x: 120 + i * 260, y: 120 } }));
         const ids = new Set(shadow.nodes.map((n) => n.id));
         shadow.edges = (g.edges ?? [])
           .filter((e) => e?.source && e?.target && ids.has(e.source) && ids.has(e.target))
@@ -428,12 +431,22 @@ export async function POST(request: Request) {
       // the final validated graph at the end (no incremental drawing).
       const finalNodes = shadow.nodes;
       const finalEdges = shadow.edges;
+      if (!finalNodes.length) {
+        console.error("[ai-generate] fullJson parsed graph had no usable nodes after corrective passes");
+        controller.enqueue(encodeMessage(encoder, { type: "validation", errors: ["fullJson: el grafo parseado no tiene nodos utilizables tras los pases correctivos"] }));
+        return 0;
+      }
       shadow.nodes = [];
       shadow.edges = [];
       let count = 0;
       if (graphName) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "setName", name: graphName }), encoder, controller, count, shadow);
       for (const n of finalNodes) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "addNode", node: n }), encoder, controller, count, shadow);
       for (const e of finalEdges) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "addEdge", edge: e }), encoder, controller, count, shadow);
+      if (count === 0) {
+        console.error("[ai-generate] fullJson synthesized ops all rejected");
+        controller.enqueue(encodeMessage(encoder, { type: "validation", errors: ["fullJson: no se pudo materializar el grafo generado (ops rechazadas)"] }));
+      }
+      console.info("[ai-generate] fullJson materialized ops:", count, "nodes:", finalNodes.length, "edges:", finalEdges.length);
       return count;
     }
     const stream = new ReadableStream({ async start(controller) { try { let operationCount = 0;
