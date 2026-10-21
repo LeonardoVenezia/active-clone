@@ -1,0 +1,7 @@
+{"id":"C-09-a","wf":"7nv5v7oh2n0ixv70j4uwm","pass":true,"violations":[],"notes":"Regla Formula-vs-Loop disparo: 2 Loops (stripe+TN), sheets+gmail composio. Estructura de comparacion floja (los loops solo extraen ids) pero cumple expect."}
+{"id":"C-09-b","wf":"fe3fnaffh1w99iengpcrj","pass":true,"violations":[],"notes":"Loop unico comparador, sheets+gmail composio."}
+{"id":"C-12-a","wf":"4mb8ozzid9tu9r45hzhcq","pass":false,"violations":["sin Loop ni filtro: append-sheets escribe los arrays .orders crudos en una celda; cond-slack chequea success en vez de contar faltantes"],"notes":"La regla Formula-vs-Loop no cubre esta forma (no hay Fórmula). Extendiendo validador: escritura de campo lista crudo como valor exige Loop o agregado."}
+{"id":"C-12-a","wf":"4linjjd38e6788ud4rkxx","pass":true,"violations":[],"notes":"POST-FIX: 4 Loops (filtro stock<5 por plataforma con Condition inner + append por item), cond>3, slack nativo, sheets composio. Estructura modelo."}
+{"id":"C-12-b","wf":"dh97jfx40ziybq1bhgkok","pass":true,"violations":[],"notes":"Loops con Condition stock<5 + append sheets composio inner, conteo Fórmula, cond>3, slack."}
+{"id":"C-01-a","wf":"743lojqmk69fq8ud76qdp","pass":true,"violations":[],"notes":"Estructura completa, SIN nodo duplicado esta vez."}
+{"id":"C-01-b","wf":"z2347ci5882tcywx2flb4","pass":true,"violations":[],"notes":"Estructura completa, sin duplicados."}
