@@ -1,0 +1,18 @@
+{
+ "case": "C-07",
+ "descripcion": "Pregunta de comprador ML sobre devolución. El Doc de políticas dice 30 días. Se espera UNA respuesta en ML que use las políticas (menciona '30 días').",
+ "sources": {
+  "Manual": { "questionId": "q_900", "orderId": "ml_ord_1" },
+  "mercadolibre/question-received": { "questionId": "q_900", "orderId": "ml_ord_1", "text": "Puedo devolver el producto?" },
+  "mercadolibre/get-order": {
+   "order": { "id": "ml_ord_1" },
+   "id": "ml_ord_1", "status": "paid", "total": 32000, "currency": "ARS",
+   "buyerNickname": "COMPRADOR_UNO",
+   "items": [{ "itemId": "MLA1001", "title": "Zapatillas Runner", "quantity": 1, "unitPrice": 32000 }],
+   "shippingId": "ship_1", "dateCreated": "2026-10-19T12:00:00-03:00"
+  },
+  "mercadolibre/get-question": { "id": "q_900", "itemId": "MLA1001", "text": "Puedo devolver el producto?", "status": "UNANSWERED", "dateCreated": "2026-10-21T08:00:00-03:00", "answer": "" },
+  "composio/GOOGLEDOCS_GET_DOCUMENT_PLAINTEXT": { "data": "POLITICAS DE LA TIENDA: devoluciones dentro de los 30 dias con ticket; cambios sin costo dentro de los 15 dias." }
+ },
+ "expect": { "answersExpected": 1, "answerMustInclude": ["30"] }
+}

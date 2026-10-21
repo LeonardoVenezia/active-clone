@@ -1,0 +1,15 @@
+{
+ "case": "C-04",
+ "descripcion": "Carrito abandonado con total 80000 (> 50000): corresponde la rama del cupón 10%, UN solo WhatsApp al cliente.",
+ "sources": {
+  "tiendanube/order-created": { "orderId": "cart_1" },
+  "tiendanube/get-order": {
+   "id": "cart_1", "number": "9001", "status": "open", "paymentStatus": "pending",
+   "shippingStatus": "unpacked", "total": "80000.00", "currency": "ARS",
+   "customerEmail": "carrito@example.com", "customerName": "Cliente Carrito", "customerPhone": "5491100000002",
+   "products": [{ "productId": "p9", "variantId": "v9", "name": "Campera Invernal", "sku": "CAM-9", "quantity": 1, "price": "80000.00" }],
+   "createdAt": "2026-10-21T10:00:00-03:00"
+  }
+ },
+ "expect": { "whatsappCount": 1, "whatsappMustInclude": ["10"], "branch": "coupon" }
+}

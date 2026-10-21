@@ -54,6 +54,8 @@ export async function simulate(workflow, fixture) {
     sheetRows: [],
     emails: [],
     slack: [],
+    whatsapp: [],
+    mlAnswers: [],
     loops: [],
     formulas: [],
     conditions: [],
@@ -176,6 +178,12 @@ export async function simulate(workflow, fixture) {
           try { args = JSON.parse(args); } catch { log.errors.push({ where, error: "composio arguments no parsean como JSON", raw: args.slice(0, 300) }); }
         }
         const tool = config.tool || config.toolSlug || "";
+        const composioFx = fixture?.sources?.[`composio/${tool}`];
+        if (composioFx !== undefined) {
+          // El executor guarda result.data como output del nodo y auto-unwrappea
+          // {success, data}: el fixture se expone entero como ese data.
+          return { success: true, data: composioFx };
+        }
         if (tool.startsWith("GOOGLESHEETS")) {
           const values = args && typeof args === "object" ? (args.values || []) : [];
           log.sheetRows.push({ where, tool, values, spreadsheet: args?.spreadsheetId || args?.spreadsheet_id || null, range: args?.range || args?.sheet_name || null });
@@ -190,10 +198,33 @@ export async function simulate(workflow, fixture) {
         log.slack.push({ where, channel: config.slackChannel || null, message: config.slackMessage || null });
         return { success: true, data: { messageId: "mock" } };
       }
+      case "whatsapp/send-message": {
+        log.whatsapp.push({ where, to: config.to || null, text: config.text || null });
+        return { success: true, messageId: "mock", to: config.to || "" };
+      }
+      case "mercadolibre/answer-question": {
+        log.mlAnswers.push({ where, questionId: config.questionId || null, text: config.text || null });
+        return { success: true, questionId: config.questionId || "" };
+      }
+      case "ai-gateway/generate-text": {
+        // Mock determinístico: el texto generado ES el prompt ya resuelto.
+        // Permite verificar el cableado (qué datos llegaron al prompt), no la prosa.
+        const text = String(config.aiPrompt ?? "");
+        return { success: true, text, data: { text } };
+      }
       default: {
         // Fuente de datos mockeada por fixture (por actionType, con override por nodo)
         const src = fixture?.sources?.[where.nodeId] ?? fixture?.sources?.[actionType];
         if (src !== undefined) {
+          // __byArg: mock distinto según el valor de un argumento de config
+          // (p.ej. get-question por questionId dentro de un Loop).
+          if (src && typeof src === "object" && src.__byArg) {
+            const [argField, byValue] = Object.entries(src.__byArg)[0] ?? [];
+            const argVal = config[argField];
+            const data = byValue?.[String(argVal)] ?? byValue?.__default;
+            if (data !== undefined) return { success: true, ...data };
+            return { success: false, error: `mock sin entrada para ${argField}=${argVal}` };
+          }
           const data = typeof src === "function" ? src(config) : applyQueryMock(actionType, src, config);
           return { success: true, ...data };
         }
@@ -321,7 +352,9 @@ export async function simulate(workflow, fixture) {
       return;
     }
     if (node.type === "trigger" || node.data?.type === "trigger") {
-      outputs[sanitize(node.id)] = { label: node.data?.label || node.id, data: { triggered: true } };
+      const tType = String(node.data?.config?.triggerType ?? "");
+      const tFx = fixture?.sources?.[node.id] ?? (tType ? fixture?.sources?.[tType] : undefined);
+      outputs[sanitize(node.id)] = { label: node.data?.label || node.id, data: tFx ?? { triggered: true } };
       executed.add(node.id);
       firedParents.add(node.id);
       return;

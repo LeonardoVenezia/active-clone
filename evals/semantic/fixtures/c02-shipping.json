@@ -1,0 +1,18 @@
+{
+ "case": "C-02",
+ "descripcion": "Tracking proactivo TN->Zipnova. La orden ord_ship_1 tiene envío zn_1 DEMORADO con tracking ZN-TRACK-123: se espera Slack en #envios y WhatsApp al cliente incluyendo el tracking.",
+ "sources": {
+  "tiendanube/order-created": { "orderId": "ord_ship_1" },
+  "tiendanube/get-order": {
+   "id": "ord_ship_1", "number": "3001", "status": "open", "paymentStatus": "paid",
+   "shippingStatus": "shipped", "total": "45000.00", "currency": "ARS",
+   "customerEmail": "cliente@example.com", "customerName": "Cliente Envio", "customerPhone": "5491100000001",
+   "products": [{ "productId": "p1", "variantId": "v1", "name": "Zapatillas Runner", "sku": "ZAP-1", "quantity": 1, "price": "45000.00" }],
+   "createdAt": "2026-10-20T15:00:00-03:00"
+  },
+  "zipnova/get-shipment": {
+   "shipment": { "id": "zn_1", "orderId": "ord_ship_1", "status": "delayed", "statusDetail": "demorado en deposito", "tracking": "ZN-TRACK-123", "carrier": "Zipnova", "estimatedDelivery": "2026-10-25" }
+  }
+ },
+ "expect": { "slackExpected": true, "whatsappExpected": true, "whatsappMustInclude": ["ZN-TRACK-123"] }
+}

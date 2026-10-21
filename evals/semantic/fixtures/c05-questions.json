@@ -1,0 +1,17 @@
+{
+ "case": "C-05",
+ "descripcion": "Dos preguntas sin responder en ML (q_1, q_2). Se espera UN Slack en #ventas por pregunta, con el texto de la pregunta y la respuesta sugerida.",
+ "sources": {
+  "composio/discover": { "items": [{ "id": "q_1" }, { "id": "q_2" }] },
+  "mercadolibre/get-question": {
+   "__byArg": {
+    "questionId": {
+     "q_1": { "id": "q_1", "itemId": "MLA1001", "text": "Tienen stock en talle M?", "status": "UNANSWERED", "dateCreated": "2026-10-21T09:00:00-03:00", "answer": "" },
+     "q_2": { "id": "q_2", "itemId": "MLA1002", "text": "Cuando llega mi pedido?", "status": "UNANSWERED", "dateCreated": "2026-10-21T09:05:00-03:00", "answer": "" },
+     "__default": { "id": "q_x", "itemId": "MLA1000", "text": "Pregunta desconocida", "status": "UNANSWERED", "dateCreated": "2026-10-21T09:00:00-03:00", "answer": "" }
+    }
+   }
+  }
+ },
+ "expect": { "slackCount": 2, "slackMustInclude": ["Tienen stock en talle M?", "Cuando llega mi pedido?"] }
+}
