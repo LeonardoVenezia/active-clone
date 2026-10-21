@@ -152,6 +152,8 @@ CRITICAL ABOUT CONDITION NODES:
 - NEVER connect multiple different outcome paths to a single condition node
 - Each condition should check for ONE specific case
 
+For "only if X do Y, then continue with Z either way": create TWO conditions (X and NOT X); connect X -> Y -> Z and NOT X -> Z. NEVER connect a Condition to both Y and a downstream Z: when it is false, everything connected is skipped and the flow dies.
+
 Example: "if good send Slack, if bad create ticket" needs TWO conditions:
 {"op": "addNode", "node": {"id": "cond-good", "data": {"config": {"condition": "{{@rate:Rate.value}} === 'good'"}}}}
 {"op": "addNode", "node": {"id": "cond-bad", "data": {"config": {"condition": "{{@rate:Rate.value}} === 'bad'"}}}}

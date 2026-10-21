@@ -12,7 +12,7 @@ import { api } from "@/lib/api-client";
 import { currentWorkflowNameAtom, edgesAtom, nodesAtom } from "@/lib/workflow-store";
 type Msg = { id: string; role: "user" | "assistant"; content: string };
 function findPlaceholders(nodes: { id: string; data?: unknown }[]): string[] {
-  const bad = /^(?:your|tu|my|mi)[\s_-]|^<[^>]*>$|^\[[^\]]*\]$|^\{\{?[^}]*\}?\}$|example\.com|placeholder|replace[_\s-]?me|change[_\s-]?me|^todo$|^xxx+$|spreadsheet[_-]?id$|^1abc|^abc123|your_|\[\[|<[a-z_ ]{2,30}>/i;
+  const bad = /(?:^|\/\/)(?:your|tu|my|mi)[\s_-]|^<[^>]*>$|^\[[^\]]*\]$|^\{\{?[^}]*\}?\}$|example\.com|placeholder|replace[_\s-]?me|change[_\s-]?me|^todo$|^xxx+$|spreadsheet[_-]?id$|^1abc|^abc123|your_|\[\[|<[a-z_ ]{2,30}>/i;
   const out: string[] = [];
   for (const n of nodes) {
     const d = (n.data ?? {}) as { label?: string; type?: string; config?: Record<string, unknown> };

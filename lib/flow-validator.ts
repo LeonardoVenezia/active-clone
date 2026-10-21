@@ -21,12 +21,16 @@ const PLACEHOLDER_RES: RegExp[] = [
   /\bTODO\b/,
   /\blorem\s+ipsum\b/i,
   /<[a-z][a-z -]{2,}>/i,
+  /\byour[_-][a-z]/i,
+  /\/\/(?:tu|my|your)[-_][a-z0-9-]*\./i,
 ];
 
 const SYSTEM_OUTPUTS: OutputsMap = {
   Loop: ["results", "items", "failed", "filtered", "count", "completed", "failedCount", "filteredCount"],
   Approval: ["approved", "note"],
   Fórmula: ["result"],
+  "HTTP Request": ["data", "status", "success"],
+  "Database Query": ["rows", "count", "success"],
 };
 
 function isTrigger(node: FlowNode): boolean {
@@ -148,6 +152,31 @@ export function validateFlow(
       }
     }
 
+    // Hand-rolled HTTP Request to an API that has a native plugin or Composio action
+    if (actionType === "HTTP Request") {
+      const endpoint = String(cfg.endpoint ?? "");
+      const KNOWN_API_HOSTS: Array<[RegExp, string]> = [
+        [/sheets\.googleapis\.com|docs\.google\.com\/spreadsheets/i, "Google Sheets (Composio googlesheets)"],
+        [/gmail\.googleapis\.com/i, "Gmail (Composio gmail)"],
+        [/graph\.microsoft\.com/i, "Outlook (Composio outlook)"],
+        [/slack\.com\/api/i, "Slack (slack/* plugin)"],
+        [/api\.notion\.com/i, "Notion (Composio notion)"],
+        [/api\.airtable\.com/i, "Airtable (Composio airtable)"],
+        [/api\.github\.com/i, "GitHub (github/* plugin)"],
+        [/api\.stripe\.com/i, "Stripe (stripe/* plugin)"],
+        [/api\.hubapi\.com/i, "HubSpot (Composio hubspot)"],
+        [/api\.linear\.app/i, "Linear (linear/* plugin)"],
+        [/api\.perplexity\.ai/i, "Perplexity (perplexity/* plugin)"],
+        [/api\.mercadopago\.com/i, "Mercado Pago (mercadopago/* plugin)"],
+      ];
+      for (const [re, name] of KNOWN_API_HOSTS) {
+        if (re.test(endpoint)) {
+          errors.push(`consistencia: node "${n.id}" (${label}) hand-rolls an HTTP Request to the ${name} API; you MUST use that app's plugin action or its exact Composio catalog action instead (never a manual HTTP Request to an app that has one)`);
+          break;
+        }
+      }
+    }
+
     // Delay sanity
     if (actionType === "Delay") {
       const minutes = Number(cfg.durationMinutes ?? 0) || 0;
@@ -164,6 +193,18 @@ export function validateFlow(
         errors.push(`semántica: Condition node "${n.id}" (${label}) has an empty condition`);
       } else if (!cond.includes("{{@") && !/(===|!==|>=|<=|>\s|<\s|\$count|\$)/.test(cond)) {
         errors.push(`semántica: Condition node "${n.id}" (${label}) must reference a previous step output ({{@...}}) or compare values`);
+      }
+    }
+
+    // @item/@index are only valid inside a Loop's inner steps
+    if (actionType !== "Loop") {
+      const ownStrings: Array<{ path: string; value: string }> = [];
+      collectStrings(cfg, "", ownStrings);
+      for (const { path, value } of ownStrings) {
+        const m = value.match(/\{\{@(item|index):/);
+        if (m) {
+          errors.push(`semántica: node "${n.id}" (${label}) field "${path}" uses {{@${m[1]}}} which only exists INSIDE a Loop's inner steps; reference a real earlier node instead`);
+        }
       }
     }
 
@@ -202,6 +243,39 @@ export function validateFlow(
         const known = outputsOf(actionTypeOf(target));
         if (known && firstField && !known.includes(firstField)) {
           errors.push(`semántica: node "${n.id}" (${label}) references "${refId}.${firstField}" but ${actionTypeOf(target)} only outputs: ${known.join(", ")}`);
+        }
+      }
+    }
+  }
+
+  // Condition gates both a node and its downstream: when the condition is false,
+  // everything after it dies, which is almost never the intent ("only if X do Y, then continue").
+  {
+    const out = new Map<string, string[]>();
+    for (const e of edges) {
+      if (!out.has(e.source)) out.set(e.source, []);
+      (out.get(e.source) as string[]).push(e.target);
+    }
+    const reaches = (from: string, to: string): boolean => {
+      const seen = new Set<string>();
+      const q = [...(out.get(from) ?? [])];
+      while (q.length) {
+        const c = q.pop() as string;
+        if (c === to) return true;
+        if (seen.has(c)) continue;
+        seen.add(c);
+        q.push(...(out.get(c) ?? []));
+      }
+      return false;
+    };
+    for (const n of nodes) {
+      if (actionTypeOf(n) !== "Condition") continue;
+      const targets = out.get(n.id) ?? [];
+      for (const a of targets) {
+        for (const b of targets) {
+          if (a !== b && reaches(a, b)) {
+            errors.push(`consistencia: Condition "${n.id}" (${n.data?.label ?? ""}) connects to both "${a}" and its downstream "${b}"; when it is false the whole rest of the flow is skipped. For "only if X do Y, then continue either way", use TWO conditions (X and NOT X): X -> Y -> Z and NOT X -> Z`);
+          }
         }
       }
     }
