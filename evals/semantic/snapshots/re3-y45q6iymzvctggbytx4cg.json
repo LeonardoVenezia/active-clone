@@ -1,0 +1,115 @@
+{
+  "active": false,
+  "canEdit": true,
+  "createdAt": "2026-10-21T19:40:33.975Z",
+  "description": "",
+  "edges": [
+    {
+      "id": "e1",
+      "source": "rZQsf6CwbLvKG79SsteU2",
+      "target": "search-questions",
+      "type": "animated"
+    },
+    {
+      "id": "e2",
+      "source": "search-questions",
+      "target": "draft-answer",
+      "type": "animated"
+    },
+    {
+      "id": "e3",
+      "source": "draft-answer",
+      "target": "notify-slack",
+      "type": "animated"
+    }
+  ],
+  "id": "y45q6iymzvctggbytx4cg",
+  "isOwner": true,
+  "name": "Untitled 160",
+  "nodes": [
+    {
+      "data": {
+        "config": {
+          "scheduleCron": "*/30 * * * *",
+          "triggerType": "Schedule"
+        },
+        "description": "Dispara cada 30 minutos",
+        "label": "Cada 30 minutos",
+        "status": "idle",
+        "type": "trigger"
+      },
+      "id": "rZQsf6CwbLvKG79SsteU2",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 110
+      },
+      "selected": false,
+      "type": "trigger"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "mercadolibre/get-question",
+          "questionId": "11751825075"
+        },
+        "description": "Busca preguntas en Mercado Libre",
+        "label": "Buscar preguntas sin responder - Mercado Libre",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "search-questions",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Redacta una respuesta amable y comercial para la siguiente pregunta de un comprador en Mercado Libre: {{@search-questions:Buscar preguntas sin responder.text}}"
+        },
+        "description": "Genera una respuesta sugerida usando IA",
+        "label": "Redactar respuesta sugerida",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "draft-answer",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "slack/send-message",
+          "slackChannel": "#ventas",
+          "slackMessage": "Pregunta de comprador: {{@search-questions:Buscar preguntas sin responder.text}}\n\nRespuesta sugerida: {{@draft-answer:Redactar respuesta sugerida.text}}"
+        },
+        "description": "Envía la pregunta y la respuesta sugerida a Slack",
+        "label": "Avisar por Slack",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "notify-slack",
+      "position": {
+        "x": 1200,
+        "y": 110
+      },
+      "type": "action"
+    }
+  ],
+  "shared": false,
+  "updatedAt": "2026-10-21T19:41:39.841Z",
+  "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+  "visibility": "private"
+}
