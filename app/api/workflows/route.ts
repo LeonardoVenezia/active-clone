@@ -108,7 +108,7 @@ export async function GET(request: Request) {
       })),
     ];
 
-    return NextResponse.json(mappedWorkflows);
+    return NextResponse.json(mappedWorkflows, { headers: { "x-build-sha": buildSha } });
   } catch (error) {
     console.error("Failed to get workflows:", error);
     return NextResponse.json(
