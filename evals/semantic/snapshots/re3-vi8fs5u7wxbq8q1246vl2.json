@@ -1,0 +1,161 @@
+{
+  "active": false,
+  "canEdit": true,
+  "createdAt": "2026-10-21T19:24:46.776Z",
+  "description": "Flujo en modo maqueta para recuperar carritos abandonados de Tiendanube con espera, condición de total y envío de WhatsApp.",
+  "edges": [
+    {
+      "id": "e1",
+      "source": "KLYtpHhiJsaUOs8JyhkLt",
+      "target": "delay-2h",
+      "type": "animated"
+    },
+    {
+      "id": "e2",
+      "source": "delay-2h",
+      "target": "cond-gt-50k",
+      "type": "animated"
+    },
+    {
+      "id": "e3",
+      "source": "delay-2h",
+      "target": "cond-lte-50k",
+      "type": "animated"
+    },
+    {
+      "id": "e4",
+      "source": "cond-gt-50k",
+      "target": "msg-coupon",
+      "type": "animated"
+    },
+    {
+      "id": "e5",
+      "source": "cond-lte-50k",
+      "target": "msg-simple",
+      "type": "animated"
+    }
+  ],
+  "id": "vi8fs5u7wxbq8q1246vl2",
+  "isOwner": true,
+  "name": "Recuperar Carritos Abandonados Tiendanube (Maqueta)",
+  "nodes": [
+    {
+      "data": {
+        "config": {
+          "triggerType": "Manual"
+        },
+        "description": "Simula la detección de un carrito abandonado en Tiendanube",
+        "label": "Simular Carrito Abandonado",
+        "status": "idle",
+        "type": "trigger"
+      },
+      "id": "KLYtpHhiJsaUOs8JyhkLt",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "selected": false,
+      "type": "trigger"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Delay",
+          "durationMinutes": 120
+        },
+        "description": "Pausa la ejecución durante 2 horas antes de contactar al cliente",
+        "label": "Esperar 2 Horas",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "delay-2h",
+      "position": {
+        "x": 460,
+        "y": 185
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@KLYtpHhiJsaUOs8JyhkLt:Simular Carrito Abandonado.total}} > 50000"
+        },
+        "description": "Verifica si el total del carrito es mayor a $50.000 para aplicar cupón",
+        "label": "Total > $50.000",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "cond-gt-50k",
+      "position": {
+        "x": 830,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@KLYtpHhiJsaUOs8JyhkLt:Simular Carrito Abandonado.total}} <= 50000"
+        },
+        "description": "Verifica si el total del carrito es menor o igual a $50.000 para mensaje simple",
+        "label": "Total <= $50.000",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "cond-lte-50k",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "whatsapp/send-message",
+          "text": "¡Hola! Notamos que dejaste productos en tu carrito. Como tu compra supera los $50.000, te regalamos un 10% de descuento con el cupón CUPON10.",
+          "to": "5491112345678"
+        },
+        "description": "Envía WhatsApp con cupón de descuento",
+        "label": "Mensaje con Cupón 10% - WhatsApp",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "msg-coupon",
+      "position": {
+        "x": 1200,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "whatsapp/send-message",
+          "text": "¡Hola! Notamos que dejaste algunos productos en tu carrito de compras. ¿Te podemos ayudar en algo para finalizar tu pedido?",
+          "to": "5491112345678"
+        },
+        "description": "Envía WhatsApp simple recordando el carrito",
+        "label": "Mensaje Simple - WhatsApp",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "msg-simple",
+      "position": {
+        "x": 1200,
+        "y": 110
+      },
+      "type": "action"
+    }
+  ],
+  "shared": false,
+  "updatedAt": "2026-10-21T19:37:05.352Z",
+  "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+  "visibility": "private"
+}
