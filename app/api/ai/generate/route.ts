@@ -316,7 +316,7 @@ export async function POST(request: Request) {
     const shadow: Shadow = { nodes: [...((existingWorkflow?.nodes ?? []) as FlowNode[])], edges: [...((existingWorkflow?.edges ?? []) as FlowEdge[])] };
     // A brand-new workflow carries only the placeholder trigger; that counts as
     // empty. Any real (user-arranged) node disables the auto-layout.
-    const startedEmpty = (existingWorkflow?.nodes ?? []).every((n) => ((n.data as { config?: Record<string, unknown> } | undefined)?.config?.placeholder === true));
+    const startedEmpty = (existingWorkflow?.nodes ?? []).every((n: FlowNode) => ((n.data as { config?: Record<string, unknown> } | undefined)?.config?.placeholder === true));
     const computeErrors = (): string[] => {
       const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes(), { validTriggerTypes: getValidTriggerTypes(), composioCatalog: composioCatalogMap, actionItemFields: getActionOutputItemFields() });
       const coverage = planCoverageError(userPrompt, shadow.nodes);
