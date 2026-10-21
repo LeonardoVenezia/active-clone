@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
 import { generateAITriggerPrompts, getActionOutputFields, getActionOutputItemFields, getAllActions, getAllTriggers } from "@/plugins/registry";
-import { type FlowEdge, type FlowNode, channelConsistencyError, planCoverageError, requestCoverageError, validateFlow } from "@/lib/flow-validator";
+import { type FlowEdge, type FlowNode, channelConsistencyError, perItemLoopError, planCoverageError, questionActionError, requestCoverageError, shipmentDetailError, validateFlow } from "@/lib/flow-validator";
 import { layoutPositions } from "@/lib/auto-layout";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
 
@@ -325,6 +325,12 @@ export async function POST(request: Request) {
       if (appCoverage) errs.push(appCoverage);
       const channel = channelConsistencyError(userPrompt, shadow.nodes);
       if (channel) errs.push(channel);
+      const perItem = perItemLoopError(userPrompt, shadow.nodes);
+      if (perItem) errs.push(perItem);
+      const shipment = shipmentDetailError(shadow.nodes, shadow.edges);
+      if (shipment) errs.push(shipment);
+      const questions = questionActionError(userPrompt, shadow.nodes);
+      if (questions) errs.push(questions);
       return errs;
     };
     async function runCorrectivePass(operationCount: number, encoder: TextEncoder, controller: ReadableStreamDefaultController): Promise<number> {

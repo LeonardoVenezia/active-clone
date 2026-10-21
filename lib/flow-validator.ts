@@ -545,6 +545,7 @@ const APP_MENTIONS: Array<[RegExp, RegExp, string]> = [
   [/mercado\s?pago/i, /mercadopago|mercado\s?pago/i, "Mercado Pago"],
   [/mercado\s?libre/i, /mercadolibre|mercado\s?libre/i, "Mercado Libre"],
   [/(?:google\s+)?sheets?|planilla|spreadsheet|hoja de c[aá]lculo/i, /googlesheets|google\s+sheets|spreadsheet/i, "Google Sheets"],
+  [/google\s+docs?\b|documento de google/i, /googledocs|google\s+docs/i, "Google Docs"],
   [/wordpress/i, /wordpress|wp-json/i, "WordPress"],
   [/perplexity/i, /perplexity/i, "Perplexity"],
   [/gmail/i, /gmail/i, "Gmail"],
@@ -565,7 +566,18 @@ const APP_MENTIONS: Array<[RegExp, RegExp, string]> = [
 ];
 
 function nodeHaystack(node: FlowNode): string {
-  return JSON.stringify(node.data ?? {}).toLowerCase();
+  // Only the node's identity fields: label, action/trigger type, toolkit.
+  // Message bodies and prompts mention apps without USING them ("tu carrito
+  // en Tiendanube"), so config text must not count as coverage.
+  const cfg = (node.data?.config ?? {}) as Record<string, unknown>;
+  const parts: unknown[] = [node.data?.label, cfg.actionType, cfg.triggerType, cfg.toolkit, cfg.toolKit, cfg.toolSlug, cfg.tool, cfg.slug];
+  // Loop inner steps count as coverage too (e.g. slack/send-message inside the Loop).
+  const steps = Array.isArray(cfg.steps) ? (cfg.steps as Array<Record<string, unknown>>) : [];
+  for (const st of steps) parts.push(st?.actionType, st?.label);
+  return parts
+    .filter((v) => typeof v === "string")
+    .join(" ")
+    .toLowerCase();
 }
 
 /**
@@ -587,14 +599,15 @@ function extractRequestSteps(promptText: string): string[] {
 export function requestCoverageError(promptText: string, nodes: FlowNode[]): string | null {
   const missing: string[] = [];
   const stepLines = extractRequestSteps(promptText);
-  if (stepLines.length < 2) return null;
   const haystacks = nodes.map(nodeHaystack);
-  for (const line of stepLines) {
-    for (const [stepRe, nodeRe, name] of APP_MENTIONS) {
-      if (!stepRe.test(line)) continue;
-      if (!haystacks.some((h) => nodeRe.test(h))) {
-        missing.push(`${name} (step "${line.trim().slice(0, 80)}")`);
-      }
+  // An app named anywhere in the request (intro or a numbered step) must show
+  // up as at least one node; the model otherwise drops it silently (e.g. a
+  // manual trigger "simulating" Tiendanube with no Tiendanube step at all).
+  for (const [stepRe, nodeRe, name] of APP_MENTIONS) {
+    const hit = stepLines.find((l) => stepRe.test(l)) ?? (stepRe.test(promptText) ? promptText : undefined);
+    if (hit === undefined) continue;
+    if (!haystacks.some((h) => nodeRe.test(h))) {
+      missing.push(`${name} ("${hit.trim().slice(0, 80)}")`);
     }
   }
   if (!missing.length) return null;
@@ -614,6 +627,69 @@ const MESSAGING_SEND: Record<string, { action: string; aliases: string[]; name: 
   mercadolibre: { action: "mercadolibre/send-message", aliases: ["mercado libre", "mercadolibre", "meli"], name: "Mercado Libre" },
   slack: { action: "slack/send-message", aliases: ["slack"], name: "Slack" },
 };
+
+/** Per-item intent in the request ("para cada ...", "por cada ...") needs a Loop node. */
+export function perItemLoopError(promptText: string, nodes: FlowNode[]): string | null {
+  if (!/para cada|por cada/i.test(promptText)) return null;
+  if (nodes.some((n) => actionTypeOf(n) === "Loop")) return null;
+  return `consistencia: the request processes items one by one ("para cada ...") but the canvas has no Loop node; add a Loop over the list output and put the per-item steps (compare/filter/notify per item) INSIDE it`;
+}
+
+/**
+ * zipnova/get-shipment takes a shipmentId, which is NOT the order id: it only
+ * appears in the ecommerce order DETAIL. A get-shipment with no get-order
+ * ancestor can only be fed a hardcoded id.
+ */
+export function shipmentDetailError(nodes: FlowNode[], edges: FlowEdge[]): string | null {
+  const revAdj = new Map<string, string[]>();
+  for (const e of edges) {
+    if (!revAdj.has(e.target)) revAdj.set(e.target, []);
+    (revAdj.get(e.target) as string[]).push(e.source);
+  }
+  const ancestorsOf = (id: string): Set<string> => {
+    const seen = new Set<string>();
+    const queue = [...(revAdj.get(id) ?? [])];
+    while (queue.length) {
+      const c = queue.pop() as string;
+      if (seen.has(c)) continue;
+      seen.add(c);
+      queue.push(...(revAdj.get(c) ?? []));
+    }
+    return seen;
+  };
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "zipnova/get-shipment") continue;
+    const ok = [...ancestorsOf(n.id)].some((a) => {
+      const t = byId.get(a);
+      return t ? /\/get-order$/.test(actionTypeOf(t)) : false;
+    });
+    if (!ok) {
+      const label = n.data?.label ?? n.id;
+      return `consistencia: node "${n.id}" (${label}) calls zipnova/get-shipment but no earlier step fetches the order DETAIL; the shipmentId only exists in the order detail output, so add the store's get-order step (e.g. "tiendanube/get-order" or "mercadolibre/get-order") before it and wire shipmentId from there - never hardcode the id`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Buyer questions need mercadolibre/get-question: search-orders returns orders
+ * (summary only), never questions. Catches the model "searching questions" with
+ * the orders action.
+ */
+export function questionActionError(promptText: string, nodes: FlowNode[]): string | null {
+  for (const n of nodes) {
+    if (actionTypeOf(n) === "mercadolibre/search-orders" && /pregunta/i.test(nodeHaystack(n))) {
+      const label = n.data?.label ?? n.id;
+      return `consistencia: node "${n.id}" (${label}) uses mercadolibre/search-orders to look for QUESTIONS; search-orders returns orders (summary only), never questions - use "mercadolibre/get-question" instead`;
+    }
+  }
+  const asksQuestions = /(buscar|traer|revisar|listar)[^.;\n]{0,50}pregunta|preguntas?[^.;\n]{0,50}sin responder/i.test(promptText);
+  if (asksQuestions && !nodes.some((n) => actionTypeOf(n) === "mercadolibre/get-question")) {
+    return `consistencia: the request asks to find unanswered buyer questions but no node uses "mercadolibre/get-question"; add it - mercadolibre/search-orders returns orders, not questions`;
+  }
+  return null;
+}
 
 export function channelConsistencyError(promptText: string, nodes: FlowNode[]): string | null {
   const prompt = promptText.toLowerCase();
