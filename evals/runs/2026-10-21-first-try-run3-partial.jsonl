@@ -1,0 +1,17 @@
+{"id":"C-01-a","wf":"5ymuitw241ye2t2hcflt1","pass":true,"violations":[],"notes":"Trigger plugin TN (nuevo!), Loop con cond+slack inner, Approval, zipnova, whatsapp, sheets composio. Perfecto."}
+{"id":"C-01-b","wf":"x21se3s1w5ytsvqxe8o7v","pass":true,"violations":[],"notes":"Todos los required. DEFECTO: nodo top-level check-prod duplicado del inner step con {{@item}} fuera de Loop (invalido en runtime) - validator no lo atrapo pese a la regla @item-fuera-de-loop."}
+{"id":"C-02-a","wf":"z8k1mkbqk1uy6aj2v92ae","pass":false,"violations":["falta tiendanube/get-order requerido","zipnova/get-shipment shipmentId cableado al orderId del trigger (error semantico)"],"notes":"Uso el plugin trigger tiendanube/order-created bien, pero salteo el get-order y cableo mal zipnova."}
+{"id":"C-02-b","wf":"6caht7z2yjtdcmuasyd4p","pass":true,"violations":[],"notes":"search-orders por get-order (aceptado), zipnova+cond+slack+whatsapp ok. Trigger Manual en vez de evento. shipmentId/telefono hardcodeados flaggeados por el builder, maqueta aceptable."}
+{"id":"C-03-a","wf":"eyathgem0m7fy8cymbaoy","pass":true,"violations":[],"notes":"Trigger plugin ML order-updated, get-order/get-shipment/send-message nativos, wiring perfecto."}
+{"id":"C-03-b","wf":"ciozc9hrk8adlazxuk7tm","pass":true,"violations":[],"notes":"Identico al -a. Mensaje creado por el builder (Crealo por mi)."}
+{"id":"C-04-a","wf":"31rqnxr2yg8tnvms6ite8","pass":true,"violations":[],"notes":"Delay, TN get-order, doble condicion, 2 mensajes IA, whatsapp nativo."}
+{"id":"C-04-b","wf":"yb8gm07kezsg46xg42jle","pass":true,"violations":[],"notes":"Misma estructura que -a (trigger Manual, ok maqueta)."}
+{"id":"C-05-a","wf":"lijw2uomcc4mo5uex2zk5","pass":false,"violations":["falta mercadolibre/get-question: uso search-orders con status unanswered (inventado)"],"notes":"Loop con LLM+slack inner ok, pero la fuente de preguntas es la accion equivocada."}
+{"id":"C-05-b","wf":"89t1owtmluv98knyihp2g","pass":true,"violations":[],"notes":"cron30 + get-question + LLM + slack #ventas. Sin Loop (criterio run-2: aceptable)."}
+{"id":"C-06-a","wf":"l5pz8wmqfuoa028ntayoj","pass":true,"violations":[],"notes":"WA trigger, TN search-orders, googledocs composio GET_DOCUMENT_PLAINTEXT, LLM, whatsapp native."}
+{"id":"C-06-b","wf":"ps2c6ha7esdtxh07sp932","pass":true,"violations":[],"notes":"Igual que -a."}
+{"id":"C-07-a","wf":"kmrxl0ztc255hynu5v6bc","pass":true,"violations":[],"notes":"Trigger ML question-received, get-order, googledocs composio, LLM, answer-question nativo."}
+{"id":"C-07-b","wf":"x8ofg2rgm2dxan3h3p9a3","pass":true,"violations":[],"notes":"Trigger + get-question + get-order + googledocs + LLM + answer-question, todo nativo ML."}
+{"id":"C-08-a","wf":"d7k7k1luh2epopv7nrgua","pass":true,"violations":[],"notes":"ARREGLADO vs run-2: googledocs + gmail via composio, doble condicion, whatsapp nativo."}
+{"id":"C-08-b","wf":"pslw0edmkhzrs0aco1ei8","pass":true,"violations":[],"notes":"Igual que -a: googledocs+gmail composio, doble cond, whatsapp nativo."}
+{"id":"C-09-a","wf":"sg4o1it8ccu6h3f6z6f1k","pass":false,"violations":["falta Loop requerido: comparacion en un solo paso Fórmula"],"notes":"stripe/TN nativos, sheets+gmail composio ok. Necesito nudge inicial (el modelo pidio re-explicar el pedido)."}
