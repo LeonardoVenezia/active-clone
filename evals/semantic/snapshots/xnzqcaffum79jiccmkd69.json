@@ -1,0 +1,84 @@
+{
+ "name": "Control de Stock Diario",
+ "nodes": [
+  {
+   "id": "7zGGW_33J97Wsll_1rdzZ",
+   "data": {
+    "type": "trigger",
+    "label": "Programador diario",
+    "config": {
+     "triggerType": "Schedule",
+     "scheduleCron": "0 9 * * *"
+    },
+    "status": "idle",
+    "description": "Todos los días a las 9 AM"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 100,
+    "y": 200
+   },
+   "selected": false
+  },
+  {
+   "id": "search-tn",
+   "data": {
+    "type": "action",
+    "label": "Buscar productos Tiendanube",
+    "config": {
+     "limit": 50,
+     "query": "",
+     "status": "any",
+     "actionType": "tiendanube/search-orders",
+     "paymentStatus": "any",
+     "shippingStatus": "any"
+    },
+    "status": "idle",
+    "description": "Obtiene los productos de Tiendanube"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 75
+   }
+  },
+  {
+   "id": "search-ml",
+   "data": {
+    "type": "action",
+    "label": "Buscar productos Mercado Libre",
+    "config": {
+     "limit": 50,
+     "query": "",
+     "status": "any",
+     "actionType": "mercadolibre/search-orders"
+    },
+    "status": "idle",
+    "description": "Obtiene los productos de Mercado Libre"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 325
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e-trig-tn",
+   "type": "animated",
+   "source": "7zGGW_33J97Wsll_1rdzZ",
+   "target": "search-tn"
+  },
+  {
+   "id": "e-trig-ml",
+   "type": "animated",
+   "source": "7zGGW_33J97Wsll_1rdzZ",
+   "target": "search-ml"
+  }
+ ]
+}
