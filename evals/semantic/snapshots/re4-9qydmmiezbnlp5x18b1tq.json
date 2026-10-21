@@ -1,0 +1,106 @@
+{
+  "active": false,
+  "canEdit": true,
+  "createdAt": "2026-10-21T20:27:47.403Z",
+  "description": "",
+  "edges": [
+    {
+      "id": "e-trig-search",
+      "source": "tSAN5Pidf-ZEKn_m56TV0",
+      "target": "search-questions",
+      "type": "animated"
+    },
+    {
+      "id": "e-search-loop",
+      "source": "search-questions",
+      "target": "loop-questions",
+      "type": "animated"
+    }
+  ],
+  "id": "9qydmmiezbnlp5x18b1tq",
+  "isOwner": true,
+  "name": "Untitled 169",
+  "nodes": [
+    {
+      "data": {
+        "config": {
+          "scheduleCron": "*/30 * * * *",
+          "triggerType": "Schedule"
+        },
+        "description": "Se ejecuta cada 30 minutos",
+        "label": "Cada 30 minutos",
+        "status": "idle",
+        "type": "trigger"
+      },
+      "id": "tSAN5Pidf-ZEKn_m56TV0",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 110
+      },
+      "selected": false,
+      "type": "trigger"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "mercadolibre/get-question",
+          "questionId": "11751825075"
+        },
+        "label": "Buscar Preguntas - Mercado Libre",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "search-questions",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Loop",
+          "maxItems": 50,
+          "source": "{{@search-questions:Buscar Preguntas.id}}",
+          "steps": [
+            {
+              "actionType": "ai-gateway/generate-text",
+              "config": {
+                "aiFormat": "text",
+                "aiModel": "meta/llama-4-scout",
+                "aiPrompt": "Redacta una respuesta amable y comercial para la siguiente pregunta de un comprador en Mercado Libre: {{@search-questions:Buscar Preguntas.text}}"
+              },
+              "id": "generate-answer"
+            },
+            {
+              "actionType": "slack/send-message",
+              "config": {
+                "slackChannel": "#ventas",
+                "slackMessage": "Pregunta: {{@search-questions:Buscar Preguntas.text}}\n\nRespuesta sugerida: {{@generate-answer:Redactar Respuesta.text}}"
+              },
+              "id": "slack-notify"
+            }
+          ]
+        },
+        "label": "Procesar Preguntas",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "loop-questions",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "type": "action"
+    }
+  ],
+  "shared": false,
+  "updatedAt": "2026-10-21T20:29:01.556Z",
+  "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+  "visibility": "private"
+}
