@@ -708,11 +708,14 @@ export function getActionOutputItemFields(): Record<
       if (!action.outputFields?.length) continue;
       const actionId = computeActionId(plugin.type, action.slug);
       for (const f of action.outputFields) {
-        const match = /\(([a-zA-Z0-9_,\s]+)\)/.exec(f.description ?? "");
+        const match = /\(([^)]+)\)/.exec(f.description ?? "");
         if (!match) continue;
-        const fields = match[1]
-          .split(",")
-          .map((x) => x.trim())
+        // Nested sub-shapes are listed after a colon ("variants: id, sku, ...");
+        // they belong to a nested array, not to the top-level item, so the
+        // field list ends at the first token that opens a nested spec.
+        const tokens = match[1].split(",").map((x) => x.trim());
+        const cut = tokens.findIndex((x) => x.includes(":"));
+        const fields = (cut === -1 ? tokens : tokens.slice(0, cut))
           .filter((x) => /^[a-zA-Z][a-zA-Z0-9_]*$/.test(x));
         if (fields.length === 0) continue;
         if (!map[actionId]) map[actionId] = {};

@@ -169,7 +169,7 @@ const tiendanubePlugin: IntegrationPlugin = {
     {
       slug: "search-orders",
       label: "Search Orders",
-      description: "Search orders by text, status or date",
+      description: "Search orders by text, status or date. Returns SUMMARY fields only (id, number, status, paymentStatus, shippingStatus, total, currency, customerEmail, customerName, createdAt). To read the FULL detail of one order (products, shipping id, etc.) follow with a Get Order step using the order id.",
       category: "Tiendanube",
       stepFunction: "searchOrdersStep",
       stepImportPath: "search-orders",

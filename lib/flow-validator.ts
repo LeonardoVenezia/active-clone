@@ -85,6 +85,29 @@ export function validateFlow(
 ): string[] {
   const errors: string[] = [];
   const byId = new Map<string, FlowNode>();
+  // Reverse adjacency for ancestor (reverse-BFS) checks: a {{@node}} reference
+  // is only valid when the referenced node runs strictly BEFORE the referencing
+  // one, i.e. it is an ancestor through the edge graph.
+  const revAdj = new Map<string, string[]>();
+  for (const e of edges) {
+    if (!revAdj.has(e.target)) revAdj.set(e.target, []);
+    (revAdj.get(e.target) as string[]).push(e.source);
+  }
+  const ancestorCache = new Map<string, Set<string>>();
+  const ancestorsOf = (id: string): Set<string> => {
+    const cached = ancestorCache.get(id);
+    if (cached) return cached;
+    const seen = new Set<string>();
+    const queue = [...(revAdj.get(id) ?? [])];
+    while (queue.length) {
+      const c = queue.pop() as string;
+      if (seen.has(c)) continue;
+      seen.add(c);
+      queue.push(...(revAdj.get(c) ?? []));
+    }
+    ancestorCache.set(id, seen);
+    return seen;
+  };
   for (const n of nodes) {
     if (byId.has(n.id)) errors.push(`grafo: duplicate node id "${n.id}" added twice`);
     byId.set(n.id, n);
@@ -247,16 +270,30 @@ export function validateFlow(
         errors.push(`semántica: Condition node "${n.id}" (${label}) has an empty condition`);
       } else if (!cond.includes("{{@") && !/(===|!==|>=|<=|>\s|<\s|\$count|\$)/.test(cond)) {
         errors.push(`semántica: Condition node "${n.id}" (${label}) must reference a previous step output ({{@...}}) or compare values`);
+      } else {
+        // Incomplete expression: an operator without its left (or right) operand
+        // crashes the evaluator at runtime ("Unexpected token").
+        const stripped = cond.replace(/\{\{[^}]*\}\}/g, " x ").trim();
+        const OP = "(={2,3}|!={1,2}|[><]=?|&&|\\|\\|)";
+        if (new RegExp("^" + OP).test(stripped) || new RegExp(OP + "$").test(stripped)) {
+          errors.push(`semántica: Condition node "${n.id}" (${label}) has an incomplete expression ("${cond.slice(0, 60)}"); write the FULL comparison with both operands, e.g. "{{@node-id:Label.totalStock}} < 5"`);
+        }
       }
     }
 
     // Writing a raw list output as a single value: one row/item per element needs a Loop,
-    // otherwise the list must be aggregated to a scalar first.
-    if (isComposio) {
-      const txt = JSON.stringify(cfg);
-      const rawList = txt.match(/\{\{@([\w-]+):[^}]*\.(orders|payments|products|items|questions|results)\}\}/);
-      if (rawList) {
-        errors.push(`semántica: node "${n.id}" (${label}) writes the raw list field ".${rawList[2]}" from "${rawList[1]}" as a single value; one row/item per list element MUST go through a Loop (with filter/compare as inner steps), or aggregate the list to a scalar first (count, total, summary)`);
+    // otherwise the list must be aggregated to a scalar first. Applies to every node
+    // (not just Composio); the Loop "source" field legitimately points at a raw list.
+    {
+      const rawListRe = /\{\{@([\w-]+):[^}]*\.(orders|payments|products|items|questions|results)\}\}/;
+      const cfgStrings: Array<{ path: string; value: string }> = [];
+      collectStrings(cfg, "", cfgStrings);
+      for (const { path, value } of cfgStrings) {
+        if (actionType === "Loop" && path === "source") continue;
+        const rawList = value.match(rawListRe);
+        if (!rawList || rawList[1] === "item") continue;
+        errors.push(`semántica: node "${n.id}" (${label}) writes the raw list field ".${rawList[2]}" from "${rawList[1]}" as a single value; one row/item per list element MUST go through a Loop (with filter/compare as inner steps), aggregate the list to a scalar first (count, total, summary), or - when you need the DETAIL of one element (e.g. the latest order) - add the plugin's get-* detail step after "${rawList[1]}" and reference that instead`);
+        break;
       }
     }
 
@@ -402,6 +439,10 @@ export function validateFlow(
             continue;
           }
           errors.push(`grafo: node "${n.id}" (${label}) field "${path}" references node "${refId}" which was never added`);
+          continue;
+        }
+        if (!ancestorsOf(n.id).has(refId)) {
+          errors.push(`grafo: node "${n.id}" (${label}) references "${refId}" but no path runs from "${refId}" to it; a {{@...}} reference only works from an EARLIER step - wire the flow so "${refId}" runs before "${n.id}", or reference the correct earlier node`);
           continue;
         }
         // Field check: ref text after ":" is "<Label>.<field.path>"; strip the target's label.
@@ -560,3 +601,44 @@ export function requestCoverageError(promptText: string, nodes: FlowNode[]): str
   const uniq = [...new Set(missing)];
   return `consistencia: the request explicitly asks for ${uniq.join(", ")} but no node uses ${uniq.length === 1 ? "that app" : "those apps"}; add the missing step(s) with the app's plugin or Composio action and wire them in the right position`;
 }
+
+/**
+ * Channel consistency: when the conversation starts on a messaging-capable app
+ * (the trigger's plugin has its own send action), a reply to that conversation
+ * must use the SAME app's send action unless the request explicitly names the
+ * other channel. Catches "whatsapp/send-message" answering a Mercado Libre buyer
+ * when the prompt never mentions WhatsApp.
+ */
+const MESSAGING_SEND: Record<string, { action: string; aliases: string[]; name: string }> = {
+  whatsapp: { action: "whatsapp/send-message", aliases: ["whatsapp"], name: "WhatsApp" },
+  mercadolibre: { action: "mercadolibre/send-message", aliases: ["mercado libre", "mercadolibre", "meli"], name: "Mercado Libre" },
+  slack: { action: "slack/send-message", aliases: ["slack"], name: "Slack" },
+};
+
+export function channelConsistencyError(promptText: string, nodes: FlowNode[]): string | null {
+  const prompt = promptText.toLowerCase();
+  const trigger = nodes.find(isTrigger);
+  if (!trigger) return null;
+  const tCfg = (trigger.data?.config ?? {}) as Record<string, unknown>;
+  const tApp = String(tCfg.triggerType ?? "").split("/")[0];
+  const tMessaging = MESSAGING_SEND[tApp];
+  if (!tMessaging) return null;
+  const senders: Array<{ id: string; label: string; actionType: string }> = [];
+  for (const n of nodes) {
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    const at = String(cfg.actionType ?? "");
+    if (at) senders.push({ id: n.id, label: n.data?.label ?? "", actionType: at });
+    const steps = Array.isArray(cfg.steps) ? (cfg.steps as Array<{ id?: string; actionType?: string }>) : [];
+    for (const s of steps) if (s?.actionType) senders.push({ id: `${n.id}/${s.id ?? "?"}`, label: n.data?.label ?? "", actionType: String(s.actionType) });
+  }
+  for (const s of senders) {
+    const app = s.actionType.split("/")[0];
+    if (app === tApp) continue;
+    const m = MESSAGING_SEND[app];
+    if (!m || s.actionType !== m.action) continue;
+    if (m.aliases.some((a) => prompt.includes(a))) continue;
+    return `consistencia: node "${s.id}" (${s.label}) sends via ${m.action} but the request never mentions ${m.name} and the conversation starts on ${tMessaging.name}; to reply in the SAME channel use "${tMessaging.action}". Use ${m.action} only when the user explicitly asks for that channel`;
+  }
+  return null;
+}
+

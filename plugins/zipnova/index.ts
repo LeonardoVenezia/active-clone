@@ -122,7 +122,7 @@ const zipnovaPlugin: IntegrationPlugin = {
 {
   slug: "get-shipment",
   label: "Get Shipment",
-  description: "Get a shipment's details",
+  description: "Get a shipment's details. Needs a shipmentId, which is NOT the store order id: map an order to its shipment first (list-shipments with externalId=<orderId>, or the shipping id from the store plugin's get-order detail).",
   category: "Zipnova",
   stepFunction: "zipnovaGetShipment",
   stepImportPath: "get-shipment",

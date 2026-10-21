@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
 import { generateAITriggerPrompts, getActionOutputFields, getActionOutputItemFields, getAllActions, getAllTriggers } from "@/plugins/registry";
-import { type FlowEdge, type FlowNode, planCoverageError, requestCoverageError, validateFlow } from "@/lib/flow-validator";
+import { type FlowEdge, type FlowNode, channelConsistencyError, planCoverageError, requestCoverageError, validateFlow } from "@/lib/flow-validator";
+import { layoutPositions } from "@/lib/auto-layout";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
 
 type Operation = {
@@ -313,12 +314,15 @@ export async function POST(request: Request) {
     }
     const streamState = { truncated: false };
     const shadow: Shadow = { nodes: [...((existingWorkflow?.nodes ?? []) as FlowNode[])], edges: [...((existingWorkflow?.edges ?? []) as FlowEdge[])] };
+    const startedEmpty = (existingWorkflow?.nodes ?? []).length === 0;
     const computeErrors = (): string[] => {
       const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes(), { validTriggerTypes: getValidTriggerTypes(), composioCatalog: composioCatalogMap, actionItemFields: getActionOutputItemFields() });
       const coverage = planCoverageError(userPrompt, shadow.nodes);
       if (coverage) errs.push(coverage);
       const appCoverage = requestCoverageError(userPrompt, shadow.nodes);
       if (appCoverage) errs.push(appCoverage);
+      const channel = channelConsistencyError(userPrompt, shadow.nodes);
+      if (channel) errs.push(channel);
       return errs;
     };
     async function runCorrectivePass(operationCount: number, encoder: TextEncoder, controller: ReadableStreamDefaultController): Promise<number> {
@@ -518,6 +522,17 @@ export async function POST(request: Request) {
               console.warn("[ai-generate] removing duplicate top-level node of Loop inner step", n.id, "->", loopId);
               for (const e of shadow.edges) { if (e.target === n.id) e.target = loopId; if (e.source === n.id) e.source = loopId; }
               operationCount = tryParseAndEnqueueOperation(JSON.stringify({ op: "removeNode", nodeId: n.id }), encoder, controller, operationCount, shadow);
+            }
+          }
+          // Deterministic auto-layout (dagre): node positions come from the graph,
+          // not from the model. Applied only to workflows that started empty; on
+          // edits the user's existing arrangement is preserved.
+          if (startedEmpty && shadow.nodes.length) {
+            const positions = layoutPositions(shadow.nodes, shadow.edges);
+            for (const n of shadow.nodes) {
+              const pos = positions.get(n.id);
+              if (!pos) continue;
+              operationCount = tryParseAndEnqueueOperation(JSON.stringify({ op: "updateNode", nodeId: n.id, updates: { position: pos } }), encoder, controller, operationCount, shadow);
             }
           } const remaining = computeErrors(); if (remaining.length) { console.warn("[ai-generate] validation errors remain after retries", remaining); controller.enqueue(encodeMessage(encoder, { type: "validation", errors: remaining })); } controller.enqueue(encodeMessage(encoder, { type: "complete" })); controller.close(); } catch (error) { controller.enqueue(encodeMessage(encoder, { type: "error", error: error instanceof Error ? error.message : "Failed to generate workflow" })); controller.close(); } } });
     return new Response(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-cache", Connection: "keep-alive" } });

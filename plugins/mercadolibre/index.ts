@@ -114,7 +114,7 @@ const mercadolibrePlugin: IntegrationPlugin = {
     {
       slug: "search-orders",
       label: "Search Orders",
-      description: "List recent sales, optionally by text or status",
+      description: "List recent sales, optionally by text or status. Returns SUMMARY fields only (id, status, total, currency, buyerNickname, dateCreated). To read the FULL detail of one order (items, shipping id, buyer, etc.) follow with a Get Order step using the order id.",
       category: "Mercado Libre",
       stepFunction: "searchOrdersStep",
       stepImportPath: "search-orders",
