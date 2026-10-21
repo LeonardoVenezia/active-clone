@@ -1,15 +1,15 @@
 {"case":"C-01","workflow":"u38d648xyktcsv1oxsbeq","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
 {"case":"C-01","workflow":"pjh93ub1az5lm1iqhe9br","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-02","workflow":"c1ng7jikdkt7j9h8x3u4l","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-02","workflow":"3arcrw2vc3yf5svvyj1t9","structural":"FAIL","violations":["falta acción requerida: tiendanube/get-order"],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
+{"case":"C-02","workflow":"rucoyvolofn37neicnhwb","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
+{"case":"C-02","workflow":"58vf0480y0aq97arhmzfm","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
 {"case":"C-03","workflow":"sbzbji7l5ugwv6lyfnmzn","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
 {"case":"C-03","workflow":"tfbantnwsxb7sn0fu0n6y","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-04","workflow":"vi8fs5u7wxbq8q1246vl2","structural":"FAIL","violations":["falta nodo con label que contenga: Tiendanube"],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-04","workflow":"hoyib6tvok22mjo88ou8m","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-05","workflow":"y45q6iymzvctggbytx4cg","structural":"FAIL","violations":["falta acción requerida: Loop"],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-05","workflow":"vi1d7a25dx2vqcy5o32y9","structural":"FAIL","violations":["falta acción requerida: mercadolibre/get-question"],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-06","workflow":"3tjs2kh5b20tlmqz21cuc","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
-{"case":"C-06","workflow":"otal9slt8f9rzn6zchhw5","structural":"FAIL","violations":["falta toolkit composio: googledocs"],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
+{"case":"C-04","workflow":"w5286794jh8wjhb2je7ot","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
+{"case":"C-04","workflow":"0mi2y67bfuz0ktdxj8qb9","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
+{"case":"C-05","workflow":"ry0lu2ictzadbct7wzp76","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
+{"case":"C-05","workflow":"9qydmmiezbnlp5x18b1tq","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
+{"case":"C-06","workflow":"q7mq81vx1sswr7lw1kv2s","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
+{"case":"C-06","workflow":"6ea4p6is43uj5vypahq4j","structural":"PASS","violations":[],"mode":"ops","checker":"evals/structural-check.mjs","date":"2026-10-21","semantic":"not-run"}
 {"case": "C-07", "workflow": "p9gep2vhe4z3l5c2f9dco", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "no-fixture"}
 {"case": "C-07", "workflow": "cgk6ossq5d28vcu9cx620", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "no-fixture"}
 {"case": "C-08", "workflow": "ofuk8ive49nmpkjyt5u9m", "structural": "PASS", "violations": [], "mode": "ops", "checker": "evals/structural-check.mjs", "date": "2026-10-21", "semantic": "no-fixture"}
