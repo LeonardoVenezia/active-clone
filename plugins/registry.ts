@@ -633,6 +633,48 @@ export function generateAIActionPrompts(): string {
 }
 
 /**
+ * All plugin triggers with their full id ({integration}/{slug}) and label.
+ */
+export function getAllTriggers(): { id: string; label: string }[] {
+  const result: { id: string; label: string }[] = [];
+  for (const plugin of integrationRegistry.values()) {
+    for (const trigger of plugin.triggers ?? []) {
+      result.push({ id: computeActionId(plugin.type, trigger.slug), label: trigger.label });
+    }
+  }
+  return result;
+}
+
+/**
+ * AI prompt section listing plugin triggers (event sources) with config examples
+ * and output fields, so the model can start flows from real app events.
+ */
+export function generateAITriggerPrompts(): string {
+  const lines: string[] = [];
+  for (const plugin of integrationRegistry.values()) {
+    for (const trigger of plugin.triggers ?? []) {
+      const fullId = computeActionId(plugin.type, trigger.slug);
+      const exampleConfig: Record<string, string | number> = { triggerType: fullId };
+      for (const field of flattenConfigFields(trigger.configFields ?? [])) {
+        if (field.showWhen) continue;
+        if (field.example !== undefined) exampleConfig[field.key] = field.example;
+        else if (field.defaultValue !== undefined) exampleConfig[field.key] = field.defaultValue;
+        else if (field.type === "number") exampleConfig[field.key] = 10;
+        else if (field.type === "select" && field.options?.[0]) exampleConfig[field.key] = field.options[0].value;
+        else exampleConfig[field.key] = `<${field.key}>`;
+      }
+      const outputsNote = trigger.outputFields?.length
+        ? ` | outputs: ${trigger.outputFields.map((f) => f.field).join(", ")}`
+        : "";
+      lines.push(
+        `- ${trigger.label} (${fullId}): ${JSON.stringify(exampleConfig)}${outputsNote}`
+      );
+    }
+  }
+  return lines.join("\n");
+}
+
+/**
  * Map of full action id -> declared output field names.
  * Used by deterministic flow validation (lib/flow-validator.ts).
  */

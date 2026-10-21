@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
-import { getActionOutputFields, getAllActions } from "@/plugins/registry";
+import { generateAITriggerPrompts, getActionOutputFields, getAllActions, getAllTriggers } from "@/plugins/registry";
 import { type FlowEdge, type FlowNode, planCoverageError, requestCoverageError, validateFlow } from "@/lib/flow-validator";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
 
@@ -90,6 +90,7 @@ async function processOperationStream(textStream: AsyncIterable<string>, encoder
 }
 function getSystemPrompt(composioCatalog = ""): string {
   const pluginActionPrompts = generateAIActionPrompts();
+  const pluginTriggerPrompts = generateAITriggerPrompts();
   return `You are a workflow automation expert. Generate a workflow based on the user's description.
 
 CRITICAL: Output your workflow as INDIVIDUAL OPERATIONS, one per line in JSONL format.
@@ -145,6 +146,8 @@ Trigger types:
 - Manual: {"triggerType": "Manual"}
 - Webhook: {"triggerType": "Webhook", "webhookPath": "/webhooks/name", ...}
 - Schedule: {"triggerType": "Schedule", "scheduleCron": "0 9 * * *", ...}
+${pluginTriggerPrompts ? `Plugin event triggers (use these triggerType values when the flow starts from an app event; wire later steps with the listed outputs):
+${pluginTriggerPrompts}` : ""}
 
 System action types (built-in):
 - Database Query: {"actionType": "Database Query", "dbQuery": "SELECT * FROM table", "dbTable": "table"}
@@ -230,6 +233,14 @@ REMEMBER: After adding all nodes, you MUST add edges to connect them! Every node
 
 
 const SYSTEM_ACTION_TYPES = ["Database Query", "HTTP Request", "Condition", "Delay", "Fórmula", "Loop", "Approval"];
+let cachedValidTriggerTypes: Set<string> | null = null;
+function getValidTriggerTypes(): Set<string> {
+  if (!cachedValidTriggerTypes) {
+    cachedValidTriggerTypes = new Set(["Manual", "Webhook", "Schedule"]);
+    for (const t of getAllTriggers()) cachedValidTriggerTypes.add(t.id);
+  }
+  return cachedValidTriggerTypes;
+}
 let cachedValidActionTypes: Set<string> | null = null;
 function getValidActionTypes(): Set<string> {
   if (!cachedValidActionTypes) {
@@ -244,10 +255,15 @@ export async function POST(request: Request) {
   try {
     const session = await auth.api.getSession({ headers: request.headers });
     if (!session?.user || session.user.isAnonymous) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const body = await request.json(); const { prompt, existingWorkflow, toolkits } = body;
+    const body = await request.json(); const { prompt, existingWorkflow, toolkits, model } = body;
     if (!prompt) return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     if (!llmRoutes().length) return NextResponse.json({ error: "AI API key not configured on server." }, { status: 500 });
+    // Optional model pin (used by the eval harness): restrict to the route whose model matches.
+    const allRoutes = llmRoutes();
+    const pinnedRoutes = typeof model === "string" && model ? allRoutes.filter(r => r.model === model) : [];
+    const activeRoutes = pinnedRoutes.length ? pinnedRoutes : allRoutes;
     let composioCatalog = "";
+    let composioCatalogMap: Map<string, string[]> = new Map();
     // Apps with a native plugin must never load a Composio catalog: keep them out of detection entirely.
     const toolkitPatterns: Record<string, RegExp> = { outlook: /outlook|hotmail|microsoft/i, gmail: /gmail|e-?mail|mail/i, notion: /notion/i, airtable: /airtable/i, googlesheets: /sheets|spreadsheet|planilla/i, googledocs: /google\s+docs?\b|doc(umento)? de google/i, googledrive: /drive/i, hubspot: /hubspot/i, jira: /jira/i, hackernews: /hacker\s*news/i };
     const promptText = String(prompt);
@@ -264,6 +280,7 @@ export async function POST(request: Request) {
         return { toolkit, slug: tool.slug, name: tool.name, description: String(tool.description ?? "").slice(0, 120), required: params.required ?? [], params: Object.keys(params.properties ?? {}).slice(0, 12) };
       };
       let actions = results.flatMap(entry => entry?.result?.items?.map((tool: Record<string, unknown>) => compact(tool, entry.toolkit)) ?? []);
+      composioCatalogMap = new Map(actions.map(a => [`${a.toolkit}/${String(a.slug)}`, a.required]));
       let json = JSON.stringify(actions);
       while (json.length > 40000 && actions.length > 1) { actions = actions.slice(0, Math.floor(actions.length * 0.8)); json = JSON.stringify(actions); }
       console.info("[ai-generate] catalog size", { toolkits: requestedToolkits, actions: actions.length, chars: json.length });
@@ -278,12 +295,12 @@ export async function POST(request: Request) {
     async function* textChunks() {
       const failures: string[] = [];
       const safeSummary = (error: unknown) => (error instanceof Error ? error.message : "unknown error").replace(/Bearer\s+[A-Za-z0-9._~+\/-]+/gi, "Bearer [redacted]").replace(/(?:sk-[A-Za-z0-9_-]{12,}|AIza[A-Za-z0-9_-]{20,})/g, "[redacted-key]").slice(0, 240);
-      for (const route of llmRoutes()) {
+      for (const route of activeRoutes) {
         let got = false;
         try {
           console.info("[ai-generate] provider attempt", route.name, route.model);
           const provider = new OpenAI({ apiKey: route.apiKey, baseURL: route.baseURL, maxRetries: 0, timeout: 15000 });
-          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: userPrompt }], stream: true, max_tokens: 8192 });
+          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: userPrompt }], stream: true, max_tokens: 8192, temperature: 0.2 });
           for await (const chunk of result) { if (chunk.choices[0]?.finish_reason === "length") streamState.truncated = true; const value = chunk.choices[0]?.delta?.content; if (value) { got = true; yield value; } }
           if (got) return;
           failures.push(`${route.name}/${route.model}: empty stream`); console.warn("[ai-generate] provider returned no text", route.name, route.model);
@@ -297,7 +314,7 @@ export async function POST(request: Request) {
     const streamState = { truncated: false };
     const shadow: Shadow = { nodes: [...((existingWorkflow?.nodes ?? []) as FlowNode[])], edges: [...((existingWorkflow?.edges ?? []) as FlowEdge[])] };
     const computeErrors = (): string[] => {
-      const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes());
+      const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes(), { validTriggerTypes: getValidTriggerTypes(), composioCatalog: composioCatalogMap });
       const coverage = planCoverageError(userPrompt, shadow.nodes);
       if (coverage) errs.push(coverage);
       const appCoverage = requestCoverageError(userPrompt, shadow.nodes);
@@ -311,11 +328,11 @@ export async function POST(request: Request) {
       const nodeList = shadow.nodes.map(n => `- ${n.id}: ${JSON.stringify({ label: n.data?.label, config: n.data?.config })}`).join("\n");
       const edgeList = shadow.edges.map(e => `- ${e.source} -> ${e.target}`).join("\n");
       const fixPrompt = `The workflow you generated has these DETERMINISTIC VALIDATION ERRORS:\n${errors.map(e => `- ${e}`).join("\n")}\n\nCurrent nodes:\n${nodeList}\nCurrent edges:\n${edgeList}\n\nEmit ONLY the corrective operations needed to fix these exact errors (addNode/addEdge/removeNode/removeEdge/updateNode). Add nodes before the edges that use them. Do NOT recreate existing nodes; reuse their exact ids. Original request: ${userPrompt}`;
-      for (const route of llmRoutes()) {
+      for (const route of activeRoutes) {
         try {
           console.info("[ai-generate] corrective attempt", route.name, route.model);
           const provider = new OpenAI({ apiKey: route.apiKey, baseURL: route.baseURL, maxRetries: 0, timeout: 20000 });
-          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: fixPrompt }], max_tokens: 4096 });
+          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: fixPrompt }], max_tokens: 4096, temperature: 0.2 });
           const text = result.choices[0]?.message?.content ?? "";
           if (!text) continue;
           let count = operationCount;

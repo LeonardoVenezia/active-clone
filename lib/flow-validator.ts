@@ -68,11 +68,18 @@ function reachableFrom(roots: string[], edges: FlowEdge[]): Set<string> {
   return seen;
 }
 
+export type ValidateFlowOptions = {
+  validTriggerTypes?: ReadonlySet<string>;
+  // "toolkit/slug" -> required argument names, from the loaded Composio catalog
+  composioCatalog?: ReadonlyMap<string, string[]>;
+};
+
 export function validateFlow(
   nodes: FlowNode[],
   edges: FlowEdge[],
   actionOutputs: OutputsMap = {},
-  validActionTypes?: ReadonlySet<string>
+  validActionTypes?: ReadonlySet<string>,
+  options: ValidateFlowOptions = {}
 ): string[] {
   const errors: string[] = [];
   const byId = new Map<string, FlowNode>();
@@ -84,6 +91,16 @@ export function validateFlow(
   const triggers = nodes.filter(isTrigger);
   if (triggers.length === 0) errors.push("grafo: the workflow has no trigger node");
   if (triggers.length > 1) errors.push(`grafo: ${triggers.length} trigger nodes; exactly one is required`);
+  for (const t of triggers) {
+    const tcfg = (t.data?.config ?? {}) as Record<string, unknown>;
+    const tType = String(tcfg.triggerType ?? "");
+    if (options.validTriggerTypes && !options.validTriggerTypes.has(tType)) {
+      errors.push(`grafo: trigger "${t.id}" (${t.data?.label ?? "unlabeled"}) has unknown triggerType "${tType || "(missing)"}"; use Manual, Webhook, Schedule, or one of the listed plugin triggers`);
+    }
+    if (tType === "Webhook" && !tcfg.webhookPath) {
+      errors.push(`grafo: trigger "${t.id}" (${t.data?.label ?? "unlabeled"}) is a Webhook but has no webhookPath`);
+    }
+  }
 
   for (const e of edges) {
     if (!byId.has(e.source)) errors.push(`grafo: edge ${e.source} -> ${e.target} references missing node "${e.source}"`);
@@ -162,6 +179,21 @@ export function validateFlow(
     ];
     const isComposio = actionType === "composio/run-tool" || actionType === "Run Composio Action";
     const composioToolkit = isComposio ? String(cfg.toolkit ?? cfg.toolKit ?? "").toLowerCase() : "";
+    if (isComposio && options.composioCatalog && options.composioCatalog.size > 0) {
+      const slug = String(cfg.toolSlug ?? cfg.tool ?? cfg.slug ?? "");
+      const key = `${composioToolkit}/${slug}`;
+      const required = options.composioCatalog.get(key);
+      if (!required) {
+        errors.push(`consistencia: node "${n.id}" (${label}) uses Composio action "${key}" which is NOT in the loaded catalog; use only exact toolkit/slug pairs from the REAL COMPOSIO ACTIONS list`);
+      } else if (required.length) {
+        let provided: Record<string, unknown> = {};
+        try { provided = JSON.parse(String(cfg.arguments ?? "{}")) as Record<string, unknown>; } catch { provided = {}; }
+        const missing = required.filter((arg) => !(arg in provided));
+        if (missing.length) {
+          errors.push(`consistencia: node "${n.id}" (${label}) Composio action "${key}" is missing required arguments: ${missing.join(", ")}`);
+        }
+      }
+    }
     for (const [re, app, example] of NATIVE_PLUGIN_APPS) {
       const mentionsApp = re.test(label);
       const composioHitsNative = isComposio && (composioToolkit === app || composioToolkit.replace(/[\s_-]/g, "") === app);
