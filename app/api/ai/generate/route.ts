@@ -87,6 +87,7 @@ Operations you can output:
 
 IMPORTANT RULES:
 - Every workflow must have EXACTLY ONE trigger node
+- Apps with a NATIVE plugin (whatsapp, slack, tiendanube, mercadolibre, zipnova, stripe, github, linear, mercadopago) MUST use the plugin's own action (e.g. whatsapp/send-message, slack/send-message, mercadolibre/get-order): never the generic "Send Message"/"Send Email" actions, never a hand-rolled HTTP Request, and never the Composio toolkit for those apps
 - Output ONE operation per line
 - Each line must be complete, valid JSON
 - Start with setName and setDescription

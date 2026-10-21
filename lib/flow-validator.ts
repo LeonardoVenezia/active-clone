@@ -152,6 +152,26 @@ export function validateFlow(
       }
     }
 
+    // Native plugin preferred over generic actions and over Composio for apps with a native plugin
+    const NATIVE_PLUGIN_APPS: Array<[RegExp, string, string]> = [
+      [/whatsapp/i, "whatsapp", "whatsapp/send-message"],
+      [/slack/i, "slack", "slack/send-message"],
+      [/mercado\s*libre|mercadolibre/i, "mercadolibre", "mercadolibre/*"],
+      [/tiendanube/i, "tiendanube", "tiendanube/*"],
+      [/zipnova/i, "zipnova", "zipnova/*"],
+    ];
+    const isComposio = actionType === "composio/run-tool" || actionType === "Run Composio Action";
+    const composioToolkit = isComposio ? String(cfg.toolkit ?? cfg.toolKit ?? "").toLowerCase() : "";
+    for (const [re, app, example] of NATIVE_PLUGIN_APPS) {
+      const mentionsApp = re.test(label);
+      const composioHitsNative = isComposio && (composioToolkit === app || composioToolkit.replace(/[\s_-]/g, "") === app);
+      const genericHitsNative = (actionType === "Send Message" || actionType === "Send Email") && mentionsApp;
+      if (composioHitsNative || genericHitsNative) {
+        errors.push(`consistencia: node "${n.id}" (${label}) uses ${isComposio ? `the Composio ${app} toolkit` : `generic action "${actionType}"`} but ${app} has a NATIVE plugin; you MUST use the native plugin action (e.g. "${example}") instead`);
+        break;
+      }
+    }
+
     // Hand-rolled HTTP Request to an API that has a native plugin or Composio action
     if (actionType === "HTTP Request") {
       const endpoint = String(cfg.endpoint ?? "");
