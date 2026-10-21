@@ -232,6 +232,8 @@ export function validateFlow(
     const strings: Array<{ path: string; value: string }> = [];
     collectStrings(cfg, "", strings);
     for (const { path, value } of strings) {
+      // WordPress REST placeholders (<site>, app-password auth) are intentional per the builder rules
+      if (value.includes("/wp-json/")) continue;
       for (const re of PLACEHOLDER_RES) {
         if (re.test(value)) {
           if (/endpoint|url/i.test(path)) {

@@ -42,7 +42,14 @@ function shadowApply(operation: Operation, shadow: Shadow): boolean {
     return true;
   }
   if (operation.op === "updateNode" && operation.nodeId) {
-    shadow.nodes = shadow.nodes.map((n) => n.id === operation.nodeId ? { ...n, ...(operation.updates?.position ? { position: operation.updates.position } : {}), ...(operation.updates?.data ? { data: { ...n.data, ...(operation.updates.data as object) } } : {}) } as FlowNode : n);
+    const upd = operation.updates?.data as FlowNode["data"] | undefined;
+    shadow.nodes = shadow.nodes.map((n) => {
+      if (n.id !== operation.nodeId) return n;
+      const mergedData = upd
+        ? { ...n.data, ...upd, config: { ...((n.data?.config ?? {}) as object), ...((upd.config ?? {}) as object) } }
+        : n.data;
+      return { ...n, ...(operation.updates?.position ? { position: operation.updates.position } : {}), ...(upd ? { data: mergedData } : {}) } as FlowNode;
+    });
     return true;
   }
   return operation.op === "setName" || operation.op === "setDescription";
@@ -54,10 +61,24 @@ function tryParseAndEnqueueOperation(line: string, encoder: TextEncoder, control
   try { const operation = JSON.parse(trimmed) as Operation; if (!shadowApply(operation, shadow)) { console.warn("[API] op rejected by guard:", operation.op, trimmed.substring(0, 80)); return operationCount; } const newCount = operationCount + 1; console.log(`[API] Operation ${newCount}:`, operation.op); controller.enqueue(encodeMessage(encoder, { type: "operation", operation })); return newCount; }
   catch { console.warn("[API] Skipping invalid JSON line:", trimmed.substring(0, 50)); return operationCount; }
 }
+// Extract complete top-level JSON objects by brace balance, tolerating models that
+// pretty-print one operation across multiple lines. Text between objects is dropped.
+function extractJsonObjects(buf: string): { objs: string[]; rest: string } {
+  const objs: string[] = [];
+  let depth = 0, start = -1, inStr = false, esc = false, last = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const c = buf[i];
+    if (inStr) { if (esc) esc = false; else if (c === "\\") esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"' && depth > 0) inStr = true;
+    else if (c === "{") { if (depth++ === 0) start = i; }
+    else if (c === "}" && depth > 0 && --depth === 0) { objs.push(buf.slice(start, i + 1)); last = i + 1; }
+  }
+  return { objs, rest: buf.slice(depth > 0 ? start : last) };
+}
 function processBufferLines(buffer: string, encoder: TextEncoder, controller: ReadableStreamDefaultController, operationCount: number, shadow: Shadow): { remainingBuffer: string; newOperationCount: number } {
-  const lines = buffer.split("\n"); const remainingBuffer = lines.pop() || ""; let newOperationCount = operationCount;
-  for (const line of lines) newOperationCount = tryParseAndEnqueueOperation(line, encoder, controller, newOperationCount, shadow);
-  return { remainingBuffer, newOperationCount };
+  const { objs, rest } = extractJsonObjects(buffer); let newOperationCount = operationCount;
+  for (const obj of objs) newOperationCount = tryParseAndEnqueueOperation(obj, encoder, controller, newOperationCount, shadow);
+  return { remainingBuffer: rest, newOperationCount };
 }
 async function processOperationStream(textStream: AsyncIterable<string>, encoder: TextEncoder, controller: ReadableStreamDefaultController, shadow: Shadow): Promise<number> {
   let buffer = ""; let operationCount = 0; let chunkCount = 0; let charCount = 0;
@@ -70,8 +91,6 @@ async function processOperationStream(textStream: AsyncIterable<string>, encoder
 function getSystemPrompt(composioCatalog = ""): string {
   const pluginActionPrompts = generateAIActionPrompts();
   return `You are a workflow automation expert. Generate a workflow based on the user's description.
-
-${composioCatalog}
 
 CRITICAL: Output your workflow as INDIVIDUAL OPERATIONS, one per line in JSONL format.
 Each line must be a complete, separate JSON object.
@@ -156,8 +175,8 @@ CRITICAL ABOUT CONDITION NODES:
 For "only if X do Y, then continue with Z either way": create TWO conditions (X and NOT X); connect X -> Y -> Z and NOT X -> Z. NEVER connect a Condition to both Y and a downstream Z: when it is false, everything connected is skipped and the flow dies.
 
 Example: "if good send Slack, if bad create ticket" needs TWO conditions:
-{"op": "addNode", "node": {"id": "cond-good", "data": {"config": {"condition": "{{@rate:Rate.value}} === 'good'"}}}}
-{"op": "addNode", "node": {"id": "cond-bad", "data": {"config": {"condition": "{{@rate:Rate.value}} === 'bad'"}}}}
+{"op": "addNode", "node": {"id": "cond-good", "type": "action", "data": {"label": "Is Good", "type": "action", "config": {"actionType": "Condition", "condition": "{{@rate:Rate.value}} === 'good'"}}}}
+{"op": "addNode", "node": {"id": "cond-bad", "type": "action", "data": {"label": "Is Bad", "type": "action", "config": {"actionType": "Condition", "condition": "{{@rate:Rate.value}} === 'bad'"}}}}
 {"op": "addEdge", "edge": {"source": "rate", "target": "cond-good"}}
 {"op": "addEdge", "edge": {"source": "rate", "target": "cond-bad"}}
 {"op": "addEdge", "edge": {"source": "cond-good", "target": "slack"}}
@@ -193,18 +212,19 @@ Example output (linear workflow with 250px horizontal spacing):
 {"op": "setName", "name": "Contact Form Workflow"}
 {"op": "setDescription", "description": "Processes contact form submissions"}
 {"op": "addNode", "node": {"id": "trigger-1", "type": "trigger", "position": {"x": 100, "y": 200}, "data": {"label": "Contact Form", "type": "trigger", "config": {"triggerType": "Manual"}, "status": "idle"}}}
-{"op": "addNode", "node": {"id": "send-email", "type": "action", "position": {"x": 350, "y": 200}, "data": {"label": "Send Email", "type": "action", "config": {"actionType": "Send Email", "emailTo": "admin@example.com", "emailSubject": "New Contact", "emailBody": "New contact form submission"}, "status": "idle"}}}
-{"op": "addNode", "node": {"id": "log-action", "type": "action", "position": {"x": 600, "y": 200}, "data": {"label": "Log Result", "type": "action", "config": {"actionType": "HTTP Request", "httpMethod": "POST", "endpoint": "https://api.example.com/log"}, "status": "idle"}}}
-{"op": "addEdge", "edge": {"id": "e1", "source": "trigger-1", "target": "send-email", "type": "default"}}
-{"op": "addEdge", "edge": {"id": "e2", "source": "send-email", "target": "log-action", "type": "default"}}
+{"op": "addNode", "node": {"id": "draft-message", "type": "action", "position": {"x": 350, "y": 200}, "data": {"label": "Draft Message", "type": "action", "config": {"actionType": "ai-gateway/generate-text", "prompt": "Write a short welcome message for the new contact form submission"}, "status": "idle"}}}
+{"op": "addNode", "node": {"id": "notify-channel", "type": "action", "position": {"x": 600, "y": 200}, "data": {"label": "Notify Channel", "type": "action", "config": {"actionType": "slack/send-message", "channel": "#general", "text": "{{@draft-message:Draft Message.text}}"}, "status": "idle"}}}
+{"op": "addEdge", "edge": {"id": "e1", "source": "trigger-1", "target": "draft-message", "type": "default"}}
+{"op": "addEdge", "edge": {"id": "e2", "source": "draft-message", "target": "notify-channel", "type": "default"}}
 
 Example output (branching workflow with 250px vertical spacing):
-{"op": "addNode", "node": {"id": "trigger-1", "type": "trigger", "position": {"x": 100, "y": 200}, "data": {"label": "Webhook", "type": "trigger", "config": {"triggerType": "Webhook"}, "status": "idle"}}}
-{"op": "addNode", "node": {"id": "branch-a", "type": "action", "position": {"x": 350, "y": 75}, "data": {"label": "Branch A", "type": "action", "config": {"actionType": "Send Email"}, "status": "idle"}}}
-{"op": "addNode", "node": {"id": "branch-b", "type": "action", "position": {"x": 350, "y": 325}, "data": {"label": "Branch B", "type": "action", "config": {"actionType": "Send Slack Message"}, "status": "idle"}}}
+{"op": "addNode", "node": {"id": "trigger-1", "type": "trigger", "position": {"x": 100, "y": 200}, "data": {"label": "Webhook", "type": "trigger", "config": {"triggerType": "Webhook", "webhookPath": "/webhooks/new-order"}, "status": "idle"}}}
+{"op": "addNode", "node": {"id": "branch-a", "type": "action", "position": {"x": 350, "y": 75}, "data": {"label": "Branch A", "type": "action", "config": {"actionType": "slack/send-message", "channel": "#general", "text": "New order received"}, "status": "idle"}}}
+{"op": "addNode", "node": {"id": "branch-b", "type": "action", "position": {"x": 350, "y": 325}, "data": {"label": "Branch B", "type": "action", "config": {"actionType": "tiendanube/search-orders"}, "status": "idle"}}}
 {"op": "addEdge", "edge": {"id": "e1", "source": "trigger-1", "target": "branch-a", "type": "default"}}
 {"op": "addEdge", "edge": {"id": "e2", "source": "trigger-1", "target": "branch-b", "type": "default"}}
 
+${composioCatalog ? `\n${composioCatalog}\n` : ""}
 REMEMBER: After adding all nodes, you MUST add edges to connect them! Every node should be reachable from the trigger.`;
 }
 
@@ -224,13 +244,19 @@ export async function POST(request: Request) {
   try {
     const session = await auth.api.getSession({ headers: request.headers });
     if (!session?.user || session.user.isAnonymous) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const body = await request.json(); const { prompt, existingWorkflow } = body;
+    const body = await request.json(); const { prompt, existingWorkflow, toolkits } = body;
     if (!prompt) return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     if (!llmRoutes().length) return NextResponse.json({ error: "AI API key not configured on server." }, { status: 500 });
     let composioCatalog = "";
-    const toolkitPatterns: Record<string, RegExp> = { outlook: /outlook|hotmail|microsoft/i, gmail: /gmail|e-?mail|mail/i, slack: /slack/i, notion: /notion/i, airtable: /airtable/i, googlesheets: /sheets|spreadsheet|planilla/i, googledocs: /google\s+docs?\b|doc(umento)? de google/i, googledrive: /drive/i, github: /github/i, linear: /linear/i, stripe: /stripe/i, hubspot: /hubspot/i, jira: /jira/i, hackernews: /hacker\s*news/i };
+    // Apps with a native plugin must never load a Composio catalog: keep them out of detection entirely.
+    const toolkitPatterns: Record<string, RegExp> = { outlook: /outlook|hotmail|microsoft/i, gmail: /gmail|e-?mail|mail/i, notion: /notion/i, airtable: /airtable/i, googlesheets: /sheets|spreadsheet|planilla/i, googledocs: /google\s+docs?\b|doc(umento)? de google/i, googledrive: /drive/i, hubspot: /hubspot/i, jira: /jira/i, hackernews: /hacker\s*news/i };
     const promptText = String(prompt);
-    const requestedToolkits = Object.keys(toolkitPatterns).filter(k => toolkitPatterns[k].test(promptText)).slice(0, 4);
+    // The client sends the toolkits it detected from the user's own text; only fall back to
+    // prompt regex (which can hit fixed boilerplate) when the field is absent.
+    const requestedToolkits = (Array.isArray(toolkits)
+      ? toolkits.filter((t: unknown): t is string => typeof t === "string" && t in toolkitPatterns)
+      : Object.keys(toolkitPatterns).filter(k => toolkitPatterns[k].test(promptText))
+    ).slice(0, 4);
     if (requestedToolkits.length && !/REAL COMPOSIO ACTIONS/.test(promptText)) {
       const results = await Promise.all(requestedToolkits.map(async toolkit => { try { return { toolkit, result: await discoverComposio({ catalog: "tools", toolkit }) }; } catch (error) { console.error("[ai-generate] Composio catalog lookup failed", toolkit, error instanceof Error ? error.message : "unknown"); return null; } }));
       const compact = (tool: Record<string, unknown>, toolkit: string) => {
@@ -282,7 +308,7 @@ export async function POST(request: Request) {
       const errors = computeErrors();
       if (!errors.length) return operationCount;
       console.warn("[ai-generate] validation errors", errors);
-      const nodeList = shadow.nodes.map(n => `- ${n.id} (${n.data?.label ?? ""} / ${String(n.data?.config?.actionType ?? n.data?.type ?? "")})`).join("\n");
+      const nodeList = shadow.nodes.map(n => `- ${n.id}: ${JSON.stringify({ label: n.data?.label, config: n.data?.config })}`).join("\n");
       const edgeList = shadow.edges.map(e => `- ${e.source} -> ${e.target}`).join("\n");
       const fixPrompt = `The workflow you generated has these DETERMINISTIC VALIDATION ERRORS:\n${errors.map(e => `- ${e}`).join("\n")}\n\nCurrent nodes:\n${nodeList}\nCurrent edges:\n${edgeList}\n\nEmit ONLY the corrective operations needed to fix these exact errors (addNode/addEdge/removeNode/removeEdge/updateNode). Add nodes before the edges that use them. Do NOT recreate existing nodes; reuse their exact ids. Original request: ${userPrompt}`;
       for (const route of llmRoutes()) {
@@ -293,7 +319,9 @@ export async function POST(request: Request) {
           const text = result.choices[0]?.message?.content ?? "";
           if (!text) continue;
           let count = operationCount;
-          for (const line of text.split("\n")) count = tryParseAndEnqueueOperation(line, encoder, controller, count, shadow);
+          const { objs } = extractJsonObjects(text);
+          const candidates = objs.length ? objs : text.split("\n");
+          for (const piece of candidates) count = tryParseAndEnqueueOperation(piece, encoder, controller, count, shadow);
           return count;
         } catch (error) { console.error("[ai-generate] corrective pass failed", route.name, error instanceof Error ? error.message.slice(0, 200) : "unknown"); }
       }

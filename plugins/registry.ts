@@ -615,7 +615,8 @@ export function generateAIActionPrompts(): string {
         } else if (field.type === "select" && field.options?.[0]) {
           exampleConfig[field.key] = field.options[0].value;
         } else {
-          exampleConfig[field.key] = `Your ${field.label.toLowerCase()}`;
+          // Angle-bracket placeholders are caught by the validator if the model copies them verbatim.
+          exampleConfig[field.key] = `<${field.key}>`;
         }
       }
 
