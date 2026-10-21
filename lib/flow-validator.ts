@@ -248,6 +248,22 @@ export function validateFlow(
       }
     }
 
+    // Fórmula over lists: comparing or filtering list outputs item-by-item requires a Loop.
+    // Wholesale aggregation (sum, count, totals) in a Fórmula is fine.
+    if (actionType === "Fórmula") {
+      const txt = JSON.stringify(cfg);
+      const refs = [...txt.matchAll(/\{\{@([\w-]+):/g)].map((m) => m[1]);
+      const listRef = refs.some((id) => {
+        const target = byId.get(id);
+        const targetType = target ? actionTypeOf(target) : "";
+        return /search|list|get-question/i.test(targetType);
+      });
+      const perItemIntent = /compar|diferenc|filtr|faltante|sin stock|stock bajo|cada|per[- ]item|por [íi]tem/i.test(`${label} ${txt.slice(0, 300)}`);
+      if (listRef && perItemIntent) {
+        errors.push(`semántica: node "${n.id}" (${label}) compares/filters list outputs in a single Fórmula step; per-item list processing MUST be a Loop node whose inner steps do the per-item check (Condition inside the Loop for per-item filters/alerts); aggregate or notify AFTER the Loop`);
+      }
+    }
+
     // @item/@index are only valid inside a Loop's inner steps
     if (actionType !== "Loop") {
       const ownStrings: Array<{ path: string; value: string }> = [];

@@ -389,6 +389,24 @@ export async function POST(request: Request) {
             const removable = orphans.filter(o => !referenced.has(o.id) && !shadow.edges.some(e => e.source === o.id && reachable.has(e.target)));
             if (!removable.length) break;
             for (const o of removable) { console.warn("[ai-generate] removing unreachable orphan node", o.id); operationCount = tryParseAndEnqueueOperation(JSON.stringify({ op: "removeNode", nodeId: o.id }), encoder, controller, operationCount, shadow); }
+          }
+          // Deterministic dedupe: a top-level node that shares its id with a Loop inner step is a
+          // duplicate the model emitted (its {{@item:...}} refs only resolve inside the Loop).
+          // Remove it and rewire its incoming edges to the Loop, its outgoing edges from the Loop.
+          {
+            const innerIdToLoop = new Map<string, string>();
+            for (const n of shadow.nodes) {
+              const steps = (n.data as { config?: { steps?: { id?: string }[] } })?.config?.steps;
+              if (Array.isArray(steps)) for (const s of steps) if (typeof s?.id === "string") innerIdToLoop.set(s.id, n.id);
+            }
+            for (const n of [...shadow.nodes]) {
+              const loopId = innerIdToLoop.get(n.id);
+              if (!loopId || loopId === n.id) continue;
+              if (n.type === "trigger" || (n.data as { type?: string })?.type === "trigger") continue;
+              console.warn("[ai-generate] removing duplicate top-level node of Loop inner step", n.id, "->", loopId);
+              for (const e of shadow.edges) { if (e.target === n.id) e.target = loopId; if (e.source === n.id) e.source = loopId; }
+              operationCount = tryParseAndEnqueueOperation(JSON.stringify({ op: "removeNode", nodeId: n.id }), encoder, controller, operationCount, shadow);
+            }
           } const remaining = computeErrors(); if (remaining.length) { console.warn("[ai-generate] validation errors remain after retries", remaining); controller.enqueue(encodeMessage(encoder, { type: "validation", errors: remaining })); } controller.enqueue(encodeMessage(encoder, { type: "complete" })); controller.close(); } catch (error) { controller.enqueue(encodeMessage(encoder, { type: "error", error: error instanceof Error ? error.message : "Failed to generate workflow" })); controller.close(); } } });
     return new Response(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-cache", Connection: "keep-alive" } });
   } catch (error) { console.error("Failed to generate workflow:", error instanceof Error ? error.message.slice(0, 240) : "unknown"); return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to generate workflow" }, { status: 500 }); }
