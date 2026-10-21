@@ -1,0 +1,207 @@
+{
+  "active": false,
+  "canEdit": true,
+  "createdAt": "2026-10-21T20:29:41.774Z",
+  "description": "Flujo automático de atención al cliente vía WhatsApp integrado con Tiendanube, Google Docs y respuestas simuladas.",
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "b1bVLeEwOXaABTY9OZKnr",
+      "target": "tiendanube-get-order",
+      "type": "animated"
+    },
+    {
+      "id": "edge-2",
+      "source": "tiendanube-get-order",
+      "target": "faq-example",
+      "type": "animated"
+    },
+    {
+      "id": "edge-3",
+      "source": "faq-example",
+      "target": "draft-response",
+      "type": "animated"
+    },
+    {
+      "id": "edge-4",
+      "source": "draft-response",
+      "target": "whatsapp-reply",
+      "type": "animated"
+    },
+    {
+      "id": "e2",
+      "source": "tiendanube-get-order",
+      "target": "tiendanube-get-order-detail",
+      "type": "animated"
+    },
+    {
+      "id": "e3",
+      "source": "tiendanube-get-order-detail",
+      "target": "faq-example",
+      "type": "animated"
+    },
+    {
+      "id": "e3",
+      "source": "tiendanube-get-order",
+      "target": "googledocs-read-faq",
+      "type": "animated"
+    },
+    {
+      "id": "e4",
+      "source": "tiendanube-get-order-detail",
+      "target": "draft-response",
+      "type": "animated"
+    },
+    {
+      "id": "e5",
+      "source": "googledocs-read-faq",
+      "target": "draft-response",
+      "type": "animated"
+    }
+  ],
+  "id": "q7mq81vx1sswr7lw1kv2s",
+  "isOwner": true,
+  "name": "Soporte al Cliente Automático",
+  "nodes": [
+    {
+      "data": {
+        "config": {
+          "triggerType": "whatsapp/incoming-message"
+        },
+        "description": "Se activa al recibir un mensaje de WhatsApp",
+        "label": "Mensaje de WhatsApp Entrante",
+        "status": "idle",
+        "type": "trigger"
+      },
+      "id": "b1bVLeEwOXaABTY9OZKnr",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 205
+      },
+      "selected": false,
+      "type": "trigger"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "tiendanube/search-orders",
+          "limit": 1,
+          "query": "{{@b1bVLeEwOXaABTY9OZKnr:Mensaje de WhatsApp Entrante.from}}"
+        },
+        "description": "Busca la última orden del cliente",
+        "label": "Buscar Orden en Tiendanube",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "tiendanube-get-order",
+      "position": {
+        "x": 460,
+        "y": 205
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Devuelve este texto de preguntas frecuentes de ejemplo: 1. Los envíos tardan entre 3 y 5 días hábiles. 2. Se pueden hacer cambios dentro de los 30 días. 3. Los medios de pago aceptados son tarjeta y transferencia."
+        },
+        "description": "Texto de ejemplo con las preguntas frecuentes",
+        "label": "FAQ de Ejemplo",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "faq-example",
+      "position": {
+        "x": 1200,
+        "y": 290
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Redacta una respuesta de soporte al cliente para el mensaje: {{@b1bVLeEwOXaABTY9OZKnr:Mensaje de WhatsApp Entrante.text}}. Estado de la última orden: {{@tiendanube-get-order-detail:Obtener Detalle de Orden.status}}. Información de FAQ: {{@faq-example:FAQ de Ejemplo.text}}."
+        },
+        "description": "Redacta la respuesta usando el mensaje, la orden y las FAQ",
+        "label": "Redactar Respuesta",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "draft-response",
+      "position": {
+        "x": 1570,
+        "y": 195
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "whatsapp/send-message",
+          "text": "{{@draft-response:Redactar Respuesta.text}}",
+          "to": "{{@b1bVLeEwOXaABTY9OZKnr:Mensaje de WhatsApp Entrante.from}}"
+        },
+        "description": "Envía la respuesta redactada al cliente por WhatsApp",
+        "label": "Enviar Respuesta por WhatsApp",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "whatsapp-reply",
+      "position": {
+        "x": 1940,
+        "y": 195
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "tiendanube/get-order",
+          "orderId": "{{@tiendanube-get-order:Buscar Orden en Tiendanube.orders[0].id}}"
+        },
+        "label": "Obtener Detalle de Orden - Tiendanube",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "tiendanube-get-order-detail",
+      "position": {
+        "x": 830,
+        "y": 205
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "composio/run-tool",
+          "arguments": "{\"document_id\": \"1234567890abcdef\"}",
+          "tool": "GOOGLEDOCS_GET_DOCUMENT_PLAINTEXT",
+          "toolkit": "googledocs"
+        },
+        "label": "Leer FAQ de Google Docs",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "googledocs-read-faq",
+      "position": {
+        "x": 1200,
+        "y": 110
+      },
+      "type": "action"
+    }
+  ],
+  "shared": false,
+  "updatedAt": "2026-10-21T20:31:08.295Z",
+  "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+  "visibility": "private"
+}
