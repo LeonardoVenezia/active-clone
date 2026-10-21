@@ -691,6 +691,93 @@ export function questionActionError(promptText: string, nodes: FlowNode[]): stri
   return null;
 }
 
+export type SheetColumnsContract = {
+  spreadsheetId: string;
+  sheets: Array<{ title: string; columns: string[] }>;
+};
+
+/**
+ * When a source contract was inspected live (lib/source-inspector), Sheets
+ * writes against that spreadsheet must use its real sheet names and columns.
+ */
+export function sheetContractError(nodes: FlowNode[], contracts: SheetColumnsContract[]): string | null {
+  if (!contracts.length) return null;
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "composio/run-tool") continue;
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    const tool = String(cfg.tool ?? "").toUpperCase();
+    if (!tool.startsWith("GOOGLESHEETS")) continue;
+    let args: Record<string, unknown> = {};
+    try { args = JSON.parse(String(cfg.arguments ?? "{}")) as Record<string, unknown>; } catch { args = {}; }
+    const sid = String(args.spreadsheet_id ?? "");
+    const contract = contracts.find((c) => c.spreadsheetId === sid);
+    if (!contract) continue;
+    const label = n.data?.label ?? n.id;
+    const sheetName = String(args.sheet_name ?? "");
+    const sheet = contract.sheets.find((sh) => sh.title === sheetName);
+    if (!sheet) {
+      return `contrato: node "${n.id}" (${label}) writes to sheet "${sheetName}" but the verified spreadsheet only has: ${contract.sheets.map((sh) => `"${sh.title}"`).join(", ")}; use one of those exact sheet names`;
+    }
+    if (!sheet.columns.length) continue;
+    const values = Array.isArray(args.values) ? (args.values as unknown[]) : null;
+    const literalRow = values?.find((row) => {
+      const cells = (Array.isArray(row) ? row : [row]).map((c) => String(c ?? ""));
+      return cells.some((c) => c.trim() !== "") && cells.every((c) => !c.includes("{{@"));
+    });
+    if (literalRow) {
+      const cells = (Array.isArray(literalRow) ? literalRow : [literalRow]).map((c) => String(c ?? "").trim());
+      const same = cells.length === sheet.columns.length && cells.every((c, i) => c.toLowerCase() === sheet.columns[i].toLowerCase());
+      if (!same) {
+        return `contrato: node "${n.id}" (${label}) writes a literal row (${cells.join(" | ")}) that does not match the verified columns of sheet "${sheet.title}" (${sheet.columns.join(" | ")}); use the exact verified column names and order, and take data values from {{@...}} references`;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * An HTTP Request node can carry config.responseSchema: a sample JSON the user
+ * pasted for their own API. References into that node's .data output must
+ * resolve against the sample's real shape.
+ */
+export function httpSchemaError(nodes: FlowNode[]): string | null {
+  const samples = new Map<string, { label: string; paths: Set<string> }>();
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "HTTP Request") continue;
+    const raw = (n.data?.config as Record<string, unknown> | undefined)?.responseSchema;
+    if (!raw) continue;
+    let sample: unknown;
+    try { sample = JSON.parse(String(raw)); } catch { continue; }
+    if (!sample || typeof sample !== "object") continue;
+    const paths = new Set<string>();
+    const walk = (v: unknown, prefix: string, depth: number): void => {
+      if (depth > 4 || v === null || typeof v !== "object") return;
+      const entries = Array.isArray(v) ? Object.entries((v[0] ?? {}) as Record<string, unknown>) : Object.entries(v as Record<string, unknown>);
+      for (const [k, val] of entries) {
+        const p = prefix ? `${prefix}.${k}` : k;
+        paths.add(p);
+        if (val && typeof val === "object") walk(val, p, depth + 1);
+      }
+    };
+    walk(sample, "", 0);
+    if (paths.size) samples.set(n.id, { label: n.data?.label ?? n.id, paths });
+  }
+  if (!samples.size) return null;
+  for (const n of nodes) {
+    const txt = JSON.stringify(n.data?.config ?? {});
+    for (const m of txt.matchAll(/\{\{@([\w-]+):[^}]*?\.data\.([\w.\[\]]+)\}\}/g)) {
+      const sample = samples.get(m[1]);
+      if (!sample) continue;
+      const refPath = m[2].replace(/\[\d+\]/g, "");
+      const known = sample.paths.has(refPath) || [...sample.paths].some((p) => p.startsWith(`${refPath}.`));
+      if (refPath && !known) {
+        return `contrato: node "${n.id}" (${n.data?.label ?? n.id}) references "${m[1]}.data.${m[2]}" but the sample response of "${sample.label}" only has: ${[...sample.paths].slice(0, 12).join(", ")}; reference a field that actually exists in the API's response`;
+      }
+    }
+  }
+  return null;
+}
+
 const LIST_ACTION_RE = /search-|list-|get-question/;
 
 /**

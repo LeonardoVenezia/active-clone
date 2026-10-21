@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
 import { generateAITriggerPrompts, getActionOutputFields, getActionOutputItemFields, getAllActions, getAllTriggers } from "@/plugins/registry";
-import { type FlowEdge, type FlowNode, channelConsistencyError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, requestCoverageError, shipmentDetailError, validateFlow } from "@/lib/flow-validator";
+import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, requestCoverageError, sheetContractError, shipmentDetailError, validateFlow } from "@/lib/flow-validator";
+import { type SourceContract, contractPromptBlock, extractApiSample, inspectSheetsContracts } from "@/lib/source-inspector";
 import { layoutPositions } from "@/lib/auto-layout";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
 
@@ -152,7 +153,7 @@ ${pluginTriggerPrompts}` : ""}
 
 System action types (built-in):
 - Database Query: {"actionType": "Database Query", "dbQuery": "SELECT * FROM table", "dbTable": "table"}
-- HTTP Request: {"actionType": "HTTP Request", "httpMethod": "POST", "endpoint": "https://api.example.com", "httpHeaders": "{}", "httpBody": "{}"}
+- HTTP Request: {"actionType": "HTTP Request", "httpMethod": "POST", "endpoint": "https://api.example.com", "httpHeaders": "{}", "httpBody": "{}"} — when the user pasted a sample response of that API, copy it verbatim into config.responseSchema (a JSON string) so references into its .data output can be verified.
 - Condition: {"actionType": "Condition", "condition": "{{@nodeId:Label.field}} === 'value'"}
 - Delay: {"actionType": "Delay", "durationMinutes": 10} — pauses the workflow durably before continuing (use "durationSeconds" for sub-minute waits). NEVER simulate a wait with an HTTP Request to an external service.
 - Approval: {"actionType": "Approval", "message": "..."} — pauses the run until a person approves or rejects it from the runs view (human-in-the-loop). Use it whenever the user should review, choose or authorize something before the flow continues (e.g. picking one of N generated options, authorizing a publication or a purchase). A rejection ends the run. Later steps can reference {{@node-id:Label.approved}} and {{@node-id:Label.note}}. When the user asks to be presented options to review or choose from, use this node for that step (never a messaging app they did not ask for).
@@ -287,11 +288,22 @@ export async function POST(request: Request) {
       console.info("[ai-generate] catalog size", { toolkits: requestedToolkits, actions: actions.length, chars: json.length });
       composioCatalog = actions.length ? `LIVE COMPOSIO ACTION CATALOG (exact slugs; use only these):\n${json}` : "No live Composio action catalog was available. Do not invent Composio actions.";
     }
-    let userPrompt = prompt;
+    // Source contracts: read the real schema of existing sources the user
+    // referenced (Google Sheets via their own Composio connection, or a sample
+    // JSON they pasted for their own API) so the builder wires verified names.
+    const sourceContracts: SourceContract[] = [];
+    try {
+      const [sheets] = await Promise.all([inspectSheetsContracts(String(prompt), session.user.id)]);
+      sourceContracts.push(...sheets);
+    } catch { /* inspection never blocks generation */ }
+    const apiSample = extractApiSample(String(prompt));
+    if (apiSample) sourceContracts.push(apiSample);
+    const sheetContracts: SheetColumnsContract[] = sourceContracts.filter((c): c is SheetColumnsContract & { kind: "googlesheets" } => c.kind === "googlesheets").map((c) => ({ spreadsheetId: c.spreadsheetId, sheets: c.sheets }));
+    let userPrompt = String(prompt) + contractPromptBlock(sourceContracts);
     if (existingWorkflow) {
       const nodesList = (existingWorkflow.nodes || []).map((n: { id: string; data?: { label?: string } }) => `- ${n.id} (${n.data?.label || "Unlabeled"})`).join("\n");
       const edgesList = (existingWorkflow.edges || []).map((e: { id: string; source: string; target: string }) => `- ${e.id}: ${e.source} -> ${e.target}`).join("\n");
-      userPrompt = `I have an existing workflow. Make ONLY the changes requested.\nCurrent workflow nodes:\n${nodesList}\nCurrent workflow edges:\n${edgesList}\nFull workflow data (do not recreate existing nodes):\n${JSON.stringify(existingWorkflow, null, 2)}\nUser request: ${prompt}\nOutput only operations needed. Add new edges after nodes. Use existing node ids; avoid overlaps; preserve structure.`;
+      userPrompt = `I have an existing workflow. Make ONLY the changes requested.\nCurrent workflow nodes:\n${nodesList}\nCurrent workflow edges:\n${edgesList}\nFull workflow data (do not recreate existing nodes):\n${JSON.stringify(existingWorkflow, null, 2)}\nUser request: ${prompt}${contractPromptBlock(sourceContracts)}\nOutput only operations needed. Add new edges after nodes. Use existing node ids; avoid overlaps; preserve structure.`;
     }
     async function* textChunks() {
       const failures: string[] = [];
@@ -333,6 +345,10 @@ export async function POST(request: Request) {
       if (questions) errs.push(questions);
       const crossing = listCrossingError(userPrompt, shadow.nodes);
       if (crossing) errs.push(crossing);
+      const sheetContract = sheetContractError(shadow.nodes, sheetContracts);
+      if (sheetContract) errs.push(sheetContract);
+      const httpSchema = httpSchemaError(shadow.nodes);
+      if (httpSchema) errs.push(httpSchema);
       return errs;
     };
     async function runCorrectivePass(operationCount: number, encoder: TextEncoder, controller: ReadableStreamDefaultController): Promise<number> {
