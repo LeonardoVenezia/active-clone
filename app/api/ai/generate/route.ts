@@ -255,7 +255,7 @@ export async function POST(request: Request) {
   try {
     const session = await auth.api.getSession({ headers: request.headers });
     if (!session?.user || session.user.isAnonymous) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const body = await request.json(); const { prompt, existingWorkflow, toolkits, model } = body;
+    const body = await request.json(); const { prompt, existingWorkflow, toolkits, model } = body; const evalMode = body.evalMode === "fullJson" ? "fullJson" : "ops";
     if (!prompt) return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     if (!llmRoutes().length) return NextResponse.json({ error: "AI API key not configured on server." }, { status: 500 });
     // Optional model pin (used by the eval harness): restrict to the route whose model matches.
@@ -364,7 +364,84 @@ export async function POST(request: Request) {
       }
       return operationCount;
     }
-    const stream = new ReadableStream({ async start(controller) { try { let operationCount = await processOperationStream(textChunks(), encoder, controller, shadow); if (streamState.truncated) operationCount = await runContinuationPass(operationCount, encoder, controller); for (let pass = 0; pass < 3; pass++) { if (!computeErrors().length) break; operationCount = await runCorrectivePass(operationCount, encoder, controller); }
+    // fullJson experimental mode (?evalMode=fullJson): the model emits ONE
+    // complete graph JSON {"name","nodes","edges"}; it is validated at once
+    // and corrective passes re-emit the complete corrected JSON. The canvas
+    // draws at the end via synthesized operations. Default ("ops") unchanged.
+    function parseGraphJson(text: string): { name?: string; nodes?: FlowNode[]; edges?: FlowEdge[] } | null {
+      const { objs } = extractJsonObjects(text);
+      const candidates = objs.length ? objs : [text];
+      for (const piece of candidates) {
+        try {
+          const g = JSON.parse(piece) as { name?: string; nodes?: FlowNode[]; edges?: FlowEdge[] };
+          if (g && Array.isArray(g.nodes) && g.nodes.length > 0 && Array.isArray(g.edges)) return g;
+        } catch { /* try the next candidate */ }
+      }
+      return null;
+    }
+    async function runFullJsonGeneration(encoder: TextEncoder, controller: ReadableStreamDefaultController): Promise<number> {
+      const formatInstr = `\n\nOUTPUT FORMAT FOR THIS REQUEST (overrides the operations format): respond with ONLY ONE JSON object {"name": string, "nodes": [...], "edges": [...]} - the COMPLETE workflow graph in a single document. Nodes and edges use the exact same shapes as the addNode/addEdge operations (each node needs id, type, position {x,y} and data {label, type, config}). No markdown fences, no commentary, no incremental operations.`;
+      let graph: { name?: string; nodes?: FlowNode[]; edges?: FlowEdge[] } | null = null;
+      for (const route of activeRoutes) {
+        try {
+          console.info("[ai-generate] fullJson attempt", route.name, route.model);
+          const provider = new OpenAI({ apiKey: route.apiKey, baseURL: route.baseURL, maxRetries: 0, timeout: 60000 });
+          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: `${userPrompt}${formatInstr}` }], max_tokens: 8192, temperature: 0.2 });
+          const text = result.choices[0]?.message?.content ?? "";
+          if (!text) continue;
+          graph = parseGraphJson(text);
+          if (graph) break;
+        } catch (error) { console.error("[ai-generate] fullJson pass failed", route.name, error instanceof Error ? error.message.slice(0, 200) : "unknown"); }
+      }
+      if (!graph) {
+        controller.enqueue(encodeMessage(encoder, { type: "validation", errors: ["fullJson: the model did not return a parseable graph JSON"] }));
+        return 0;
+      }
+      let graphName = graph.name;
+      const loadGraph = (g: { nodes?: FlowNode[]; edges?: FlowEdge[] }) => {
+        shadow.nodes = (g.nodes ?? []).filter((n) => n?.id && n.data).map((n, i) => ({ ...n, position: (n as { position?: { x: number; y: number } }).position ?? { x: 120 + i * 260, y: 120 } }));
+        const ids = new Set(shadow.nodes.map((n) => n.id));
+        shadow.edges = (g.edges ?? [])
+          .filter((e) => e?.source && e?.target && ids.has(e.source) && ids.has(e.target))
+          .map((e) => ({ ...e, id: e.id ?? `e-${e.source}-${e.target}` }));
+      };
+      loadGraph(graph);
+      for (let pass = 0; pass < 3; pass++) {
+        const errors = computeErrors();
+        if (!errors.length) break;
+        console.warn("[ai-generate] fullJson validation errors", errors);
+        const fixPrompt = `The workflow graph you generated has these DETERMINISTIC VALIDATION ERRORS:\n${errors.map((e) => `- ${e}`).join("\n")}\n\nCurrent graph JSON:\n${JSON.stringify({ name: graphName, nodes: shadow.nodes, edges: shadow.edges })}\n\nRe-emit the COMPLETE corrected JSON object ({"name","nodes","edges"}), fixing exactly these errors. Keep node ids stable unless a node must be removed. Original request: ${userPrompt}`;
+        let fixed = false;
+        for (const route of activeRoutes) {
+          try {
+            console.info("[ai-generate] fullJson corrective attempt", route.name, route.model);
+            const provider = new OpenAI({ apiKey: route.apiKey, baseURL: route.baseURL, maxRetries: 0, timeout: 60000 });
+            const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: fixPrompt }], max_tokens: 8192, temperature: 0.2 });
+            const text = result.choices[0]?.message?.content ?? "";
+            const g = text ? parseGraphJson(text) : null;
+            if (g) { loadGraph(g); if (g.name) graphName = g.name; fixed = true; break; }
+          } catch (error) { console.error("[ai-generate] fullJson corrective failed", route.name, error instanceof Error ? error.message.slice(0, 200) : "unknown"); }
+        }
+        if (!fixed) break;
+      }
+      // Rebuild the shadow through the normal op path so the canvas draws
+      // the final validated graph at the end (no incremental drawing).
+      const finalNodes = shadow.nodes;
+      const finalEdges = shadow.edges;
+      shadow.nodes = [];
+      shadow.edges = [];
+      let count = 0;
+      if (graphName) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "setName", name: graphName }), encoder, controller, count, shadow);
+      for (const n of finalNodes) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "addNode", node: n }), encoder, controller, count, shadow);
+      for (const e of finalEdges) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "addEdge", edge: e }), encoder, controller, count, shadow);
+      return count;
+    }
+    const stream = new ReadableStream({ async start(controller) { try { let operationCount = 0;
+          if (evalMode === "fullJson" && !existingWorkflow) {
+            operationCount = await runFullJsonGeneration(encoder, controller);
+          } else {
+            operationCount = await processOperationStream(textChunks(), encoder, controller, shadow); if (streamState.truncated) operationCount = await runContinuationPass(operationCount, encoder, controller); for (let pass = 0; pass < 3; pass++) { if (!computeErrors().length) break; operationCount = await runCorrectivePass(operationCount, encoder, controller); }
+          }
           // Deterministic cleanup: remove unreachable action nodes that nothing references
           // (leftovers a corrective pass replaced but did not remove).
           for (let sweep = 0; sweep < 3; sweep++) {

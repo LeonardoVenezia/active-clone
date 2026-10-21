@@ -1,0 +1,130 @@
+{
+ "name": "Soporte al Cliente Automático (Maqueta)",
+ "nodes": [
+  {
+   "id": "_4OsyAs0K2aUsuL1jZ42-",
+   "data": {
+    "type": "trigger",
+    "label": "WhatsApp Incoming Message",
+    "config": {
+     "triggerType": "whatsapp/incoming-message"
+    },
+    "status": "idle",
+    "description": "Recibe el mensaje de WhatsApp del cliente"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 100,
+    "y": 200
+   },
+   "selected": false
+  },
+  {
+   "id": "get-order",
+   "data": {
+    "type": "action",
+    "label": "Get Order Tiendanube",
+    "config": {
+     "orderId": "123456789",
+     "actionType": "tiendanube/get-order"
+    },
+    "status": "idle",
+    "description": "Obtiene la última orden del cliente en Tiendanube"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 200
+   }
+  },
+  {
+   "id": "get-faq",
+   "data": {
+    "type": "action",
+    "label": "Get FAQ Document",
+    "config": {
+     "tool": "GOOGLEDOCS_GET_DOCUMENT_PLAINTEXT",
+     "toolkit": "googledocs",
+     "arguments": "{\"document_id\": \"mock-faq-doc-id-123\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle",
+    "description": "Lee el contenido completo del Google Doc de preguntas frecuentes"
+   },
+   "type": "action",
+   "position": {
+    "x": 600,
+    "y": 200
+   }
+  },
+  {
+   "id": "generate-response",
+   "data": {
+    "type": "action",
+    "label": "Generate AI Response",
+    "config": {
+     "aiModel": "meta/llama-4-scout",
+     "aiFormat": "text",
+     "aiPrompt": "Redacta una respuesta de soporte al cliente para el mensaje: {{@_4OsyAs0K2aUsuL1jZ42-:WhatsApp Incoming Message.text}}. Usa la información del estado de la orden de Tiendanube: {{@get-order:Get Order Tiendanube.status}} y las políticas del documento de FAQs: {{@get-faq:Get FAQ Document.data}}.",
+     "actionType": "ai-gateway/generate-text"
+    },
+    "status": "idle",
+    "description": "Redacta una respuesta usando IA basada en el mensaje, la orden y las FAQs"
+   },
+   "type": "action",
+   "position": {
+    "x": 850,
+    "y": 200
+   }
+  },
+  {
+   "id": "send-whatsapp",
+   "data": {
+    "type": "action",
+    "label": "Send WhatsApp Reply",
+    "config": {
+     "to": "{{@_4OsyAs0K2aUsuL1jZ42-:WhatsApp Incoming Message.from}}",
+     "text": "{{@generate-response:Generate AI Response.text}}",
+     "actionType": "whatsapp/send-message"
+    },
+    "status": "idle",
+    "description": "Envía la respuesta redactada al cliente por WhatsApp"
+   },
+   "type": "action",
+   "position": {
+    "x": 1100,
+    "y": 200
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "_4OsyAs0K2aUsuL1jZ42-",
+   "target": "get-order"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "get-order",
+   "target": "get-faq"
+  },
+  {
+   "id": "e3",
+   "type": "animated",
+   "source": "get-faq",
+   "target": "generate-response"
+  },
+  {
+   "id": "e4",
+   "type": "animated",
+   "source": "generate-response",
+   "target": "send-whatsapp"
+  }
+ ]
+}

@@ -1,0 +1,93 @@
+{
+ "name": "Recuperar Ventas Perdidas en Mercado Libre",
+ "nodes": [
+  {
+   "id": "rxdzzdaRdNhAFq587UabZ",
+   "data": {
+    "type": "trigger",
+    "label": "Schedule 30 Min",
+    "config": {
+     "triggerType": "Schedule",
+     "scheduleCron": "*/30 * * * *"
+    },
+    "status": "idle",
+    "description": "Ejecutar cada 30 minutos"
+   },
+   "type": "trigger",
+   "position": {
+    "x": 100,
+    "y": 200
+   },
+   "selected": false
+  },
+  {
+   "id": "search-questions",
+   "data": {
+    "type": "action",
+    "label": "Buscar Preguntas",
+    "config": {
+     "actionType": "mercadolibre/get-question",
+     "questionId": "11751825075"
+    },
+    "status": "idle",
+    "description": "Busca preguntas sin responder"
+   },
+   "type": "action",
+   "position": {
+    "x": 350,
+    "y": 200
+   }
+  },
+  {
+   "id": "loop-questions",
+   "data": {
+    "type": "action",
+    "label": "Procesar Preguntas",
+    "config": {
+     "steps": [
+      {
+       "id": "suggest-answer",
+       "config": {
+        "text": "Respuesta sugerida de ejemplo",
+        "questionId": "{{@item:Item.id}}"
+       },
+       "actionType": "mercadolibre/answer-question"
+      },
+      {
+       "id": "notify-slack",
+       "config": {
+        "slackChannel": "#ventas",
+        "slackMessage": "Pregunta ID: {{@item:Item.id}}\nRespuesta sugerida: Respuesta sugerida de ejemplo"
+       },
+       "actionType": "slack/send-message"
+      }
+     ],
+     "source": "{{@search-questions:Buscar Preguntas.id}}",
+     "maxItems": 50,
+     "actionType": "Loop"
+    },
+    "status": "idle",
+    "description": "Repite para cada pregunta y envia a Slack"
+   },
+   "type": "action",
+   "position": {
+    "x": 600,
+    "y": 200
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e-trig-search",
+   "type": "animated",
+   "source": "rxdzzdaRdNhAFq587UabZ",
+   "target": "search-questions"
+  },
+  {
+   "id": "e-search-loop",
+   "type": "animated",
+   "source": "search-questions",
+   "target": "loop-questions"
+  }
+ ]
+}

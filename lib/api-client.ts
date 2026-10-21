@@ -272,14 +272,15 @@ export const aiApi = {
       name?: string;
     },
     toolkits?: string[],
-    model?: string
+    model?: string,
+    evalMode?: string
   ): Promise<WorkflowData> => {
     const response = await fetch("/api/ai/generate", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ prompt, existingWorkflow, ...(toolkits?.length ? { toolkits } : {}), ...(model ? { model } : {}) }),
+      body: JSON.stringify({ prompt, existingWorkflow, ...(toolkits?.length ? { toolkits } : {}), ...(model ? { model } : {}), ...(evalMode ? { evalMode } : {}) }),
     });
 
     if (!response.ok) {
