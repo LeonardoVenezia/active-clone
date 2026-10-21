@@ -1,0 +1,192 @@
+{
+  "active": false,
+  "canEdit": true,
+  "createdAt": "2026-10-21T20:31:30.848Z",
+  "description": "",
+  "edges": [
+    {
+      "id": "e1",
+      "source": "ZETJz4AwjEmyXL64a8iQI",
+      "target": "search-orders",
+      "type": "animated"
+    },
+    {
+      "id": "e2",
+      "source": "search-orders",
+      "target": "read-faq",
+      "type": "animated"
+    },
+    {
+      "id": "e3",
+      "source": "read-faq",
+      "target": "draft-response",
+      "type": "animated"
+    },
+    {
+      "id": "e4",
+      "source": "draft-response",
+      "target": "send-whatsapp",
+      "type": "animated"
+    },
+    {
+      "id": "e2",
+      "source": "search-orders",
+      "target": "get-order",
+      "type": "animated"
+    },
+    {
+      "id": "e3",
+      "source": "get-order",
+      "target": "read-faq",
+      "type": "animated"
+    }
+  ],
+  "id": "6ea4p6is43uj5vypahq4j",
+  "isOwner": true,
+  "name": "Soporte al Cliente Automático",
+  "nodes": [
+    {
+      "data": {
+        "config": {
+          "triggerType": "whatsapp/incoming-message"
+        },
+        "description": "Cuando llega un mensaje de WhatsApp",
+        "label": "Mensaje Entrante WhatsApp",
+        "status": "idle",
+        "type": "trigger"
+      },
+      "id": "ZETJz4AwjEmyXL64a8iQI",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 153
+      },
+      "selected": false,
+      "type": "trigger"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "tiendanube/search-orders",
+          "limit": 1,
+          "paymentStatus": "any",
+          "query": "{{@ZETJz4AwjEmyXL64a8iQI:Mensaje Entrante WhatsApp.from}}",
+          "shippingStatus": "any",
+          "status": "any"
+        },
+        "description": "Busca la última orden del cliente en Tiendanube",
+        "label": "Buscar Órdenes Tiendanube",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "search-orders",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 460,
+        "y": 153
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "composio/run-tool",
+          "arguments": "{\"document_id\": \"<GOOGLE_DOC_ID_AQUI>\"}",
+          "tool": "GOOGLEDOCS_GET_DOCUMENT_PLAINTEXT",
+          "toolkit": "googledocs"
+        },
+        "description": "Lee el contenido completo del Google Doc de preguntas frecuentes",
+        "label": "Leer FAQ Google Doc",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "read-faq",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 1200,
+        "y": 153
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Basándote en las siguientes preguntas frecuentes:\n{{@read-faq:Leer FAQ Google Doc.data}}\n\nY en la última orden del cliente:\n{{@search-orders:Buscar Órdenes Tiendanube.orders}}\n\nRedacta una respuesta amable y útil para el cliente que envió este mensaje:\n{{@ZETJz4AwjEmyXL64a8iQI:Mensaje Entrante WhatsApp.text}}"
+        },
+        "description": "Redacta una respuesta usando la FAQ y el estado de la orden",
+        "label": "Redactar Respuesta IA",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "draft-response",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 1570,
+        "y": 153
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "whatsapp/send-message",
+          "text": "{{@draft-response:Redactar Respuesta IA.text}}",
+          "to": "{{@ZETJz4AwjEmyXL64a8iQI:Mensaje Entrante WhatsApp.from}}"
+        },
+        "description": "Envía la respuesta redactada al cliente por WhatsApp",
+        "label": "Enviar Respuesta WhatsApp",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "send-whatsapp",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 1940,
+        "y": 153
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "tiendanube/get-order",
+          "orderId": "{{@search-orders:Buscar Órdenes Tiendanube.orders[0].id}}"
+        },
+        "label": "Obtener Detalle Orden - Tiendanube",
+        "type": "action"
+      },
+      "id": "get-order",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "type": "action"
+    }
+  ],
+  "shared": false,
+  "updatedAt": "2026-10-21T20:32:49.629Z",
+  "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+  "visibility": "private"
+}
