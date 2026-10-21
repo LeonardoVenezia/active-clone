@@ -1,0 +1,114 @@
+{
+  "active": false,
+  "canEdit": true,
+  "createdAt": "2026-10-21T20:22:29.145Z",
+  "description": "Cada 30 minutos busca preguntas en Mercado Libre, las procesa en loop y avisa por Slack al canal #ventas.",
+  "edges": [
+    {
+      "id": "e-trig-comp",
+      "source": "wKNFABbQcnTLtcokRnKIr",
+      "target": "composio-discover",
+      "type": "animated"
+    },
+    {
+      "id": "e-comp-loop",
+      "source": "composio-discover",
+      "target": "process-questions-loop",
+      "type": "animated"
+    }
+  ],
+  "id": "ry0lu2ictzadbct7wzp76",
+  "isOwner": true,
+  "name": "Recuperar ventas en Mercado Libre - Preguntas sin responder",
+  "nodes": [
+    {
+      "data": {
+        "config": {
+          "scheduleCron": "*/30 * * * *",
+          "triggerType": "Schedule"
+        },
+        "description": "Se ejecuta cada 30 minutos",
+        "label": "Cada 30 minutos",
+        "status": "idle",
+        "type": "trigger"
+      },
+      "id": "wKNFABbQcnTLtcokRnKIr",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 110
+      },
+      "selected": false,
+      "type": "trigger"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "composio/discover",
+          "catalog": "toolkits",
+          "search": "mercadolibre"
+        },
+        "label": "Buscar preguntas de Mercado Libre",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "composio-discover",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Loop",
+          "maxItems": 20,
+          "source": "{{@composio-discover:Buscar preguntas de Mercado Libre.items}}",
+          "steps": [
+            {
+              "actionType": "mercadolibre/get-question",
+              "config": {
+                "questionId": "{{@item:Item.id}}"
+              },
+              "id": "get-question"
+            },
+            {
+              "actionType": "ai-gateway/generate-text",
+              "config": {
+                "aiFormat": "text",
+                "aiModel": "meta/llama-4-scout",
+                "aiPrompt": "Redacta una respuesta sugerida y amable para esta pregunta de un comprador de Mercado Libre: {{@get-question:Get Question.text}}"
+              },
+              "id": "draft-answer"
+            },
+            {
+              "actionType": "slack/send-message",
+              "config": {
+                "slackChannel": "#ventas",
+                "slackMessage": "Nueva pregunta de Mercado Libre:\nPregunta: {{@get-question:Get Question.text}}\nRespuesta sugerida:\n{{@draft-answer:Generate Text.text}}"
+              },
+              "id": "send-slack"
+            }
+          ]
+        },
+        "label": "Procesar cada pregunta",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "process-questions-loop",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "type": "action"
+    }
+  ],
+  "shared": false,
+  "updatedAt": "2026-10-21T20:26:58.789Z",
+  "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+  "visibility": "private"
+}
