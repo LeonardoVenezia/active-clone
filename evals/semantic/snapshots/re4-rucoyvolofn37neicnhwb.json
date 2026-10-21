@@ -1,0 +1,185 @@
+{
+  "active": false,
+  "canEdit": true,
+  "createdAt": "2026-10-21T20:09:45.188Z",
+  "description": "Cuando una orden de Tiendanube se marca como enviada, busca el detalle en Zipnova y notifica por Slack si hay demora o envía WhatsApp al cliente.",
+  "edges": [
+    {
+      "id": "e1",
+      "source": "J3d18ChkBr0tSGQrpCSDg",
+      "target": "get-zipnova-shipment",
+      "type": "animated"
+    },
+    {
+      "id": "e2",
+      "source": "get-zipnova-shipment",
+      "target": "cond-delayed",
+      "type": "animated"
+    },
+    {
+      "id": "e3",
+      "source": "get-zipnova-shipment",
+      "target": "cond-normal",
+      "type": "animated"
+    },
+    {
+      "id": "e4",
+      "source": "cond-delayed",
+      "target": "slack-alert",
+      "type": "animated"
+    },
+    {
+      "id": "e5",
+      "source": "cond-normal",
+      "target": "whatsapp-client",
+      "type": "animated"
+    },
+    {
+      "id": "e1",
+      "source": "J3d18ChkBr0tSGQrpCSDg",
+      "target": "get-tiendanube-order",
+      "type": "animated"
+    },
+    {
+      "id": "e2",
+      "source": "get-tiendanube-order",
+      "target": "get-zipnova-shipment",
+      "type": "animated"
+    }
+  ],
+  "id": "rucoyvolofn37neicnhwb",
+  "isOwner": true,
+  "name": "Tracking Proactivo de Envíos Tiendanube y Zipnova",
+  "nodes": [
+    {
+      "data": {
+        "config": {
+          "triggerType": "tiendanube/order-created"
+        },
+        "description": "Se dispara cuando una orden es marcada como enviada",
+        "label": "Orden Enviada Tiendanube",
+        "status": "idle",
+        "type": "trigger"
+      },
+      "id": "J3d18ChkBr0tSGQrpCSDg",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "selected": false,
+      "type": "trigger"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "zipnova/get-shipment",
+          "shipmentId": "{{@J3d18ChkBr0tSGQrpCSDg:Orden Enviada Tiendanube.orderId}}"
+        },
+        "label": "Obtener Envío Zipnova",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "get-zipnova-shipment",
+      "position": {
+        "x": 830,
+        "y": 185
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@get-zipnova-shipment:Obtener Envío Zipnova.raw}} !== ''"
+        },
+        "label": "Envío Demorado o con Problema",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "cond-delayed",
+      "position": {
+        "x": 1200,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@get-zipnova-shipment:Obtener Envío Zipnova.raw}} !== ''"
+        },
+        "label": "Envío Normal",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "cond-normal",
+      "position": {
+        "x": 1200,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "slack/send-message",
+          "slackChannel": "#envios",
+          "slackMessage": "Atención: El envío de la orden está demorado o con problemas. Detalle: {{@get-zipnova-shipment:Obtener Envío Zipnova.raw}}"
+        },
+        "label": "Avisar Slack Demora",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "slack-alert",
+      "position": {
+        "x": 1570,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "whatsapp/send-message",
+          "text": "Hola! Tu pedido ya fue despachado. Podés ver el estado y tracking de tu envío aquí: {{@get-zipnova-shipment:Obtener Envío Zipnova.raw}}",
+          "to": "5491112345678"
+        },
+        "label": "Enviar WhatsApp Cliente",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "whatsapp-client",
+      "position": {
+        "x": 1570,
+        "y": 110
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "tiendanube/get-order",
+          "orderId": "{{@J3d18ChkBr0tSGQrpCSDg:Orden Enviada Tiendanube.orderId}}"
+        },
+        "label": "Obtener Orden Tiendanube",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "get-tiendanube-order",
+      "position": {
+        "x": 460,
+        "y": 143
+      },
+      "type": "action"
+    }
+  ],
+  "shared": false,
+  "updatedAt": "2026-10-21T20:11:56.864Z",
+  "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+  "visibility": "private"
+}
