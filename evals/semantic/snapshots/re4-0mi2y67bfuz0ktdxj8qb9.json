@@ -1,0 +1,424 @@
+{
+  "active": false,
+  "canEdit": true,
+  "createdAt": "2026-10-21T20:20:38.545Z",
+  "description": "Espera 2 horas ante un carrito abandonado, evalúa el total para ofrecer un 10% de descuento y envía un WhatsApp al cliente.",
+  "edges": [
+    {
+      "id": "e1",
+      "source": "-vJcIID5tDtfhTUTtgQ5Y",
+      "target": "esperar-2-horas",
+      "type": "animated"
+    },
+    {
+      "id": "e2",
+      "source": "esperar-2-horas",
+      "target": "obtener-pedido",
+      "type": "animated"
+    },
+    {
+      "id": "e3",
+      "source": "obtener-pedido",
+      "target": "condicion-mayor-50k",
+      "type": "animated"
+    },
+    {
+      "id": "e4",
+      "source": "obtener-pedido",
+      "target": "condicion-menor-50k",
+      "type": "animated"
+    },
+    {
+      "id": "e5",
+      "source": "condicion-mayor-50k",
+      "target": "mensaje-descuento",
+      "type": "animated"
+    },
+    {
+      "id": "e6",
+      "source": "condicion-menor-50k",
+      "target": "mensaje-simple",
+      "type": "animated"
+    },
+    {
+      "id": "e7",
+      "source": "mensaje-descuento",
+      "target": "whatsapp-descuento",
+      "type": "animated"
+    },
+    {
+      "id": "e8",
+      "source": "mensaje-simple",
+      "target": "whatsapp-simple",
+      "type": "animated"
+    },
+    {
+      "id": "e-wa-desc-zip",
+      "source": "whatsapp-descuento",
+      "target": "zipnova-shipment",
+      "type": "animated"
+    },
+    {
+      "id": "e-wa-desc-slack",
+      "source": "whatsapp-descuento",
+      "target": "slack-notify",
+      "type": "animated"
+    },
+    {
+      "id": "e-wa-desc-mp",
+      "source": "whatsapp-descuento",
+      "target": "mp-payment-link",
+      "type": "animated"
+    },
+    {
+      "id": "e-wa-desc-ml",
+      "source": "whatsapp-descuento",
+      "target": "ml-order-check",
+      "type": "animated"
+    },
+    {
+      "id": "e-wa-desc-stripe",
+      "source": "whatsapp-descuento",
+      "target": "stripe-customer",
+      "type": "animated"
+    },
+    {
+      "id": "e-wa-desc-linear",
+      "source": "whatsapp-descuento",
+      "target": "linear-ticket",
+      "type": "animated"
+    },
+    {
+      "id": "e-wa-desc-github",
+      "source": "whatsapp-descuento",
+      "target": "github-issue",
+      "type": "animated"
+    }
+  ],
+  "id": "0mi2y67bfuz0ktdxj8qb9",
+  "isOwner": true,
+  "name": "Recupero de Carritos Abandonados Tiendanube",
+  "nodes": [
+    {
+      "data": {
+        "config": {
+          "triggerType": "tiendanube/order-created"
+        },
+        "description": "Se dispara al detectarse un carrito abandonado en Tiendanube",
+        "label": "Carrito Abandonado - Tiendanube",
+        "status": "idle",
+        "type": "trigger"
+      },
+      "id": "-vJcIID5tDtfhTUTtgQ5Y",
+      "measured": {
+        "height": 192,
+        "width": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 485
+      },
+      "selected": false,
+      "type": "trigger"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Delay",
+          "durationMinutes": 120
+        },
+        "label": "Esperar 2 Horas",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "esperar-2-horas",
+      "position": {
+        "x": 460,
+        "y": 485
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "tiendanube/get-order",
+          "orderId": "{{@-vJcIID5tDtfhTUTtgQ5Y:Carrito Abandonado.orderId}}"
+        },
+        "label": "Obtener Detalle del Carrito - Tiendanube",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "obtener-pedido",
+      "position": {
+        "x": 830,
+        "y": 485
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@obtener-pedido:Obtener Detalle del Carrito.total}} > 50000"
+        },
+        "label": "Total Mayor a $50.000",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "condicion-mayor-50k",
+      "position": {
+        "x": 1200,
+        "y": 560
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@obtener-pedido:Obtener Detalle del Carrito.total}} <= 50000"
+        },
+        "label": "Total Menor o Igual a $50.000",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "condicion-menor-50k",
+      "position": {
+        "x": 1200,
+        "y": 410
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Redacta un mensaje de WhatsApp para el cliente {{@obtener-pedido:Obtener Detalle del Carrito.customerName}} ofreciendo un cupón de 10% de descuento para retomar su carrito abandonado por un total de {{@obtener-pedido:Obtener Detalle del Carrito.total}}."
+        },
+        "label": "Mensaje con Descuento",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "mensaje-descuento",
+      "position": {
+        "x": 1570,
+        "y": 560
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Redacta un mensaje de WhatsApp amigable para el cliente {{@obtener-pedido:Obtener Detalle del Carrito.customerName}} invitándolo a finalizar su compra en el carrito abandonado."
+        },
+        "label": "Mensaje Simple",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "mensaje-simple",
+      "position": {
+        "x": 1570,
+        "y": 410
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "whatsapp/send-message",
+          "text": "{{@mensaje-descuento:Mensaje con Descuento.text}}",
+          "to": "{{@obtener-pedido:Obtener Detalle del Carrito.customerPhone}}"
+        },
+        "label": "Enviar WhatsApp Descuento",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "whatsapp-descuento",
+      "position": {
+        "x": 1940,
+        "y": 560
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "whatsapp/send-message",
+          "text": "{{@mensaje-simple:Mensaje Simple.text}}",
+          "to": "{{@obtener-pedido:Obtener Detalle del Carrito.customerPhone}}"
+        },
+        "label": "Enviar WhatsApp Simple",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "whatsapp-simple",
+      "position": {
+        "x": 1940,
+        "y": 410
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "zipnova/create-shipment",
+          "carrierId": "5",
+          "city": "CABA",
+          "declaredValue": "{{@obtener-pedido:Obtener Detalle del Carrito.total}}",
+          "externalId": "{{@-vJcIID5tDtfhTUTtgQ5Y:Carrito Abandonado.orderId}}",
+          "logisticType": "ship_drop",
+          "originId": "auto",
+          "packageDescription": "Productos",
+          "packageHeightCm": "30",
+          "packageLengthCm": "40",
+          "packageWidthCm": "20",
+          "processImmediately": "0",
+          "recipientDocument": "30123456",
+          "recipientEmail": "{{@obtener-pedido:Obtener Detalle del Carrito.customerEmail}}",
+          "recipientName": "{{@obtener-pedido:Obtener Detalle del Carrito.customerName}}",
+          "recipientPhone": "{{@obtener-pedido:Obtener Detalle del Carrito.customerPhone}}",
+          "serviceType": "pickup_point",
+          "sortBy": "price",
+          "state": "Capital Federal",
+          "street": "Av. Corrientes",
+          "streetNumber": "1234",
+          "weightGrams": "1200",
+          "zipcode": "1405"
+        },
+        "label": "Zipnova Shipment",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "zipnova-shipment",
+      "position": {
+        "x": 2310,
+        "y": 1010
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "slack/send-message",
+          "slackChannel": "#general",
+          "slackMessage": "Nuevo carrito abandonado procesado para el pedido {{@obtener-pedido:Obtener Detalle del Carrito.orderId}}"
+        },
+        "label": "Slack Notify",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "slack-notify",
+      "position": {
+        "x": 2310,
+        "y": 860
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "mercadopago/create-payment-link",
+          "currency": "ARS",
+          "externalReference": "{{@-vJcIID5tDtfhTUTtgQ5Y:Carrito Abandonado.orderId}}",
+          "notificationUrl": "https://mytienda.com/webhooks/mp",
+          "quantity": "1",
+          "successUrl": "https://mytienda.com/gracias",
+          "title": "Recuperación de Carrito",
+          "unitPrice": "{{@obtener-pedido:Obtener Detalle del Carrito.total}}"
+        },
+        "label": "Mercado Pago Link",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "mp-payment-link",
+      "position": {
+        "x": 2310,
+        "y": 710
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "mercadolibre/get-order",
+          "orderId": "{{@-vJcIID5tDtfhTUTtgQ5Y:Carrito Abandonado.orderId}}"
+        },
+        "label": "Mercado Libre Check",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "ml-order-check",
+      "position": {
+        "x": 2310,
+        "y": 560
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "stripe/create-customer",
+          "email": "{{@obtener-pedido:Obtener Detalle del Carrito.customerEmail}}",
+          "name": "{{@obtener-pedido:Obtener Detalle del Carrito.customerName}}"
+        },
+        "label": "Stripe Customer",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "stripe-customer",
+      "position": {
+        "x": 2310,
+        "y": 410
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "linear/create-ticket",
+          "ticketDescription": "Cliente {{@obtener-pedido:Obtener Detalle del Carrito.customerName}} abandonó carrito por {{@obtener-pedido:Obtener Detalle del Carrito.total}}",
+          "ticketPriority": "2",
+          "ticketTitle": "Seguimiento Carrito Abandonado"
+        },
+        "label": "Linear Ticket",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "linear-ticket",
+      "position": {
+        "x": 2310,
+        "y": 260
+      },
+      "type": "action"
+    },
+    {
+      "data": {
+        "config": {
+          "actionType": "github/create-issue",
+          "body": "Revisar carrito de {{@obtener-pedido:Obtener Detalle del Carrito.customerEmail}}",
+          "owner": "octocat",
+          "repo": "hello-world",
+          "title": "Incidencia Carrito Abandonado"
+        },
+        "label": "GitHub Issue",
+        "status": "idle",
+        "type": "action"
+      },
+      "id": "github-issue",
+      "position": {
+        "x": 2310,
+        "y": 110
+      },
+      "type": "action"
+    }
+  ],
+  "shared": false,
+  "updatedAt": "2026-10-21T20:22:09.886Z",
+  "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+  "visibility": "private"
+}
