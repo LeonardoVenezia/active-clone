@@ -260,6 +260,45 @@ export function validateFlow(
       }
     }
 
+    // AI text node used to compare/filter list outputs: same rule as Fórmula
+    // over lists. The comparison must be deterministic (Loop + Condition),
+    // not LLM prose over serialized lists.
+    if (actionType === "ai-gateway/generate-text") {
+      const txt = JSON.stringify(cfg);
+      const refs = [...txt.matchAll(/\{\{@([\w-]+):/g)].map((m) => m[1]);
+      const listRef = refs.some((id) => {
+        const target = byId.get(id);
+        const targetType = target ? actionTypeOf(target) : "";
+        return /search|list|get-question/i.test(targetType);
+      });
+      const perItemIntent = /compar|diferenc|filtr|faltante|sin stock|stock bajo|reconcil|cada|per[- ]item|por [íi]tem/i.test(`${label} ${String(cfg.aiPrompt ?? "").slice(0, 400)}`);
+      if (listRef && perItemIntent) {
+        errors.push(`semántica: node "${n.id}" (${label}) compares/filters list outputs with an AI text node; per-item list comparison MUST be deterministic: a Loop node whose inner steps do the per-item check (Condition inside the Loop), not LLM prose over serialized lists`);
+      }
+    }
+
+    // Google Sheets writes: data rows must come from {{@...}} references, not
+    // hardcoded fake values. A literal first row is fine (headers).
+    if (isComposio) {
+      const toolName = String(cfg.toolSlug ?? cfg.tool ?? cfg.slug ?? "");
+      if (toolName.startsWith("GOOGLESHEETS")) {
+        let args: Record<string, unknown> = {};
+        try { args = JSON.parse(String(cfg.arguments ?? "{}")) as Record<string, unknown>; } catch { args = {}; }
+        const values = args && Array.isArray(args.values) ? (args.values as unknown[]) : null;
+        if (values && values.length > 1) {
+          for (let i = 1; i < values.length; i++) {
+            const row = Array.isArray(values[i]) ? (values[i] as unknown[]) : [values[i]];
+            const cells = row.map((c) => String(c ?? ""));
+            if (cells.every((c) => c.trim() === "")) continue;
+            if (cells.every((c) => !c.includes("{{@"))) {
+              errors.push(`consistencia: node "${n.id}" (${label}) hardcodes a data row in Google Sheets ("${cells.join(" | ").slice(0, 60)}"); data values MUST come from {{@...}} references to real step outputs (a literal first row is fine for headers)`);
+              break;
+            }
+          }
+        }
+      }
+    }
+
     // Fórmula over lists: comparing or filtering list outputs item-by-item requires a Loop.
     // Wholesale aggregation (sum, count, totals) in a Fórmula is fine.
     if (actionType === "Fórmula") {
@@ -337,11 +376,7 @@ export function validateFlow(
           const rest = match[2];
           // {{@item:Item}} (the whole item) is always fine.
           if (rest === "Item" || !rest.includes(".")) continue;
-          // @item only exists inside Loop nodes.
-          if (actionType !== "Loop") {
-            errors.push(`semántica: node "${n.id}" (${label}) uses "{{@item:...}}" but @item only exists inside a Loop's inner steps; put that logic inside a Loop or reference a real step output`);
-            continue;
-          }
+          // (@item outside a Loop is flagged by the dedicated rule below.)
           // {{@item:Item.field}} inside a Loop: check the field against the
           // source array's item shape when the action describes it.
           if (!loopItemFields) continue;
@@ -379,7 +414,11 @@ export function validateFlow(
           fieldPath = rest.includes(".") ? rest.slice(rest.indexOf(".") + 1) : rest;
         }
         const firstField = fieldPath.split(".")[0]?.split("[")[0];
-        const known = outputsOf(actionTypeOf(target));
+        const targetAction = actionTypeOf(target);
+        // composio/run-tool devuelve un payload dinámico por tool
+        // ({success, data: {...}}) y el executor lo auto-unwrappea: no se
+        // puede validar el campo de primer nivel.
+        const known = targetAction === "composio/run-tool" || targetAction === "Run Composio Action" ? undefined : outputsOf(targetAction);
         if (known && firstField && !known.includes(firstField)) {
           errors.push(`semántica: node "${n.id}" (${label}) references "${refId}.${firstField}" but ${actionTypeOf(target)} only outputs: ${known.join(", ")}`);
         }
