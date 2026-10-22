@@ -1,0 +1,347 @@
+{
+ "id": "opzkh4wjvjtwxl4yrur6p",
+ "name": "Control de Stock Diario",
+ "description": "Revisa stock de Tiendanube y Mercado Libre, anota en Google Sheets y avisa por Slack",
+ "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+ "nodes": [
+  {
+   "id": "-qW0ilkP-CUBYx3DFHNQQ",
+   "data": {
+    "type": "trigger",
+    "label": "Schedule Diario 9AM",
+    "config": {
+     "triggerType": "Schedule",
+     "scheduleCron": "0 9 * * *"
+    },
+    "status": "idle",
+    "description": "Ejecuta todos los días a las 9:00 AM"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 90,
+    "y": 570
+   },
+   "selected": false
+  },
+  {
+   "id": "tiendanube-items",
+   "data": {
+    "type": "action",
+    "label": "Listar Productos Tiendanube",
+    "config": {
+     "limit": "50",
+     "actionType": "tiendanube/list-products"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 1160
+   }
+  },
+  {
+   "id": "mercadolibre-items",
+   "data": {
+    "type": "action",
+    "label": "Listar Productos Mercado Libre",
+    "config": {
+     "limit": "50",
+     "status": "any",
+     "actionType": "mercadolibre/list-items"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 1010
+   }
+  },
+  {
+   "id": "sheets-append",
+   "data": {
+    "type": "action",
+    "label": "Anotar en Planilla Stock bajo",
+    "config": {
+     "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+     "toolkit": "googlesheets",
+     "arguments": "{\"spreadsheetId\": \"Stock bajo\", \"range\": \"A1\", \"valueInputOption\": \"USER_ENTERED\", \"values\": [[\"Tiendanube / ML\", \"Stock bajo\"]]}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 830,
+    "y": 1010
+   }
+  },
+  {
+   "id": "cond-stock",
+   "data": {
+    "type": "action",
+    "label": "Más de 3 en falta",
+    "config": {
+     "condition": "{{@loop-node:Procesar Productos.count}} > 3",
+     "actionType": "Condition"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1200,
+    "y": 1085
+   }
+  },
+  {
+   "id": "slack-alert",
+   "data": {
+    "type": "action",
+    "label": "Avisar Slack #compras",
+    "config": {
+     "actionType": "slack/send-message",
+     "slackChannel": "#compras",
+     "slackMessage": "Alerta: hay más de 3 productos con stock bajo en la planilla Stock bajo."
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1570,
+    "y": 1085
+   }
+  },
+  {
+   "id": "zipnova-step",
+   "data": {
+    "type": "action",
+    "label": "Zipnova Check",
+    "config": {
+     "actionType": "zipnova/list-shipments"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 860
+   }
+  },
+  {
+   "id": "whatsapp-step",
+   "data": {
+    "type": "action",
+    "label": "WhatsApp Alert",
+    "config": {
+     "to": "5491112345678",
+     "text": "Alerta de stock diario",
+     "actionType": "whatsapp/send-message"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 710
+   }
+  },
+  {
+   "id": "mercadopago-step",
+   "data": {
+    "type": "action",
+    "label": "MercadoPago Check",
+    "config": {
+     "actionType": "mercadopago/search-payments"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 560
+   }
+  },
+  {
+   "id": "stripe-step",
+   "data": {
+    "type": "action",
+    "label": "Stripe Check",
+    "config": {
+     "actionType": "stripe/list-payments"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 410
+   }
+  },
+  {
+   "id": "linear-step",
+   "data": {
+    "type": "action",
+    "label": "Linear Issue",
+    "config": {
+     "actionType": "linear/find-issues"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 260
+   }
+  },
+  {
+   "id": "github-step",
+   "data": {
+    "type": "action",
+    "label": "GitHub Issue",
+    "config": {
+     "repo": "repo",
+     "owner": "owner",
+     "actionType": "github/list-issues"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 110
+   }
+  },
+  {
+   "id": "loop-node",
+   "data": {
+    "type": "action",
+    "label": "Procesar Productos",
+    "config": {
+     "steps": [
+      {
+       "id": "check-stock-item",
+       "config": {
+        "condition": "{{@item:Item.stock}} < 5"
+       },
+       "actionType": "Condition"
+      },
+      {
+       "id": "sheet-append-item",
+       "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+       "toolkit": "googlesheets",
+       "arguments": "{\"spreadsheetId\": \"Stock bajo\", \"range\": \"A1\", \"valueInputOption\": \"USER_ENTERED\", \"values\": [[\"Tiendanube\", \"{{@item:Item.name}}\"]]}",
+       "actionType": "composio/run-tool"
+      }
+     ],
+     "source": "{{@tiendanube-items:Listar Productos Tiendanube.products}}",
+     "maxItems": 50,
+     "actionType": "Loop"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 830,
+    "y": 1160
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e-trig-tn",
+   "type": "animated",
+   "source": "-qW0ilkP-CUBYx3DFHNQQ",
+   "target": "tiendanube-items"
+  },
+  {
+   "id": "e-trig-ml",
+   "type": "animated",
+   "source": "-qW0ilkP-CUBYx3DFHNQQ",
+   "target": "mercadolibre-items"
+  },
+  {
+   "id": "e-tn-sheets",
+   "type": "animated",
+   "source": "tiendanube-items",
+   "target": "sheets-append"
+  },
+  {
+   "id": "e-ml-sheets",
+   "type": "animated",
+   "source": "mercadolibre-items",
+   "target": "sheets-append"
+  },
+  {
+   "id": "e-sheets-cond",
+   "type": "animated",
+   "source": "sheets-append",
+   "target": "cond-stock"
+  },
+  {
+   "id": "e-cond-slack",
+   "type": "animated",
+   "source": "cond-stock",
+   "target": "slack-alert"
+  },
+  {
+   "id": "e-trig-zip",
+   "type": "animated",
+   "source": "-qW0ilkP-CUBYx3DFHNQQ",
+   "target": "zipnova-step"
+  },
+  {
+   "id": "e-trig-wa",
+   "type": "animated",
+   "source": "-qW0ilkP-CUBYx3DFHNQQ",
+   "target": "whatsapp-step"
+  },
+  {
+   "id": "e-trig-mp",
+   "type": "animated",
+   "source": "-qW0ilkP-CUBYx3DFHNQQ",
+   "target": "mercadopago-step"
+  },
+  {
+   "id": "e-trig-stripe",
+   "type": "animated",
+   "source": "-qW0ilkP-CUBYx3DFHNQQ",
+   "target": "stripe-step"
+  },
+  {
+   "id": "e-trig-linear",
+   "type": "animated",
+   "source": "-qW0ilkP-CUBYx3DFHNQQ",
+   "target": "linear-step"
+  },
+  {
+   "id": "e-trig-gh",
+   "type": "animated",
+   "source": "-qW0ilkP-CUBYx3DFHNQQ",
+   "target": "github-step"
+  },
+  {
+   "id": "e-tn-loop",
+   "type": "animated",
+   "source": "tiendanube-items",
+   "target": "loop-node"
+  },
+  {
+   "id": "e-loop-cond",
+   "type": "animated",
+   "source": "loop-node",
+   "target": "cond-stock"
+  }
+ ],
+ "visibility": "private",
+ "active": false,
+ "createdAt": "2026-10-22T11:04:20.856Z",
+ "updatedAt": "2026-10-22T11:07:01.291Z",
+ "isOwner": true,
+ "canEdit": true,
+ "shared": false
+}

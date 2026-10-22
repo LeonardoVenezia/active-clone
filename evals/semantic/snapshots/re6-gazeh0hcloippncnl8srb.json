@@ -1,0 +1,216 @@
+{
+ "id": "gazeh0hcloippncnl8srb",
+ "name": "Reconciliación Diaria Stripe y Tiendanube",
+ "description": "Actualiza el nodo de correo para enviar la reconciliación a finanzas@example.com",
+ "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+ "nodes": [
+  {
+   "id": "Dm8RaD2RzlyYr8mSVz_nq",
+   "data": {
+    "type": "trigger",
+    "label": "Programar 8:00 h",
+    "config": {
+     "triggerType": "Schedule",
+     "scheduleCron": "0 8 * * *"
+    },
+    "status": "idle",
+    "description": "Ejecuta todos los días a las 8:00 h"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 90,
+    "y": 143
+   },
+   "selected": false
+  },
+  {
+   "id": "stripe-payments",
+   "data": {
+    "type": "action",
+    "label": "Cobros Stripe",
+    "config": {
+     "limit": "100",
+     "actionType": "stripe/list-payments"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 460,
+    "y": 143
+   }
+  },
+  {
+   "id": "tiendanube-orders",
+   "data": {
+    "type": "action",
+    "label": "Órdenes Tiendanube",
+    "config": {
+     "limit": 100,
+     "status": "any",
+     "actionType": "tiendanube/search-orders"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 830,
+    "y": 260
+   }
+  },
+  {
+   "id": "create-sheet",
+   "data": {
+    "type": "action",
+    "label": "Crear Planilla",
+    "config": {
+     "tool": "GOOGLESHEETS_CREATE_GOOGLE_SHEET1",
+     "toolkit": "googlesheets",
+     "arguments": "{\"title\": \"Reconciliación diaria\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 830,
+    "y": 75
+   }
+  },
+  {
+   "id": "compare-loop",
+   "data": {
+    "type": "action",
+    "label": "Loop Reconciliación",
+    "config": {
+     "steps": [
+      {
+       "id": "check-order",
+       "config": {
+        "query": "{{@item:Item.id}}"
+       },
+       "actionType": "tiendanube/search-orders"
+      },
+      {
+       "id": "reconcile-cond",
+       "config": {
+        "condition": "{{@check-order:Search Orders.count}} === 0"
+       },
+       "actionType": "Condition"
+      },
+      {
+       "id": "row-sheet",
+       "tool": "GOOGLESHEETS_CREATE_SPREADSHEET_ROW",
+       "toolkit": "googlesheets",
+       "arguments": "{\"spreadsheet_id\": \"{{@create-sheet:Crear Planilla.spreadsheetId}}\", \"sheet_name\": \"Sheet1\", \"insert_index\": 1}",
+       "actionType": "composio/run-tool"
+      }
+     ],
+     "source": "{{@stripe-payments:Cobros Stripe.payments}}",
+     "maxItems": 100,
+     "actionType": "Loop"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 1200,
+    "y": 143
+   }
+  },
+  {
+   "id": "send-email",
+   "data": {
+    "type": "action",
+    "label": "Enviar Correo",
+    "config": {
+     "tool": "GMAIL_SEND_EMAIL",
+     "toolkit": "gmail",
+     "arguments": "{\"recipient_email\": \"finanzas@example.com\", \"subject\": \"Resumen de Reconciliación diaria\", \"body\": \"Se procesaron {{@stripe-payments:Cobros Stripe.count}} cobros de Stripe y {{@tiendanube-orders:Órdenes Tiendanube.count}} órdenes de Tiendanube.\\nPlanilla creada: Reconciliación diaria\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 1570,
+    "y": 143
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "Dm8RaD2RzlyYr8mSVz_nq",
+   "target": "stripe-payments"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "stripe-payments",
+   "target": "tiendanube-orders"
+  },
+  {
+   "id": "edge-stripe-loop",
+   "type": "animated",
+   "source": "stripe-payments",
+   "target": "compare-loop"
+  },
+  {
+   "id": "edge-tienda-loop",
+   "type": "animated",
+   "source": "tiendanube-orders",
+   "target": "compare-loop"
+  },
+  {
+   "id": "edge-compare-sheet",
+   "type": "animated",
+   "source": "create-sheet",
+   "target": "compare-loop"
+  },
+  {
+   "id": "edge-loop-email",
+   "type": "animated",
+   "source": "compare-loop",
+   "target": "send-email"
+  },
+  {
+   "id": "edge-create-sheet-connect",
+   "type": "animated",
+   "source": "Dm8RaD2RzlyYr8mSVz_nq",
+   "target": "create-sheet"
+  }
+ ],
+ "visibility": "private",
+ "active": false,
+ "createdAt": "2026-10-22T11:19:45.576Z",
+ "updatedAt": "2026-10-22T11:23:55.171Z",
+ "isOwner": true,
+ "canEdit": true,
+ "shared": false
+}

@@ -1,0 +1,186 @@
+{
+ "id": "j1rq5fxs8dzeymrepge66",
+ "name": "Reconciliación diaria Stripe y Tiendanube",
+ "description": "Compara cobros de Stripe y órdenes de Tiendanube, anota diferencias en Google Sheets y envía resumen a finanzas@example.com",
+ "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+ "nodes": [
+  {
+   "id": "dlk7iyssZlW9O7pRzYMw7",
+   "data": {
+    "type": "trigger",
+    "label": "Diario 8:00 AM",
+    "config": {
+     "triggerType": "Schedule",
+     "scheduleCron": "0 8 * * *"
+    },
+    "status": "idle",
+    "description": "Ejecuta todos los días a las 8:00 AM"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 90,
+    "y": 185
+   },
+   "selected": false
+  },
+  {
+   "id": "stripe-payments",
+   "data": {
+    "type": "action",
+    "label": "Cobros Stripe Ayer",
+    "config": {
+     "limit": "50",
+     "actionType": "stripe/list-payments"
+    },
+    "status": "idle",
+    "description": "Trae los cobros de Stripe"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 460,
+    "y": 260
+   }
+  },
+  {
+   "id": "tiendanube-orders",
+   "data": {
+    "type": "action",
+    "label": "Órdenes Tiendanube Ayer",
+    "config": {
+     "limit": 50,
+     "status": "any",
+     "actionType": "tiendanube/search-orders"
+    },
+    "status": "idle",
+    "description": "Trae las órdenes de Tiendanube"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 460,
+    "y": 110
+   }
+  },
+  {
+   "id": "create-sheet",
+   "data": {
+    "type": "action",
+    "label": "Crear Planilla Reconciliación",
+    "config": {
+     "tool": "GOOGLESHEETS_CREATE_GOOGLE_SHEET1",
+     "toolkit": "googlesheets",
+     "arguments": "{\"title\": \"Reconciliación diaria\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle",
+    "description": "Crea la planilla nueva con columnas Orden ID, Cobro ID, Motivo"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 830,
+    "y": 185
+   }
+  },
+  {
+   "id": "send-gmail",
+   "data": {
+    "type": "action",
+    "label": "Enviar Resumen Finanzas",
+    "config": {
+     "tool": "GMAIL_SEND_EMAIL",
+     "toolkit": "gmail",
+     "arguments": "{\"recipient_email\": \"finanzas@example.com\", \"subject\": \"Resumen Reconciliación Diaria\", \"body\": \"Se adjunta el reporte de reconciliación generado en la planilla Reconciliación diaria.\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle",
+    "description": "Envía el resumen por Gmail al equipo de finanzas"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 1200,
+    "y": 185
+   }
+  },
+  {
+   "id": "compare-lists",
+   "data": {
+    "type": "action",
+    "label": "Comparar Cobros y Órdenes",
+    "config": {
+     "input": "{\"stripe\": {{@stripe-payments:Cobros Stripe Ayer.payments}}, \"tiendanube\": {{@tiendanube-orders:Órdenes Tiendanube Ayer.orders}}}",
+     "actionType": "Fórmula",
+     "expression": "stripe"
+    }
+   },
+   "type": "action",
+   "position": {
+    "x": 645,
+    "y": 185
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "dlk7iyssZlW9O7pRzYMw7",
+   "target": "stripe-payments"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "dlk7iyssZlW9O7pRzYMw7",
+   "target": "tiendanube-orders"
+  },
+  {
+   "id": "e5",
+   "type": "animated",
+   "source": "create-sheet",
+   "target": "send-gmail"
+  },
+  {
+   "id": "e3-new",
+   "type": "animated",
+   "source": "stripe-payments",
+   "target": "compare-lists"
+  },
+  {
+   "id": "e4-new",
+   "type": "animated",
+   "source": "tiendanube-orders",
+   "target": "compare-lists"
+  },
+  {
+   "id": "e-compare-sheet",
+   "type": "animated",
+   "source": "compare-lists",
+   "target": "create-sheet"
+  }
+ ],
+ "visibility": "private",
+ "active": false,
+ "createdAt": "2026-10-22T11:25:00.246Z",
+ "updatedAt": "2026-10-22T11:27:09.788Z",
+ "isOwner": true,
+ "canEdit": true,
+ "shared": false
+}

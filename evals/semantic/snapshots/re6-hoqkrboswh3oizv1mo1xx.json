@@ -1,0 +1,413 @@
+{
+ "id": "hoqkrboswh3oizv1mo1xx",
+ "name": "Control de stock diario",
+ "description": "Revisa stock diario en Tiendanube y Mercado Libre, anota bajos en Google Sheets y avisa por Slack si hay más de 3.",
+ "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+ "nodes": [
+  {
+   "id": "Q4qCQ251EAXRILrc3zaiR",
+   "data": {
+    "type": "trigger",
+    "label": "Programación Diario 9 AM",
+    "config": {
+     "triggerType": "Schedule",
+     "scheduleCron": "0 9 * * *"
+    },
+    "status": "idle",
+    "description": "Se ejecuta todos los días a las 9:00 AM"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 90,
+    "y": 260
+   },
+   "selected": false
+  },
+  {
+   "id": "list-tiendanube",
+   "data": {
+    "type": "action",
+    "label": "Obtener Productos Tiendanube",
+    "config": {
+     "actionType": "tiendanube/list-products"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 410
+   }
+  },
+  {
+   "id": "list-mercadolibre",
+   "data": {
+    "type": "action",
+    "label": "Obtener Productos Mercado Libre",
+    "config": {
+     "actionType": "mercadolibre/list-items"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 260
+   }
+  },
+  {
+   "id": "create-sheet",
+   "data": {
+    "type": "action",
+    "label": "Crear Planilla Stock Bajo",
+    "config": {
+     "tool": "GOOGLESHEETS_CREATE_GOOGLE_SHEET1",
+     "toolkit": "googlesheets",
+     "arguments": "{\"title\": \"Stock bajo\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 830,
+    "y": 335
+   }
+  },
+  {
+   "id": "loop-tiendanube",
+   "data": {
+    "type": "action",
+    "label": "Procesar Stock Tiendanube",
+    "config": {
+     "steps": [
+      {
+       "id": "check-tn",
+       "config": {
+        "condition": "{{@item:Item.totalStock}} < 5"
+       },
+       "actionType": "Condition"
+      },
+      {
+       "id": "append-tn",
+       "config": {
+        "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+        "toolkit": "googlesheets",
+        "arguments": "{\"spreadsheetId\": \"{{@create-sheet:Crear Planilla Stock Bajo.data.spreadsheetId}}\", \"range\": \"Sheet1!A:D\", \"valueInputOption\": \"USER_ENTERED\", \"values\": [[\"{{@item:Item.name}}\", \"{{@item:Item.id}}\", \"{{@item:Item.totalStock}}\", \"Tiendanube\"]]}"
+       },
+       "actionType": "composio/run-tool"
+      }
+     ],
+     "source": "{{@list-tiendanube:Obtener Productos Tiendanube.products}}",
+     "maxItems": 50,
+     "actionType": "Loop"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1200,
+    "y": 410
+   }
+  },
+  {
+   "id": "loop-mercadolibre",
+   "data": {
+    "type": "action",
+    "label": "Procesar Stock Mercado Libre",
+    "config": {
+     "steps": [
+      {
+       "id": "check-ml",
+       "config": {
+        "condition": "{{@item:Item.availableQuantity}} < 5"
+       },
+       "actionType": "Condition"
+      },
+      {
+       "id": "append-ml",
+       "config": {
+        "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+        "toolkit": "googlesheets",
+        "arguments": "{\"spreadsheetId\": \"{{@create-sheet:Crear Planilla Stock Bajo.data.spreadsheetId}}\", \"range\": \"Sheet1!A:D\", \"valueInputOption\": \"USER_ENTERED\", \"values\": [[\"{{@item:Item.title}}\", \"{{@item:Item.id}}\", \"{{@item:Item.availableQuantity}}\", \"Mercado Libre\"]]}"
+       },
+       "actionType": "composio/run-tool"
+      }
+     ],
+     "source": "{{@list-mercadolibre:Obtener Productos Mercado Libre.items}}",
+     "maxItems": 50,
+     "actionType": "Loop"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1200,
+    "y": 260
+   }
+  },
+  {
+   "id": "get-sheet-data",
+   "data": {
+    "type": "action",
+    "label": "Leer Planilla Stock Bajo",
+    "config": {
+     "tool": "GOOGLESHEETS_VALUES_GET",
+     "toolkit": "googlesheets",
+     "arguments": "{\"spreadsheet_id\": \"{{@create-sheet:Crear Planilla Stock Bajo.data.spreadsheetId}}\", \"range\": \"Sheet1!A:Z\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1570,
+    "y": 335
+   }
+  },
+  {
+   "id": "check-total-low",
+   "data": {
+    "type": "action",
+    "label": "Hay más de 3 en falta?",
+    "config": {
+     "condition": "Array.isArray({{@get-sheet-data:Leer Planilla Stock Bajo.data.values}}) && {{@get-sheet-data:Leer Planilla Stock Bajo.data.values}}.length > 3",
+     "actionType": "Condition"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1940,
+    "y": 335
+   }
+  },
+  {
+   "id": "slack-alert",
+   "data": {
+    "type": "action",
+    "label": "Avisar en Slack #compras",
+    "config": {
+     "actionType": "slack/send-message",
+     "slackChannel": "#compras",
+     "slackMessage": "Alerta: hay más de 3 productos con stock bajo en la planilla Stock bajo."
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 2310,
+    "y": 335
+   }
+  },
+  {
+   "id": "zipnova-shipment",
+   "data": {
+    "type": "action",
+    "label": "Zipnova Shipments",
+    "config": {
+     "actionType": "zipnova/list-shipments"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 110
+   }
+  },
+  {
+   "id": "whatsapp-notify",
+   "data": {
+    "type": "action",
+    "label": "WhatsApp Alert",
+    "config": {
+     "to": "5491112345678",
+     "text": "Alerta stock bajo procesada.",
+     "actionType": "whatsapp/send-message"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 830,
+    "y": 110
+   }
+  },
+  {
+   "id": "mercadopago-search",
+   "data": {
+    "type": "action",
+    "label": "Mercado Pago Payments",
+    "config": {
+     "actionType": "mercadopago/search-payments"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1200,
+    "y": 110
+   }
+  },
+  {
+   "id": "stripe-customers",
+   "data": {
+    "type": "action",
+    "label": "Stripe Customers",
+    "config": {
+     "actionType": "stripe/search-customers"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1570,
+    "y": 110
+   }
+  },
+  {
+   "id": "linear-issues",
+   "data": {
+    "type": "action",
+    "label": "Linear Issues",
+    "config": {
+     "actionType": "linear/find-issues"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1940,
+    "y": 110
+   }
+  },
+  {
+   "id": "github-issues",
+   "data": {
+    "type": "action",
+    "label": "GitHub Issues",
+    "config": {
+     "repo": "hello-world",
+     "owner": "octocat",
+     "actionType": "github/list-issues"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 2310,
+    "y": 110
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "Q4qCQ251EAXRILrc3zaiR",
+   "target": "list-tiendanube"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "Q4qCQ251EAXRILrc3zaiR",
+   "target": "list-mercadolibre"
+  },
+  {
+   "id": "e3",
+   "type": "animated",
+   "source": "list-tiendanube",
+   "target": "create-sheet"
+  },
+  {
+   "id": "e4",
+   "type": "animated",
+   "source": "list-mercadolibre",
+   "target": "create-sheet"
+  },
+  {
+   "id": "e5",
+   "type": "animated",
+   "source": "create-sheet",
+   "target": "loop-tiendanube"
+  },
+  {
+   "id": "e6",
+   "type": "animated",
+   "source": "create-sheet",
+   "target": "loop-mercadolibre"
+  },
+  {
+   "id": "e7",
+   "type": "animated",
+   "source": "loop-tiendanube",
+   "target": "get-sheet-data"
+  },
+  {
+   "id": "e8",
+   "type": "animated",
+   "source": "loop-mercadolibre",
+   "target": "get-sheet-data"
+  },
+  {
+   "id": "e9",
+   "type": "animated",
+   "source": "get-sheet-data",
+   "target": "check-total-low"
+  },
+  {
+   "id": "e10",
+   "type": "animated",
+   "source": "check-total-low",
+   "target": "slack-alert"
+  },
+  {
+   "id": "e-zipnova",
+   "type": "animated",
+   "source": "Q4qCQ251EAXRILrc3zaiR",
+   "target": "zipnova-shipment"
+  },
+  {
+   "id": "e-whatsapp",
+   "type": "animated",
+   "source": "zipnova-shipment",
+   "target": "whatsapp-notify"
+  },
+  {
+   "id": "e-mp",
+   "type": "animated",
+   "source": "whatsapp-notify",
+   "target": "mercadopago-search"
+  },
+  {
+   "id": "e-stripe",
+   "type": "animated",
+   "source": "mercadopago-search",
+   "target": "stripe-customers"
+  },
+  {
+   "id": "e-linear",
+   "type": "animated",
+   "source": "stripe-customers",
+   "target": "linear-issues"
+  },
+  {
+   "id": "e-github",
+   "type": "animated",
+   "source": "linear-issues",
+   "target": "github-issues"
+  }
+ ],
+ "visibility": "private",
+ "active": false,
+ "createdAt": "2026-10-22T11:08:44.590Z",
+ "updatedAt": "2026-10-22T11:10:08.625Z",
+ "isOwner": true,
+ "canEdit": true,
+ "shared": false
+}

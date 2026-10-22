@@ -1,0 +1,282 @@
+{
+ "id": "vogpjnbk1ebxo20reuval",
+ "name": "Tracking Proactivo de Envíos Tiendanube y Zipnova",
+ "description": "Monitorea órdenes de Tiendanube marcadas como enviadas, consulta Zipnova, avisa a Slack si hay demoras y envía WhatsApp al cliente.",
+ "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+ "nodes": [
+  {
+   "id": "I3YJfn0W79OtpE5MQaE_v",
+   "data": {
+    "type": "trigger",
+    "label": "Orden Enviada Tiendanube",
+    "config": {
+     "triggerType": "tiendanube/order-created"
+    },
+    "status": "idle",
+    "description": "Se dispara cuando una orden se crea o actualiza en Tiendanube"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 90,
+    "y": 260
+   },
+   "selected": false
+  },
+  {
+   "id": "get-zipnova-shipment",
+   "data": {
+    "type": "action",
+    "label": "Obtener Envío Zipnova",
+    "config": {
+     "actionType": "zipnova/get-shipment",
+     "shipmentId": "{{@I3YJfn0W79OtpE5MQaE_v:Orden Enviada Tiendanube.orderId}}"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 830,
+    "y": 335
+   }
+  },
+  {
+   "id": "check-delayed",
+   "data": {
+    "type": "action",
+    "label": "Envío Demorado o con Problema",
+    "config": {
+     "condition": "{{@get-zipnova-shipment:Obtener Envío Zipnova.status}} === 'delayed' || {{@get-zipnova-shipment:Obtener Envío Zipnova.status}} === 'problem'",
+     "actionType": "Condition"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1200,
+    "y": 410
+   }
+  },
+  {
+   "id": "slack-alert",
+   "data": {
+    "type": "action",
+    "label": "Alerta Slack",
+    "config": {
+     "actionType": "slack/send-message",
+     "slackChannel": "#envios",
+     "slackMessage": "El envío de la orden {{@I3YJfn0W79OtpE5MQaE_v:Orden Enviada Tiendanube.orderId}} está demorado o con problemas. Estado actual: {{@get-zipnova-shipment:Obtener Envío Zipnova.status}}"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1570,
+    "y": 410
+   }
+  },
+  {
+   "id": "whatsapp-customer",
+   "data": {
+    "type": "action",
+    "label": "WhatsApp al Cliente",
+    "config": {
+     "to": "5491112345678",
+     "text": "¡Hola! Tu pedido ha sido enviado. Estado: {{@get-zipnova-shipment:Obtener Envío Zipnova.status}}. Seguimiento: {{@get-zipnova-shipment:Obtener Envío Zipnova.tracking}}",
+     "actionType": "whatsapp/send-message"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1200,
+    "y": 260
+   }
+  },
+  {
+   "id": "tiendanube-get-order",
+   "data": {
+    "type": "action",
+    "label": "Obtener Orden Tiendanube",
+    "config": {
+     "orderId": "{{@I3YJfn0W79OtpE5MQaE_v:Orden Enviada Tiendanube.orderId}}",
+     "actionType": "tiendanube/get-order"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 260
+   }
+  },
+  {
+   "id": "mercadopago-payment",
+   "data": {
+    "type": "action",
+    "label": "Buscar Pago Mercado Pago",
+    "config": {
+     "paymentId": "123456789",
+     "actionType": "mercadopago/get-payment"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 110
+   }
+  },
+  {
+   "id": "mercadolibre-order",
+   "data": {
+    "type": "action",
+    "label": "Obtener Orden Mercado Libre",
+    "config": {
+     "orderId": "{{@I3YJfn0W79OtpE5MQaE_v:Orden Enviada Tiendanube.orderId}}",
+     "actionType": "mercadolibre/get-order"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 830,
+    "y": 110
+   }
+  },
+  {
+   "id": "stripe-customer",
+   "data": {
+    "type": "action",
+    "label": "Buscar Cliente Stripe",
+    "config": {
+     "actionType": "stripe/get-customer",
+     "customerId": "cus_ABC123"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1200,
+    "y": 110
+   }
+  },
+  {
+   "id": "linear-ticket",
+   "data": {
+    "type": "action",
+    "label": "Crear Ticket Linear",
+    "config": {
+     "actionType": "linear/create-ticket",
+     "ticketTitle": "Seguimiento de orden {{@I3YJfn0W79OtpE5MQaE_v:Orden Enviada Tiendanube.orderId}}",
+     "ticketPriority": "2",
+     "ticketDescription": "Revisar estado de envío y pago para orden de Tiendanube."
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1570,
+    "y": 110
+   }
+  },
+  {
+   "id": "github-issue",
+   "data": {
+    "type": "action",
+    "label": "Crear Issue GitHub",
+    "config": {
+     "body": "Se detectó una incidencia en el envío de la orden.",
+     "repo": "hello-world",
+     "owner": "octocat",
+     "title": "Incidencia en envío de orden {{@I3YJfn0W79OtpE5MQaE_v:Orden Enviada Tiendanube.orderId}}",
+     "actionType": "github/create-issue"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1940,
+    "y": 110
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "I3YJfn0W79OtpE5MQaE_v",
+   "target": "get-zipnova-shipment"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "get-zipnova-shipment",
+   "target": "check-delayed"
+  },
+  {
+   "id": "e3",
+   "type": "animated",
+   "source": "get-zipnova-shipment",
+   "target": "whatsapp-customer"
+  },
+  {
+   "id": "e4",
+   "type": "animated",
+   "source": "check-delayed",
+   "target": "slack-alert"
+  },
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "I3YJfn0W79OtpE5MQaE_v",
+   "target": "tiendanube-get-order"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "tiendanube-get-order",
+   "target": "get-zipnova-shipment"
+  },
+  {
+   "id": "e-mp",
+   "type": "animated",
+   "source": "I3YJfn0W79OtpE5MQaE_v",
+   "target": "mercadopago-payment"
+  },
+  {
+   "id": "e-ml",
+   "type": "animated",
+   "source": "mercadopago-payment",
+   "target": "mercadolibre-order"
+  },
+  {
+   "id": "e-stripe",
+   "type": "animated",
+   "source": "mercadolibre-order",
+   "target": "stripe-customer"
+  },
+  {
+   "id": "e-linear",
+   "type": "animated",
+   "source": "stripe-customer",
+   "target": "linear-ticket"
+  },
+  {
+   "id": "e-github",
+   "type": "animated",
+   "source": "linear-ticket",
+   "target": "github-issue"
+  }
+ ],
+ "visibility": "private",
+ "active": false,
+ "createdAt": "2026-10-22T11:15:51.548Z",
+ "updatedAt": "2026-10-22T11:18:31.961Z",
+ "isOwner": true,
+ "canEdit": true,
+ "shared": false
+}

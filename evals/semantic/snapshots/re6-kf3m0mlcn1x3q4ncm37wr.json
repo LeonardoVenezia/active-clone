@@ -1,0 +1,168 @@
+{
+ "id": "kf3m0mlcn1x3q4ncm37wr",
+ "name": "Monitoreo de Envios Tiendanube y Zipnova",
+ "description": "Monitorea ordenes en Tiendanube, verifica envios en Zipnova y notifica demoras por Slack y WhatsApp",
+ "userId": "KkFp1tAlpswYaS6tiqtN2UYQoaqlzXyz",
+ "nodes": [
+  {
+   "id": "UTyz_ktpZmhOd3iIVAd8A",
+   "data": {
+    "type": "trigger",
+    "label": "Order Created (Tiendanube)",
+    "config": {
+     "triggerType": "tiendanube/order-created"
+    },
+    "status": "idle",
+    "description": "Trigger when an order is created or marked as shipped"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 90,
+    "y": 185
+   },
+   "selected": false
+  },
+  {
+   "id": "get-shipment",
+   "data": {
+    "type": "action",
+    "label": "Get Zipnova Shipment",
+    "config": {
+     "actionType": "zipnova/get-shipment",
+     "shipmentId": "123456"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 830,
+    "y": 185
+   }
+  },
+  {
+   "id": "cond-delayed",
+   "data": {
+    "type": "action",
+    "label": "Is Delayed or Problem",
+    "config": {
+     "condition": "{{@get-shipment:Get Zipnova Shipment.status}} === 'delayed' || {{@get-shipment:Get Zipnova Shipment.status}} === 'problem'",
+     "actionType": "Condition"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1200,
+    "y": 250
+   }
+  },
+  {
+   "id": "slack-alert",
+   "data": {
+    "type": "action",
+    "label": "Notify Slack #envios",
+    "config": {
+     "actionType": "slack/send-message",
+     "slackChannel": "#envios",
+     "slackMessage": "El envío de la orden está demorado o con problemas. Estado: {{@get-shipment:Get Zipnova Shipment.status}}"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1570,
+    "y": 260
+   }
+  },
+  {
+   "id": "whatsapp-msg",
+   "data": {
+    "type": "action",
+    "label": "Send WhatsApp to Customer",
+    "config": {
+     "to": "5491100000000",
+     "text": "Hola! Tu pedido tiene el siguiente estado de envío: {{@get-shipment:Get Zipnova Shipment.status}}. Seguimiento: {{@get-shipment:Get Zipnova Shipment.tracking}}",
+     "actionType": "whatsapp/send-message"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1570,
+    "y": 110
+   }
+  },
+  {
+   "id": "get-order",
+   "data": {
+    "type": "action",
+    "label": "Get Tiendanube Order",
+    "config": {
+     "orderId": "{{@UTyz_ktpZmhOd3iIVAd8A:Order Created (Tiendanube).orderId}}",
+     "actionType": "tiendanube/get-order"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 143
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "UTyz_ktpZmhOd3iIVAd8A",
+   "target": "get-shipment"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "get-shipment",
+   "target": "cond-delayed"
+  },
+  {
+   "id": "e3",
+   "type": "animated",
+   "source": "cond-delayed",
+   "target": "slack-alert"
+  },
+  {
+   "id": "e4",
+   "type": "animated",
+   "source": "get-shipment",
+   "target": "whatsapp-msg"
+  },
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "UTyz_ktpZmhOd3iIVAd8A",
+   "target": "get-order"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "get-order",
+   "target": "get-shipment"
+  },
+  {
+   "id": "e5",
+   "type": "animated",
+   "source": "cond-delayed",
+   "target": "whatsapp-msg"
+  }
+ ],
+ "visibility": "private",
+ "active": false,
+ "createdAt": "2026-10-22T11:10:59.643Z",
+ "updatedAt": "2026-10-22T11:14:42.152Z",
+ "isOwner": true,
+ "canEdit": true,
+ "shared": false
+}
