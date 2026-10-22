@@ -86,12 +86,25 @@ export async function simulate(workflow, fixture) {
   }
 
   // processTemplates fiel al executor
+  // Paridad con workflow-executor.workflow.ts: estas keys guardan un JSON como
+  // string; un template dentro de comillas ("key": "{{@...}}") se escapa.
+  const JSON_STRING_CONFIG_KEYS = new Set(["arguments", "httpBody", "httpHeaders", "input", "responseSchema"]);
+  const escapeForJsonString = (raw) => raw.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "\\r").replace(/\n/g, "\\n").replace(/\t/g, "\\t");
+
   function processTemplates(config, extraOutputs, where) {
     const scope = { ...outputs, ...extraOutputs };
     const processed = {};
     for (const [key, value] of Object.entries(config)) {
       if (typeof value !== "string") { processed[key] = value; continue; }
-      processed[key] = value.replace(TPL, (match, nodeId, rest) => {
+      const jsonStringKey = JSON_STRING_CONFIG_KEYS.has(key);
+      processed[key] = value.replace(TPL, (match, nodeId, rest, offset, whole) => {
+        let inJsonString = false;
+        if (jsonStringKey && typeof offset === "number") {
+          const before = whole.slice(0, offset);
+          let inside = false;
+          for (let i = 0; i < before.length; i++) { const ch = before[i]; if (ch === "\\") { i++; continue; } if (ch === '"') inside = !inside; }
+          inJsonString = inside;
+        }
         const output = scope[sanitize(nodeId)];
         if (!output) {
           log.unresolvedTemplates.push({ where, template: match, reason: "node output missing" });
@@ -109,8 +122,9 @@ export async function simulate(workflow, fixture) {
           resolved: current !== undefined && current !== null,
         });
         if (current === null || current === undefined) return "";
-        if (typeof current === "object") return JSON.stringify(current);
-        return String(current);
+        if (typeof current === "object") { const json = JSON.stringify(current); return inJsonString ? escapeForJsonString(json) : json; }
+        const str = String(current);
+        return inJsonString ? escapeForJsonString(str) : str;
       });
     }
     return processed;

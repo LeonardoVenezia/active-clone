@@ -375,6 +375,26 @@ async function executeActionStep(input: {
 /**
  * Process template variables in config
  */
+// Config keys that hold a JSON document as a string. When a {{@...}} template
+// sits inside a JSON string literal there ("key": "{{@...}}"), substituted
+// values must be JSON-escaped; otherwise quotes/newlines break the parse.
+const JSON_STRING_CONFIG_KEYS = new Set([
+  "arguments",
+  "httpBody",
+  "httpHeaders",
+  "input",
+  "responseSchema",
+]);
+
+function escapeForJsonString(raw: string): string {
+  return raw
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, "\\r")
+    .replace(/\n/g, "\\n")
+    .replace(/\t/g, "\\t");
+}
+
 function processTemplates(
   config: Record<string, unknown>,
   outputs: NodeOutputs
@@ -383,13 +403,27 @@ function processTemplates(
 
   for (const [key, value] of Object.entries(config)) {
     if (typeof value === "string") {
+      const jsonStringKey = JSON_STRING_CONFIG_KEYS.has(key);
       // Process template variables like {{@nodeId:Label.field}}
       let processedValue = value;
       const templatePattern = /\{\{@([^:]+):([^}]+)\}\}/g;
       processedValue = processedValue.replace(
         templatePattern,
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Template processing requires nested logic
-        (match, nodeId, rest) => {
+        (match, nodeId, rest, offset, whole) => {
+          // Is the template inside a JSON string literal? Scan the original
+          // (pre-replacement) value counting unescaped quotes up to offset.
+          let inJsonString = false;
+          if (jsonStringKey && typeof offset === "number") {
+            const before = (whole as string).slice(0, offset);
+            let inside = false;
+            for (let i = 0; i < before.length; i++) {
+              const ch = before[i];
+              if (ch === "\\") { i++; continue; }
+              if (ch === '"') inside = !inside;
+            }
+            inJsonString = inside;
+          }
           const sanitizedNodeId = nodeId.replace(/[^a-zA-Z0-9]/g, "_");
           const output = outputs[sanitizedNodeId];
           if (!output) {
@@ -405,9 +439,11 @@ function processTemplates(
               return "";
             }
             if (typeof data === "object") {
-              return JSON.stringify(data);
+              const json = JSON.stringify(data);
+              return inJsonString ? escapeForJsonString(json) : json;
             }
-            return String(data);
+            const str = String(data);
+            return inJsonString ? escapeForJsonString(str) : str;
           }
 
           // If data is null/undefined, return empty string instead of trying to access fields
@@ -423,9 +459,11 @@ function processTemplates(
             return "";
           }
           if (typeof current === "object") {
-            return JSON.stringify(current);
+            const json = JSON.stringify(current);
+            return inJsonString ? escapeForJsonString(json) : json;
           }
-          return String(current);
+          const str = String(current);
+          return inJsonString ? escapeForJsonString(str) : str;
         }
       );
 
