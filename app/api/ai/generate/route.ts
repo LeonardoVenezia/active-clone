@@ -603,9 +603,13 @@ export async function POST(request: Request) {
         }
       };
       await runOnce([]);
-      for (let round = 0; round < 2; round++) {
+      // Up to 2 corrective rounds, plus one extra when the only remaining
+      // errors are consistency-class (e.g. an app the request explicitly
+      // asks for is still missing) - those are worth one more shot.
+      for (let round = 0; round < 3; round++) {
         const errs = computeErrors();
         if (!errs.length) break;
+        if (round >= 2 && !errs.some(e => e.startsWith("consistencia:"))) break;
         console.warn("[ai-generate] tools corrective round", round + 1, errs);
         await runOnce(errs);
       }

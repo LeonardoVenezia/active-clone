@@ -489,7 +489,10 @@ export function validateFlow(
         // puede validar el campo de primer nivel.
         const known = targetAction === "composio/run-tool" || targetAction === "Run Composio Action" ? undefined : outputsOf(targetAction);
         if (known && firstField && !known.includes(firstField)) {
-          errors.push(`semántica: node "${n.id}" (${label}) references "${refId}.${firstField}" but ${actionTypeOf(target)} only outputs: ${known.join(", ")}`);
+          const formulaHint = targetAction === "Fórmula" && known.includes("result")
+            ? ` - the expression's value is wrapped under "result"; reference nested fields as {{@${refId}:${target.data?.label ?? refId}.result.<field>}}`
+            : "";
+          errors.push(`semántica: node "${n.id}" (${label}) references "${refId}.${firstField}" but ${actionTypeOf(target)} only outputs: ${known.join(", ")}${formulaHint}`);
         }
         // Path que entra a un item de un array conocido (orders[0].shipping_id
         // u orders.shipping_id): validar el campo del item contra la forma
