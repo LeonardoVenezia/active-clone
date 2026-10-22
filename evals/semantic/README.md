@@ -314,10 +314,16 @@ confirmado en catalogo vivo; ruta Refuseless = fallback pago ultimo (23ed4b5,
 45245e0, env var en Vercel Production). El modelo es reasoning: requiere
 max_tokens alto (fix 23ed4b5).
 
-| Caso | Pago local (sin catalogo Composio) | Pago prod | Gratis prod |
+| Caso | Pago local (sin catalogo Composio) | Pago prod | Gratis prod (gemini-3.5-flash-lite) |
 |------|-----------------------------------|-----------|-------------|
-| C-09 | FAIL x2 (refs salida Formula sin .result) | FAIL (misma familia; verify-re11 EXPRESSION WRONG) | pendiente (modelo gratis colgado 18:39, 2 intentos "busy") |
-| C-12 | FAIL (sin filas Sheets) | **PASS** | pendiente |
+| C-09 | FAIL x2 (refs salida Formula sin .result) | FAIL (misma familia; verify-re11 EXPRESSION WRONG) | FAIL (pay_3/ord_7 no detectados; 18:39 el gratis estuvo colgado ~30 min - el fallback pago habria salvado la ventana) |
+| C-12 | FAIL (sin filas Sheets) | **PASS** | FAIL (identifica productos pero Slack no dispara con >3 en falta) |
+
+Tabla prod consolidada (pipeline actual, 19:10): C-09 pago 0/1 vs gratis 0/1;
+C-12 pago 1/1 vs gratis 0/1. C-09 no lo arregla el modelo (lo confirma el A/B):
+es problema de codigo/prompt - ademas se encontro contradiccion entre reglas
+del validador (template de reconciliacion vs regla per-item Loop), corregida
+solo en la rama feat/structured-builder.
 
 Senal preliminar: el pago NO arregla C-09 (0/3, mismas familias de error que
 el gratis) → C-09 es problema de codigo/prompt, no de modelo. C-12 con el pago
