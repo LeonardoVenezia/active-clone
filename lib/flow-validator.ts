@@ -723,6 +723,35 @@ function bareIdentifiersInCondition(expression: string): string[] {
  * An invented variable (orderResult.status, delayed === 'delayed') can never
  * resolve - the executor has no such scope.
  */
+/**
+ * Fórmula nodes must actually compute something from their declared input.
+ * Catches the "ceremonial Fórmula" failure: a constant string expression
+ * ("Reconciliación procesada") or an expression that references none of the
+ * input's fields. The input is a JSON string that may contain {{@...}}
+ * templates; top-level keys are read with a tolerant regex.
+ */
+export function formulaExpressionError(nodes: FlowNode[]): string | null {
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "Fórmula") continue;
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    const label = n.data?.label ?? n.id;
+    const input = typeof cfg.input === "string" ? cfg.input : "";
+    const expression = typeof cfg.expression === "string" ? cfg.expression.trim() : "";
+    if (!input.trim() || !expression) continue; // missing fields are reported elsewhere
+    const keys = [...input.matchAll(/"([A-Za-z_]\w*)"\s*:/g)].map((m) => m[1]);
+    if (keys.length === 0) continue;
+    // Bare string/number literal = computes nothing
+    if (/^"[^"]*"$/.test(expression) || /^'[^']*'$/.test(expression) || /^-?\d+(\.\d+)?$/.test(expression)) {
+      return `semántica: Fórmula node "${n.id}" (${label}) has a constant expression that computes nothing ("${expression.slice(0, 60)}"); the expression MUST be JSONata that uses the fields declared in its "input" (${keys.join(", ")}) - e.g. filtering, mapping or comparing them. Never use a Fórmula to emit fixed text; write fixed text directly in the step that needs it`;
+    }
+    const usesKey = keys.some((k) => new RegExp(`(^|[^\\w$])\\$?${k}([^\\w$]|$)`).test(expression));
+    if (!usesKey) {
+      return `semántica: Fórmula node "${n.id}" (${label}) expression uses none of its "input" fields (${keys.join(", ")}); the JSONata expression MUST reference at least one input field (e.g. ${keys[0]}) so the step actually transforms data`;
+    }
+  }
+  return null;
+}
+
 export function conditionExpressionError(nodes: FlowNode[]): string | null {
   const check = (expression: unknown, where: string): string | null => {
     if (typeof expression !== "string" || !expression.trim()) return null;

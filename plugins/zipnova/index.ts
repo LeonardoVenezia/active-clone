@@ -145,7 +145,9 @@ const zipnovaPlugin: IntegrationPlugin = {
   category: "Zipnova",
   stepFunction: "zipnovaListShipments",
   stepImportPath: "list-shipments",
-  outputFields: [{ field: "raw", description: "Shipments list" }],
+  outputFields: [
+    { field: "shipments", description: "List of shipments (id, status, statusDetail, tracking, carrier, estimatedDelivery, externalId)" },
+  ],
   configFields: [
     field("externalId", "Filter by your order ID", "ORDER-1001"),
     field("status", "Filter by status", "pending"),

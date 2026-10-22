@@ -621,7 +621,7 @@ export function generateAIActionPrompts(): string {
       }
 
       const outputsNote = action.outputFields?.length
-        ? ` | outputs: ${action.outputFields.map((f) => f.field).join(", ")}`
+        ? ` | outputs: ${action.outputFields.map((f) => (f.description ? `${f.field} (${f.description})` : f.field)).join(", ")}`
         : "";
       lines.push(
         `- ${action.label} (${fullId}): ${JSON.stringify(exampleConfig)}${outputsNote}`
