@@ -1,0 +1,186 @@
+{
+  "id": "74gkycv17dnyu3z43zcew",
+  "name": "Reconciliación Diaria Stripe y Tiendanube",
+  "description": "Compara pagos de Stripe con órdenes de Tiendanube diariamente, crea una planilla y envía un resumen por correo.",
+  "nodes": [
+    {
+      "id": "jfAlgzj-wez9-bnbtyXO4",
+      "data": {
+        "type": "trigger",
+        "label": "Daily Schedule",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 8 * * *"
+        },
+        "status": "idle",
+        "description": "Every day at 8 AM"
+      },
+      "type": "trigger",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "selected": false
+    },
+    {
+      "id": "stripe-payments",
+      "data": {
+        "type": "action",
+        "label": "Stripe Payments",
+        "config": {
+          "limit": "100",
+          "actionType": "stripe/list-payments"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 460,
+        "y": 260
+      }
+    },
+    {
+      "id": "tiendanube-orders",
+      "data": {
+        "type": "action",
+        "label": "Tiendanube Orders",
+        "config": {
+          "limit": 50,
+          "status": "any",
+          "actionType": "tiendanube/search-orders"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 460,
+        "y": 110
+      }
+    },
+    {
+      "id": "compare-lists",
+      "data": {
+        "type": "action",
+        "label": "Compare Lists",
+        "config": {
+          "input": "{\"pagos\": {{@stripe-payments:Stripe Payments.payments}}, \"ordenes\": {{@tiendanube-orders:Tiendanube Orders.orders}}}",
+          "actionType": "Fórmula",
+          "expression": "{\"soloEnA\": $filter(pagos, function($x) { $not($number($x.amount) in $map(ordenes, function($y){ $number($y.total) })) }), \"soloEnB\": $filter(ordenes, function($y) { $not($number($y.total) in $map(pagos, function($x){ $number($x.amount) })) })}"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 830,
+        "y": 185
+      }
+    },
+    {
+      "id": "create-sheet",
+      "data": {
+        "type": "action",
+        "label": "Create Google Sheet",
+        "config": {
+          "tool": "GOOGLESHEETS_CREATE_GOOGLE_SHEET1",
+          "toolkit": "googlesheets",
+          "arguments": "{\"title\": \"Reconciliación Diaria\"}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 1200,
+        "y": 185
+      }
+    },
+    {
+      "id": "send-email",
+      "data": {
+        "type": "action",
+        "label": "Send Gmail Summary",
+        "config": {
+          "tool": "GMAIL_SEND_EMAIL",
+          "toolkit": "gmail",
+          "arguments": "{\"recipient_email\": \"finanzas@example.com\", \"subject\": \"Resumen Reconciliación Diaria\", \"body\": \"Diferencias detectadas:\\n{{@compare-lists:Compare Lists.result}}\"}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 1570,
+        "y": 185
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "type": "animated",
+      "source": "jfAlgzj-wez9-bnbtyXO4",
+      "target": "stripe-payments"
+    },
+    {
+      "id": "e2",
+      "type": "animated",
+      "source": "jfAlgzj-wez9-bnbtyXO4",
+      "target": "tiendanube-orders"
+    },
+    {
+      "id": "e3",
+      "type": "animated",
+      "source": "stripe-payments",
+      "target": "compare-lists"
+    },
+    {
+      "id": "e4",
+      "type": "animated",
+      "source": "tiendanube-orders",
+      "target": "compare-lists"
+    },
+    {
+      "id": "e5",
+      "type": "animated",
+      "source": "compare-lists",
+      "target": "create-sheet"
+    },
+    {
+      "id": "e6",
+      "type": "animated",
+      "source": "create-sheet",
+      "target": "send-email"
+    }
+  ],
+  "visibility": "private",
+  "active": false,
+  "createdAt": "2026-10-22T20:09:07.608Z",
+  "updatedAt": "2026-10-22T20:17:45.835Z",
+  "isOwner": true,
+  "canEdit": true,
+  "shared": false
+}

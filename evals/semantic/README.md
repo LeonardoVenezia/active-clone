@@ -290,3 +290,18 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
   completos (verificación offline: EXPRESSION WRONG). La varianza se movió
   del wiring (resuelto) a la adherencia al template de la Fórmula.
 - Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 1/11, C-12 1/3.
+
+## Mediciones live re16 + re17 (deploy 1f4666b: join-field existence rule, 2026-10-22 ~20:20 UTC)
+
+- re16 C-09: PASS (3/3) — Fórmula con el template prebuilt VERBATIM (soloEnA/
+  soloEnB), verificación offline EXACTA (pay_3 / ord_7), Sheets crea la
+  planilla con las diferencias y Gmail las referencia. 6 nodos limpios.
+- re17 C-09: FAIL (1/3) — el modelo esquivó la Fórmula y armó la comparación
+  con un Loop ("Comparar Listados"): los campos referenciados resuelven,
+  pero pay_3/ord_7 nunca aparecen en Sheets/Gmail. Modo de falla: arquitectura
+  alternativa que el template mandate no cubre (la regla join-field solo aplica
+  a nodos Fórmula). verify-re11.mjs no aplica (sin Fórmula).
+- Consolidado post-1f4666b: C-09 1/2. Se detiene el patching de C-09 por
+  instrucción del parent.
+- Tally honesto final del día: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2,
+  C-09 2/13, C-12 1/3.
