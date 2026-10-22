@@ -118,3 +118,24 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
 - C-12: no medible esta corrida — el modelo free devolvió vacío/respuesta
   no usable en 3 intentos seguidos (busy). Sin cambios: 0/2 genuino de re6.
 - Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/5, C-12 0/2.
+
+## Medición live re7-d (deploy 562aaea listCrossing v2, 2026-10-22 ~14:30 UTC)
+
+- C-09: FAIL live (opx0evpqmbdtg0u5tbeqg). Por primera vez la estructura es
+  la canónica: UNA Fórmula con AMBAS listas en el input y JSONata sintácticamente
+  válido (el compile-check con jsonata real atrapó el `$@.` inválido en la
+  misma generación y lo corrigió). Pero la expression es una PROYECCIÓN: `stripe`
+  (devuelve la lista cruda; pay_3 aparece solo por presencia, ord_7 ausente).
+  Hallazgo: la proyección se repitió en 3/3 generaciones con Fórmula 2-listas
+  (re5-hw0ycjusgh, re6-j1rq5fxs8dzey, re7-opx0). Nueva regla anti-proyección
+  en formulaExpressionError (deploy 95fcf8c): si un input key apunta a un
+  output de lista, la expression DEBE usarlo; exige usar ambas listas.
+- C-12: FAIL live (91vject1e06fe38oef79e). El modelo generó un GRAFO CÍCLICO
+  (create-sheet <-> loops en ambos sentidos): el simulador no ejecuta nada
+  aguas abajo del ciclo (0 filas, 0 slack). No existía regla anti-ciclos:
+  nueva cyclicFlowError (deploy 018bfe7) que detecta el ciclo y nombra las
+  aristas a quitar; el corrective pass recibe el detalle.
+- Tests de reglas ahora versionados en evals/semantic/tests/ (rules2-5).
+- Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/5, C-12 0/2.
+  (Sin cambios de tally: las dos corridas nuevas son FAIL genuinos; las reglas
+  nuevas aún no tuvieron retry live.)
