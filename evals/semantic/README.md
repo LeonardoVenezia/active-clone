@@ -274,3 +274,19 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
   necesitó un nudge conversacional ("Dale, armalo así en el lienzo") y ahí
   aplicó todo, incluida la respuesta de config ("Control de Stock").
 - Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 1/10, C-12 1/3.
+
+## Medición live re15 (deploy 0dbebd7: validator unwired-report + placeholder-id rules, 2026-10-22 ~20:00 UTC)
+
+- C-09: FAIL (0/3). La regla NUEVA del validator funcionó: los pasos finales
+  ya no salen sin wiring — Sheets referencia compare-data.cobrosSinOrden /
+  .ordenesSinCobro (nada de texto estático ni ids inventados; spreadsheet_id =
+  "Reconciliación Diaria", el nombre dado) y Gmail lleva un ref (aunque al
+  campo equivocado: sheets-log.spreadsheet_id en vez de las diferencias).
+  El build tardó ~5 min con pasada correctiva y un 504 final, pero las ops
+  quedaron aplicadas.
+- Falla restante: la Fórmula NO usó el template prebuilt — joineó por
+  id/external_reference/number (campos inexistentes en los datos) en vez de
+  amount/total con $number, así que cobrosSinOrden devuelve los 3 pagos
+  completos (verificación offline: EXPRESSION WRONG). La varianza se movió
+  del wiring (resuelto) a la adherencia al template de la Fórmula.
+- Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 1/11, C-12 1/3.
