@@ -322,3 +322,18 @@ max_tokens alto (fix 23ed4b5).
 Senal preliminar: el pago NO arregla C-09 (0/3, mismas familias de error que
 el gratis) → C-09 es problema de codigo/prompt, no de modelo. C-12 con el pago
 paso en prod por primera vez.
+
+## A/B controlado: pipeline actual (ops) vs builder por tools (rama feat/structured-builder)
+
+Mismo modelo (deepseek-v4.1-flash-fast, Refuseless), mismo harness local, mismo catálogo vacío (sin COMPOSIO_API_KEY local). n=1 por celda — muestra chica, indicador no prueba.
+
+| Caso | ops (actual) | tools (nuevo) | Detalle |
+|------|--------------|---------------|---------|
+| C-09 | FAIL 0/3 | **PASS 3/3** | tools: primera reconciliación totalmente correcta (pay_3 + ord_7, fórmula verificada offline CORRECT). ops: fórmula correcta en 1/3 corridas históricas pero wiring roto (campos inexistentes) |
+| C-12 | **PASS 4/4** | FAIL 2/4 | tools improvisó HTTP Request a Sheets en vez de acción nativa/Composio → 0 filas |
+| C-02 | FAIL 1/4 | FAIL 3/4 | ops: no disparó Slack ni WhatsApp. tools: comportamiento correcto, falla solo referencia shipments[0] (nodo lista inventado fuera del fixture) |
+| C-05 | FAIL 1/4 | FAIL 1/4 | ambos: 0 mensajes Slack (falla compartida, no del modo de construcción) |
+| C-07 | FAIL 2/4 | FAIL 2/4 | ambos: respuesta sin políticas ("30" faltante) + campos sin resolver (falla compartida) |
+
+Checks totales: ops 8/19, tools 11/19. semanticPass: 1/5 cada uno.
+Fallas compartidas (C-05 slack, C-07 políticas) apuntan a gaps del prompt/base de conocimiento, no al protocolo de construcción.

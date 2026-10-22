@@ -1,0 +1,179 @@
+{
+  "name": "Tracking Proactivo de Envíos (Tiendanube + Zipnova)",
+  "nodes": [
+    {
+      "id": "trigger-order",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Orden Tiendanube",
+        "type": "trigger",
+        "config": {
+          "triggerType": "tiendanube/order-created"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "get-order",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 185
+      },
+      "data": {
+        "label": "Get Order - Tiendanube",
+        "type": "action",
+        "config": {
+          "orderId": "{{@trigger-order:Orden Tiendanube.orderId}}",
+          "actionType": "tiendanube/get-order"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "cond-shipped",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 185
+      },
+      "data": {
+        "label": "Orden Enviada",
+        "type": "action",
+        "config": {
+          "condition": "{{@get-order:Get Order.shippingStatus}} === 'shipped'",
+          "actionType": "Condition"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "list-shipments",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "List Shipments - Zipnova",
+        "type": "action",
+        "config": {
+          "externalId": "{{@get-order:Get Order.id}}",
+          "actionType": "zipnova/list-shipments"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "get-shipment",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      },
+      "data": {
+        "label": "Get Shipment - Zipnova",
+        "type": "action",
+        "config": {
+          "shipmentId": "{{@list-shipments:List Shipments.shipments[0].id}}",
+          "actionType": "zipnova/get-shipment"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "cond-delayed",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 260
+      },
+      "data": {
+        "label": "Envío Demorado o con Problema",
+        "type": "action",
+        "config": {
+          "condition": "{{@get-shipment:Get Shipment.status}} === 'delayed' || {{@get-shipment:Get Shipment.status}} === 'exception' || {{@get-shipment:Get Shipment.status}} === 'canceled'",
+          "actionType": "Condition"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "slack-alert",
+      "type": "action",
+      "position": {
+        "x": 2310,
+        "y": 260
+      },
+      "data": {
+        "label": "Avisar en #envios - Slack",
+        "type": "action",
+        "config": {
+          "slackChannel": "#envios",
+          "slackMessage": "⚠️ Envío demorado o con problema\nOrden #{{@get-order:Get Order.number}} — {{@get-order:Get Order.customerName}} ({{@get-order:Get Order.customerEmail}})\nEstado Zipnova: {{@get-shipment:Get Shipment.status}} ({{@get-shipment:Get Shipment.statusDetail}})\nTracking: {{@get-shipment:Get Shipment.tracking}} — Carrier: {{@get-shipment:Get Shipment.carrier}}\nEntrega estimada: {{@get-shipment:Get Shipment.estimatedDelivery}}",
+          "actionType": "slack/send-message"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "whatsapp-customer",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 110
+      },
+      "data": {
+        "label": "WhatsApp al Cliente",
+        "type": "action",
+        "config": {
+          "to": "{{@get-order:Get Order.customerPhone}}",
+          "text": "Hola {{@get-order:Get Order.customerName}}! Te contamos sobre tu pedido #{{@get-order:Get Order.number}}: estado del envío {{@get-shipment:Get Shipment.status}} ({{@get-shipment:Get Shipment.statusDetail}}). Seguimiento: {{@get-shipment:Get Shipment.tracking}} — {{@get-shipment:Get Shipment.carrier}}. Entrega estimada: {{@get-shipment:Get Shipment.estimatedDelivery}}.",
+          "actionType": "whatsapp/send-message"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "trigger-order",
+      "target": "get-order",
+      "id": "e-trigger-order-get-order"
+    },
+    {
+      "source": "get-order",
+      "target": "cond-shipped",
+      "id": "e-get-order-cond-shipped"
+    },
+    {
+      "source": "cond-shipped",
+      "target": "list-shipments",
+      "id": "e-cond-shipped-list-shipments"
+    },
+    {
+      "source": "list-shipments",
+      "target": "get-shipment",
+      "id": "e-list-shipments-get-shipment"
+    },
+    {
+      "source": "get-shipment",
+      "target": "cond-delayed",
+      "id": "e-get-shipment-cond-delayed"
+    },
+    {
+      "source": "cond-delayed",
+      "target": "slack-alert",
+      "id": "e-cond-delayed-slack-alert"
+    },
+    {
+      "source": "get-shipment",
+      "target": "whatsapp-customer",
+      "id": "e-get-shipment-whatsapp-customer"
+    }
+  ]
+}

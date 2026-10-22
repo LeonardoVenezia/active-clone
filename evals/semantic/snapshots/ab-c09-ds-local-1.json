@@ -1,0 +1,213 @@
+{
+  "name": "Reconciliación Diaria Stripe vs Tiendanube (Maqueta)",
+  "nodes": [
+    {
+      "id": "trigger-diario",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Schedule Diario 8AM",
+        "description": "Dispara el flujo todos los días a las 08:00 (modo maqueta, no ejecuta nada real)",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 8 * * *",
+          "timezone": "America/Argentina/Buenos_Aires"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "rango-ayer",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 185
+      },
+      "data": {
+        "label": "Rango Ayer",
+        "description": "Calcula la ventana de tiempo del día anterior (desde/hasta) para consultar ambos sistemas",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{}",
+          "expression": "{\"desde\": $fromMillis($millis() - 86400000, \"[Y0001]-[M01]-[D01]T00:00:00-03:00\"), \"hasta\": $fromMillis($millis(), \"[Y0001]-[M01]-[D01]T00:00:00-03:00\")}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "stripe-cobros",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 260
+      },
+      "data": {
+        "label": "Listar Cobros Stripe",
+        "description": "Trae los cobros registrados en Stripe del día anterior",
+        "type": "action",
+        "config": {
+          "actionType": "stripe/list-payments",
+          "limit": "100"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "tn-ordenes",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Buscar Órdenes Tiendanube",
+        "description": "Trae las órdenes de Tiendanube creadas desde el inicio del día anterior",
+        "type": "action",
+        "config": {
+          "actionType": "tiendanube/search-orders",
+          "createdAtMin": "{{@rango-ayer:Rango Ayer.desde}}",
+          "status": "any",
+          "paymentStatus": "any",
+          "shippingStatus": "any",
+          "limit": "50"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "comparar",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "Comparar Listados",
+        "description": "Cruza ambos listados por importe y detecta cobros sin orden y órdenes sin cobro",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{\"cobros\": {{@stripe-cobros:Listar Cobros Stripe.payments}}, \"ordenes\": {{@tn-ordenes:Buscar Órdenes Tiendanube.orders}}}",
+          "expression": "{\"cobrosSinOrden\": $filter(cobros, function($x) { $not($number($x.amount) in $map(ordenes, function($y){ $number($y.total) })) }), \"ordenesSinCobro\": $filter(ordenes, function($y) { $not($number($y.total) in $map(cobros, function($x){ $number($x.amount) })) })}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "armar-filas",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      },
+      "data": {
+        "label": "Armar Filas",
+        "description": "Convierte las diferencias detectadas en filas listas para la planilla",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{\"cobrosSinOrden\": {{@comparar:Comparar Listados.cobrosSinOrden}}, \"ordenesSinCobro\": {{@comparar:Comparar Listados.ordenesSinCobro}}}",
+          "expression": "{\"filas\": $append($map(cobrosSinOrden, function($c){ [\"Cobro sin orden\", $c.id, $c.amount, $c.currency, $c.created] }), $map(ordenesSinCobro, function($o){ [\"Orden sin cobro\", $o.id, $o.total, $o.currency, $o.createdAt] }))}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "sheets",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 185
+      },
+      "data": {
+        "label": "Anotar en Google Sheets",
+        "description": "Agrega las filas de diferencias a la planilla de reconciliación (completar credenciales y SPREADSHEET_ID en el panel del nodo)",
+        "type": "action",
+        "config": {
+          "actionType": "HTTP Request",
+          "httpMethod": "POST",
+          "endpoint": "https://sheets.googleapis.com/v4/spreadsheets/<SPREADSHEET_ID>/values/Sheet1!A:E:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
+          "httpHeaders": "{\"Authorization\": \"Bearer <GOOGLE_OAUTH_TOKEN>\", \"Content-Type\": \"application/json\"}",
+          "httpBody": "{\"values\": {{@armar-filas:Armar Filas.filas}}}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "gmail",
+      "type": "action",
+      "position": {
+        "x": 2310,
+        "y": 185
+      },
+      "data": {
+        "label": "Enviar Resumen Gmail",
+        "description": "Envía por Gmail el resumen con los cobros sin orden y las órdenes sin cobro (completar token OAuth en el panel del nodo)",
+        "type": "action",
+        "config": {
+          "actionType": "HTTP Request",
+          "httpMethod": "POST",
+          "endpoint": "https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media",
+          "httpHeaders": "{\"Authorization\": \"Bearer <GMAIL_OAUTH_TOKEN>\", \"Content-Type\": \"message/rfc822\"}",
+          "httpBody": "To: finanzas@empresa.com\nSubject: Reconciliación diaria Stripe vs Tiendanube\nContent-Type: text/plain; charset=UTF-8\n\nResumen de la reconciliación del día anterior (modo maqueta).\n\nCobros sin orden: {{@comparar:Comparar Listados.cobrosSinOrden}}\nÓrdenes sin cobro: {{@comparar:Comparar Listados.ordenesSinCobro}}\n\nDetalle en la planilla: https://docs.google.com/spreadsheets/d/<SPREADSHEET_ID>/edit"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger-diario",
+      "target": "rango-ayer",
+      "type": "default"
+    },
+    {
+      "id": "e2",
+      "source": "rango-ayer",
+      "target": "stripe-cobros",
+      "type": "default"
+    },
+    {
+      "id": "e3",
+      "source": "rango-ayer",
+      "target": "tn-ordenes",
+      "type": "default"
+    },
+    {
+      "id": "e4",
+      "source": "stripe-cobros",
+      "target": "comparar",
+      "type": "default"
+    },
+    {
+      "id": "e5",
+      "source": "tn-ordenes",
+      "target": "comparar",
+      "type": "default"
+    },
+    {
+      "id": "e6",
+      "source": "comparar",
+      "target": "armar-filas",
+      "type": "default"
+    },
+    {
+      "id": "e7",
+      "source": "armar-filas",
+      "target": "sheets",
+      "type": "default"
+    },
+    {
+      "id": "e8",
+      "source": "sheets",
+      "target": "gmail",
+      "type": "default"
+    }
+  ]
+}

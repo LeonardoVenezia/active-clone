@@ -1,0 +1,234 @@
+{
+  "name": "Control de Stock Diario",
+  "nodes": [
+    {
+      "id": "trigger-schedule",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Cada día a las 9 AM",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 9 * * *"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "list-tiendanube",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "Listar Productos Tiendanube",
+        "type": "action",
+        "config": {
+          "actionType": "tiendanube/list-products",
+          "query": "",
+          "limit": "50"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "list-mercadolibre",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Listar Productos Mercado Libre",
+        "type": "action",
+        "config": {
+          "actionType": "mercadolibre/list-items",
+          "query": "",
+          "status": "active",
+          "limit": "50"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-tiendanube",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 260
+      },
+      "data": {
+        "label": "Revisar Stock Tiendanube",
+        "type": "action",
+        "config": {
+          "actionType": "Loop",
+          "source": "{{@list-tiendanube:Listar Productos Tiendanube.products}}",
+          "maxItems": 50,
+          "steps": [
+            {
+              "id": "filter-tn",
+              "actionType": "Condition",
+              "config": {
+                "condition": "{{@item:Item.totalStock}} < 5"
+              }
+            },
+            {
+              "id": "sheet-tn",
+              "actionType": "composio/run-tool",
+              "config": {
+                "toolkit": "googlesheets",
+                "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+                "arguments": "{\"spreadsheetId\": \"mock-spreadsheet-id\", \"range\": \"A:C\", \"valueInputOption\": \"USER_ENTERED\", \"values\": [[\"Tiendanube\", \"{{@item:Item.name}}\", \"{{@item:Item.totalStock}}\"]]}"
+              }
+            }
+          ]
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-mercadolibre",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Revisar Stock Mercado Libre",
+        "type": "action",
+        "config": {
+          "actionType": "Loop",
+          "source": "{{@list-mercadolibre:Listar Productos Mercado Libre.items}}",
+          "maxItems": 50,
+          "steps": [
+            {
+              "id": "filter-ml",
+              "actionType": "Condition",
+              "config": {
+                "condition": "{{@item:Item.availableQuantity}} < 5"
+              }
+            },
+            {
+              "id": "sheet-ml",
+              "actionType": "composio/run-tool",
+              "config": {
+                "toolkit": "googlesheets",
+                "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+                "arguments": "{\"spreadsheetId\": \"mock-spreadsheet-id\", \"range\": \"A:C\", \"valueInputOption\": \"USER_ENTERED\", \"values\": [[\"Mercado Libre\", \"{{@item:Item.title}}\", \"{{@item:Item.availableQuantity}}\"]]}"
+              }
+            }
+          ]
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "formula-count",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "Contar Total Faltantes",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{\"tn\": {{@loop-tiendanube:Revisar Stock Tiendanube.completed}}, \"ml\": {{@loop-mercadolibre:Revisar Stock Mercado Libre.completed}}}",
+          "expression": "$count(tn) + $count(ml)"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "condition-alert",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      },
+      "data": {
+        "label": "Más de 3 en falta?",
+        "type": "action",
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@formula-count:Contar Total Faltantes.result}} > 3"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "slack-alert",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 185
+      },
+      "data": {
+        "label": "Avisar Slack",
+        "type": "action",
+        "config": {
+          "actionType": "slack/send-message",
+          "slackChannel": "#compras",
+          "slackMessage": "Alerta: hay {{@formula-count:Contar Total Faltantes.result}} productos con stock menor a 5 unidades hoy."
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger-schedule",
+      "target": "list-tiendanube",
+      "type": "default"
+    },
+    {
+      "id": "e2",
+      "source": "trigger-schedule",
+      "target": "list-mercadolibre",
+      "type": "default"
+    },
+    {
+      "id": "e3",
+      "source": "list-tiendanube",
+      "target": "loop-tiendanube",
+      "type": "default"
+    },
+    {
+      "id": "e4",
+      "source": "list-mercadolibre",
+      "target": "loop-mercadolibre",
+      "type": "default"
+    },
+    {
+      "id": "e5",
+      "source": "loop-tiendanube",
+      "target": "formula-count",
+      "type": "default"
+    },
+    {
+      "id": "e6",
+      "source": "loop-mercadolibre",
+      "target": "formula-count",
+      "type": "default"
+    },
+    {
+      "id": "e7",
+      "source": "formula-count",
+      "target": "condition-alert",
+      "type": "default"
+    },
+    {
+      "id": "e8",
+      "source": "condition-alert",
+      "target": "slack-alert",
+      "type": "default"
+    }
+  ]
+}

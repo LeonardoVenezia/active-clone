@@ -1,0 +1,215 @@
+{
+  "name": "Soporte Automático de Preguntas en Mercado Libre",
+  "nodes": [
+    {
+      "id": "trigger-1",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 260
+      },
+      "data": {
+        "label": "Pregunta Recibida - Mercado Libre",
+        "description": "Se dispara cuando un comprador hace una pregunta en Mercado Libre",
+        "type": "trigger",
+        "config": {
+          "triggerType": "mercadolibre/question-received"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "get-question",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "Obtener Pregunta - Mercado Libre",
+        "description": "Trae el texto completo de la pregunta y el ítem asociado",
+        "type": "action",
+        "config": {
+          "actionType": "mercadolibre/get-question",
+          "questionId": "{{@trigger-1:Pregunta Recibida.questionId}}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "search-orders",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 410
+      },
+      "data": {
+        "label": "Buscar Orden - Mercado Libre",
+        "description": "Busca la orden asociada al ítem de la pregunta",
+        "type": "action",
+        "config": {
+          "actionType": "mercadolibre/search-orders",
+          "query": "{{@get-question:Obtener Pregunta.itemId}}",
+          "status": "any",
+          "limit": "5"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "get-policies",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 260
+      },
+      "data": {
+        "label": "Leer Políticas",
+        "description": "Lee el contenido completo del Google Doc de políticas de la tienda (reemplazar GOOGLE_DOC_ID por el ID real del documento)",
+        "type": "action",
+        "config": {
+          "actionType": "firecrawl/scrape",
+          "url": "https://docs.google.com/document/d/GOOGLE_DOC_ID/edit"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "get-order",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 410
+      },
+      "data": {
+        "label": "Obtener Orden - Mercado Libre",
+        "description": "Trae el detalle completo de la orden encontrada",
+        "type": "action",
+        "config": {
+          "actionType": "mercadolibre/get-order",
+          "orderId": "{{@search-orders:Buscar Orden.orders[0].id}}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "draft-reply",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 260
+      },
+      "data": {
+        "label": "Redactar Respuesta",
+        "description": "Redacta la respuesta al comprador usando el detalle de la orden y las políticas del Google Doc",
+        "type": "action",
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Sos el equipo de atención al cliente de una tienda que vende en Mercado Libre. Redactá una respuesta breve, cordial y en español rioplatense para esta pregunta de un comprador.\n\nPregunta del comprador: {{@get-question:Obtener Pregunta.text}}\n\nDetalle de la orden asociada: {{@get-order:Obtener Orden}}\n\nPolíticas de la tienda (contenido completo del Google Doc de políticas, usar como única fuente de verdad para envíos, cambios, devoluciones y garantías):\n{{@google-doc:Leer Google Doc.data}}\n\nRespaldo de políticas (misma fuente, en markdown):\n{{@get-policies:Leer Políticas.markdown}}\n\nReglas: no inventes plazos, costos ni condiciones que no estén en las políticas. Si la política no cubre el caso, ofrecé amablemente escalar el caso a un asesor humano. No incluyas datos personales sensibles del comprador. Devolvé solo el texto de la respuesta, sin encabezados ni comillas."
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "answer-question",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 260
+      },
+      "data": {
+        "label": "Responder Pregunta - Mercado Libre",
+        "description": "Publica la respuesta redactada en la pregunta de Mercado Libre",
+        "type": "action",
+        "config": {
+          "actionType": "mercadolibre/answer-question",
+          "questionId": "{{@get-question:Obtener Pregunta.id}}",
+          "text": "{{@draft-reply:Redactar Respuesta.text}}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "google-doc",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 110
+      },
+      "data": {
+        "label": "Leer Google Doc",
+        "description": "Lee el contenido completo del Google Doc de políticas de la tienda usando la acción de Google Docs (Composio)",
+        "type": "action",
+        "config": {
+          "actionType": "composio/run-tool",
+          "httpMethod": "GET",
+          "endpoint": "https://docs.google.com/document/d/GOOGLE_DOC_ID/export?format=txt",
+          "httpHeaders": "{\"Authorization\": \"Bearer <GOOGLE_OAUTH_ACCESS_TOKEN>\"}",
+          "httpBody": "{}",
+          "toolkit": "googledocs",
+          "tool": "GOOGLEDOCS_GET_DOCUMENT_BY_ID",
+          "arguments": "{\"document_id\": \"GOOGLE_DOC_ID\"}"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger-1",
+      "target": "get-question",
+      "type": "default"
+    },
+    {
+      "id": "e2",
+      "source": "get-question",
+      "target": "search-orders",
+      "type": "default"
+    },
+    {
+      "id": "e3",
+      "source": "get-question",
+      "target": "get-policies",
+      "type": "default"
+    },
+    {
+      "id": "e4",
+      "source": "search-orders",
+      "target": "get-order",
+      "type": "default"
+    },
+    {
+      "id": "e5",
+      "source": "get-order",
+      "target": "draft-reply",
+      "type": "default"
+    },
+    {
+      "id": "e6",
+      "source": "get-policies",
+      "target": "draft-reply",
+      "type": "default"
+    },
+    {
+      "id": "e7",
+      "source": "draft-reply",
+      "target": "answer-question",
+      "type": "default"
+    },
+    {
+      "id": "e-google-doc-in",
+      "source": "get-question",
+      "target": "google-doc",
+      "type": "default"
+    },
+    {
+      "id": "e-google-doc-out",
+      "source": "google-doc",
+      "target": "draft-reply",
+      "type": "default"
+    }
+  ]
+}
