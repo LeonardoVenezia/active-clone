@@ -1,3 +1,5 @@
+import jsonata from "jsonata";
+
 /**
  * Deterministic post-generation validation for AI-built workflows.
  * Pure functions over the node/edge graph: no model, no I/O.
@@ -743,6 +745,13 @@ export function formulaExpressionError(nodes: FlowNode[]): string | null {
     // Bare string/number literal = computes nothing
     if (/^"[^"]*"$/.test(expression) || /^'[^']*'$/.test(expression) || /^-?\d+(\.\d+)?$/.test(expression)) {
       return `semántica: Fórmula node "${n.id}" (${label}) has a constant expression that computes nothing ("${expression.slice(0, 60)}"); the expression MUST be JSONata that uses the fields declared in its "input" (${keys.join(", ")}) - e.g. filtering, mapping or comparing them. Never use a Fórmula to emit fixed text; write fixed text directly in the step that needs it`;
+    }
+    // Syntax: compile with the real JSONata engine (catches $@. and friends)
+    try {
+      jsonata(expression);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return `semántica: Fórmula node "${n.id}" (${label}) has invalid JSONata ("${msg.slice(0, 80)}"); fix the expression syntax - valid JSONata uses $ for the current item only inside $map/$filter lambdas (e.g. $filter(pagos, function($p) { $not($p.id in ordenes.id) })), never $@. or invented symbols`;
     }
     const usesKey = keys.some((k) => new RegExp(`(^|[^\\w$])\\$?${k}([^\\w$]|$)`).test(expression));
     if (!usesKey) {
