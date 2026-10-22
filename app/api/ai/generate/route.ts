@@ -602,11 +602,38 @@ export async function POST(request: Request) {
           } catch (error) { console.error("[ai-generate] tools pass failed", route.name, error instanceof Error ? error.message.slice(0, 240) : "unknown"); }
         }
       };
+      // Deterministic repair: references into a Fórmula node's value need the
+      // "result." wrapper the engine adds. Rewriting that mechanically is
+      // cheaper and more reliable than spending a model round on a typo.
+      const fixFormulaRefs = (): number => {
+        let fixed = 0;
+        const formulaIds = new Set(shadow.nodes.filter(n => (n.data as { config?: { actionType?: string } })?.config?.actionType === "Fórmula").map(n => n.id));
+        if (!formulaIds.size) return 0;
+        const walk = (val: unknown): unknown => {
+          if (typeof val === "string") {
+            return val.replace(/\{\{@([A-Za-z0-9_-]+):([^}:.]+)\.(?!result[.\[])([^}]+)\}\}/g, (m, id: string, label: string, rest: string) => {
+              if (!formulaIds.has(id)) return m;
+              fixed++;
+              return `{{@\${id}:\${label}.result.\${rest}}}`;
+            });
+          }
+          if (Array.isArray(val)) return val.map(walk);
+          if (val && typeof val === "object") { for (const [k, v] of Object.entries(val as Record<string, unknown>)) (val as Record<string, unknown>)[k] = walk(v); }
+          return val;
+        };
+        for (const n of shadow.nodes) {
+          const data = n.data as { config?: Record<string, unknown> } | undefined;
+          if (data?.config) walk(data.config);
+        }
+        return fixed;
+      };
       await runOnce([]);
       // Up to 2 corrective rounds, plus one extra when the only remaining
       // errors are consistency-class (e.g. an app the request explicitly
       // asks for is still missing) - those are worth one more shot.
       for (let round = 0; round < 3; round++) {
+        const autoFixed = fixFormulaRefs();
+        if (autoFixed) console.info("[ai-generate] tools auto-fixed Fórmula refs:", autoFixed);
         const errs = computeErrors();
         if (!errs.length) break;
         if (round >= 2 && !errs.some(e => e.startsWith("consistencia:"))) break;
