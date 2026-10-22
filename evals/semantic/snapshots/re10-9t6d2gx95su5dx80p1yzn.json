@@ -1,0 +1,187 @@
+{
+  "id": "9t6d2gx95su5dx80p1yzn",
+  "name": "Reconciliación Diaria de Stripe y Tiendanube",
+  "description": "Flujo diario para traer pagos de Stripe y órdenes de Tiendanube, compararlos, guardarlos en Google Sheets y enviar resumen por Gmail.",
+  "nodes": [
+    {
+      "id": "Rhozf1EdCZJEAJtB2UMiP",
+      "data": {
+        "type": "trigger",
+        "label": "Todos los días a las 8 AM",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 8 * * *"
+        },
+        "status": "idle",
+        "description": "Disparador programado a las 8:00 AM"
+      },
+      "type": "trigger",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "selected": false
+    },
+    {
+      "id": "stripe-payments",
+      "data": {
+        "type": "action",
+        "label": "Traer Cobros Stripe",
+        "config": {
+          "limit": "50",
+          "actionType": "stripe/list-payments"
+        },
+        "status": "idle",
+        "description": "Obtiene los cobros de Stripe del día anterior"
+      },
+      "type": "action",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 460,
+        "y": 260
+      }
+    },
+    {
+      "id": "tiendanube-orders",
+      "data": {
+        "type": "action",
+        "label": "Traer Órdenes Tiendanube",
+        "config": {
+          "limit": 10,
+          "status": "any",
+          "actionType": "tiendanube/search-orders"
+        },
+        "status": "idle",
+        "description": "Obtiene las órdenes de Tiendanube del día anterior"
+      },
+      "type": "action",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 460,
+        "y": 110
+      }
+    },
+    {
+      "id": "compare-data",
+      "data": {
+        "type": "action",
+        "label": "Resumen de Cobros y Órdenes",
+        "config": {
+          "input": "{\"stripe_count\": {{@stripe-payments:Traer Cobros Stripe.count}}, \"tiendanube_count\": {{@tiendanube-orders:Traer Órdenes Tiendanube.count}}}",
+          "actionType": "Fórmula",
+          "expression": "\"Stripe total: \" & stripe_count & \" | Tiendanube total: \" & tiendanube_count"
+        },
+        "status": "idle",
+        "description": "Compara listados y detecta cobros sin orden u órdenes sin cobro"
+      },
+      "type": "action",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 830,
+        "y": 185
+      }
+    },
+    {
+      "id": "sheets-record",
+      "data": {
+        "type": "action",
+        "label": "Crear Planilla y Anotar",
+        "config": {
+          "tool": "GOOGLESHEETS_CREATE_GOOGLE_SHEET1",
+          "toolkit": "googlesheets",
+          "arguments": "{\"title\": \"Reconciliación Diaria\"}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle",
+        "description": "Crea la planilla Reconciliación Diaria en Google Sheets"
+      },
+      "type": "action",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 1200,
+        "y": 185
+      }
+    },
+    {
+      "id": "gmail-summary",
+      "data": {
+        "type": "action",
+        "label": "Enviar Resumen por Gmail",
+        "config": {
+          "tool": "GMAIL_SEND_EMAIL",
+          "toolkit": "gmail",
+          "arguments": "{\"recipient_email\": \"finanzas@example.com\", \"subject\": \"Resumen de Reconciliación Diaria\", \"body\": \"Hola equipo de finanzas,\\n\\nAquí tienen el resumen de la reconciliación diaria.\\n\\nResultado: {{@compare-data:Resumen de Cobros y Órdenes.result}}\\n\\nSaludos.\"}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle",
+        "description": "Envía un correo con el resumen de la reconciliación al equipo de finanzas"
+      },
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "type": "animated",
+      "source": "Rhozf1EdCZJEAJtB2UMiP",
+      "target": "stripe-payments"
+    },
+    {
+      "id": "e2",
+      "type": "animated",
+      "source": "Rhozf1EdCZJEAJtB2UMiP",
+      "target": "tiendanube-orders"
+    },
+    {
+      "id": "e3",
+      "type": "animated",
+      "source": "stripe-payments",
+      "target": "compare-data"
+    },
+    {
+      "id": "e4",
+      "type": "animated",
+      "source": "tiendanube-orders",
+      "target": "compare-data"
+    },
+    {
+      "id": "e5",
+      "type": "animated",
+      "source": "compare-data",
+      "target": "sheets-record"
+    },
+    {
+      "id": "e6",
+      "type": "animated",
+      "source": "sheets-record",
+      "target": "gmail-summary"
+    }
+  ],
+  "visibility": "private",
+  "active": false,
+  "createdAt": "2026-10-22T17:42:05.897Z",
+  "updatedAt": "2026-10-22T17:45:59.022Z",
+  "isOwner": true,
+  "canEdit": true,
+  "shared": false
+}

@@ -177,3 +177,17 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
   formas fake observadas, pero el pipeline publica igual cuando el corrective
   no corre o no logra reparar. Se agota el cupo de 2 ciclos tighten-and-measure.
 - Tally honesto final: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/5, C-12 0/2.
+
+## Medición live re10 (deploy f22f341, template reconcile mandatorio, 2026-10-22 ~17:45 UTC)
+
+- C-09: FAIL (workflow 9t6d2gx95su5dx80p1yzn, 1/3 checks). Primer build fresco
+  post-template: el modelo ignoró el mandato del template y produjo una Fórmula
+  "Resumen de Cobros y Órdenes" de conteo:
+  `"Stripe total: " & stripe_count & " | Tiendanube total: " & tiendanube_count`
+  con input ligado a `...payments.count` y `...orders.count` (agregados, no
+  ítems). Ni pay_3 ni ord_7 llegan a sheet/email. Sexta forma fake distinta:
+  count-summary a pesar del template mandatorio en prompt. El template pasa en
+  sim (snapshot de referencia) pero el modelo live no lo adopta cuando decide
+  "resumir" en vez de "cruzar". Config pass posterior (con Reintentar) tampoco
+  lo corrigió.
+- Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/6, C-12 0/2.
