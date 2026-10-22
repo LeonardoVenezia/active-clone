@@ -733,6 +733,11 @@ function bareIdentifiersInCondition(expression: string): string[] {
  * templates; top-level keys are read with a tolerant regex.
  */
 export function formulaExpressionError(nodes: FlowNode[]): string | null {
+  const byId = new Map(nodes.map((x) => [x.id, x]));
+  const isListNode = (id: string | undefined): boolean => {
+    const n = id ? byId.get(id) : undefined;
+    return !!n && LIST_ACTION_RE.test(actionTypeOf(n));
+  };
   for (const n of nodes) {
     if (actionTypeOf(n) !== "Fórmula") continue;
     const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
@@ -753,9 +758,22 @@ export function formulaExpressionError(nodes: FlowNode[]): string | null {
       const msg = e instanceof Error ? e.message : String(e);
       return `semántica: Fórmula node "${n.id}" (${label}) has invalid JSONata ("${msg.slice(0, 80)}"); fix the expression syntax - valid JSONata uses $ for the current item only inside $map/$filter lambdas (e.g. $filter(pagos, function($p) { $not($p.id in ordenes.id) })), never $@. or invented symbols`;
     }
-    const usesKey = keys.some((k) => new RegExp(`(^|[^\\w$])\\$?${k}([^\\w$]|$)`).test(expression));
+    const keyUsed = (k: string) => new RegExp(`(^|[^\\w$])\\$?${k}([^\\w$]|$)`).test(expression);
+    const usesKey = keys.some(keyUsed);
     if (!usesKey) {
       return `semántica: Fórmula node "${n.id}" (${label}) expression uses none of its "input" fields (${keys.join(", ")}); the JSONata expression MUST reference at least one input field (e.g. ${keys[0]}) so the step actually transforms data`;
+    }
+    // Anti-projection: an input key bound to a LIST output ({{@node:...}} of a
+    // list/search action) exists to be crossed/transformed; an expression that
+    // ignores one of them (e.g. just `stripe`) is a no-op projection, not a
+    // comparison. Require every list-bound key to be used.
+    const listKeys = keys.filter((k) => {
+      const m = new RegExp(`"${k}"\\s*:\\s*[^,{]*\\{\\{@([\\w-]+):`).exec(input);
+      return m ? isListNode(m[1]) : false;
+    });
+    const unused = listKeys.filter((k) => !keyUsed(k));
+    if (unused.length > 0) {
+      return `semántica: Fórmula node "${n.id}" (${label}) declares list input(s) ${unused.map((u) => `"${u}"`).join(", ")} but never uses them in the expression; when a Fórmula receives two lists its JSONata MUST use BOTH (e.g. $filter(pagos, function($p) { $not($p.id in ordenes.id) })), never return one of them unchanged`;
     }
   }
   return null;
