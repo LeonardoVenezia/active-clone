@@ -236,3 +236,14 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
   snapshot final: soloEnA=[pay_3], soloEnB=[ord_7] exacto contra el fixture,
   y ambas salidas llegan a Sheets+Gmail vía .result.
 - Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 1/8, C-12 0/2.
+
+## Medición live re13 (mismo deploy 065f4f4, 2026-10-22 ~19:22 UTC)
+
+- C-09: FAIL (1/3 checks). Estructura perfecta otra vez (6 nodos, Schedule,
+  Fórmula template verbatim, verificación offline EXACTA pay_3/ord_7), pero el
+  downstream quedó SIN wiring: Sheets escribe un string estático con un
+  spreadsheet_id inventado ("1A2B3C4D5E6F_SPREADSHEET_ID_DRAFT" — placeholder
+  que findPlaceholders no flaggeó) y Gmail manda un body estático sin las
+  diferencias. El config pass solo completó recipient_email. Ni pay_3 ni ord_7
+  llegan. Modo de falla nuevo: refs {{@...}} ausentes en los pasos finales.
+- Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 1/9, C-12 0/2.
