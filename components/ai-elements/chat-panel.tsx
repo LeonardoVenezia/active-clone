@@ -70,7 +70,6 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
   useEffect(() => { const onMessage = (event: MessageEvent) => { const current = cardRef.current; if (event.origin === window.location.origin && event.data?.type === "active-clone:connection-complete" && current && event.data.toolkitId === current.toolkitId) void checkConnected(); }; const onFocus = () => { if (document.visibilityState === "visible" && cardRef.current) void checkConnected(); }; window.addEventListener("message", onMessage); window.addEventListener("focus", onFocus); document.addEventListener("visibilitychange", onFocus); return () => { window.removeEventListener("message", onMessage); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onFocus); }; }, []);
   async function send(override?: string) {
     const t = (override ?? text).trim(); if (!t || busy) return;
-    if (undo && /^\s*(?:desh[aá]c[eé]|deshacer|undo|volv[eé] atr[aá]s)(?![\p{L}])/iu.test(t)) { setText(""); setForm(null); setMsgs(m => [...m, { id: `u${Date.now()}`, role: "user", content: t }, { id: `a${Date.now()}u`, role: "assistant", content: "Listo, deshice el último cambio." }]); void undoBuild(); return; }
     setForm(null); setFormVals({}); setPendingTemplate(null); setBusy(true); setError(""); const snapshot = { nodes: nodes.filter(n => n.type !== "add").map(n => ({ id: n.id, label: n.data?.label, type: n.data?.type, action: (n.data?.config as { actionType?: string; triggerType?: string } | undefined)?.actionType || (n.data?.config as { triggerType?: string } | undefined)?.triggerType })), edges: edges.map(e => ({ source: e.source, target: e.target })) };
     try {
       const r = await fetch("/api/workflow-chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflowId, message: t, snapshot }), signal: AbortSignal.timeout(65000) });
@@ -80,7 +79,7 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
       setMsgs(m => [...m, userMsg, { id: asstId, role: "assistant", content: "" }]);
       setText("");
       let finalText = "";
-      let result: { build?: string | null; connect?: Record<string, unknown> | null; form?: { title: string; fields: { key: string; label: string }[]; offerCreate: boolean } | null; template?: { id: string; name: string; description: string } | null; templateImport?: { id: string; name: string; description: string } | null } = {};
+      let result: { build?: string | null; connect?: Record<string, unknown> | null; form?: { title: string; fields: { key: string; label: string }[]; offerCreate: boolean } | null; template?: { id: string; name: string; description: string } | null; templateImport?: { id: string; name: string; description: string } | null; undo?: boolean | null } = {};
       const chunkStream = parseJsonEventStream({ stream: r.body, schema: uiMessageChunkSchema }).pipeThrough(new TransformStream({ transform(part, controller) { if (part.success) controller.enqueue(part.value); } }));
       for await (const msg of readUIMessageStream({ stream: chunkStream })) {
         const replace = msg.parts.find(part => part.type === "data-replace-text") as { data?: { text?: string } } | undefined;
@@ -98,6 +97,7 @@ export function ChatPanel({ workflowId }: { workflowId: string }) {
       const autoBuild = !!result.build && !result.connect && !result.templateImport;
       setPendingBuild(result.build && !autoBuild ? { instruction: result.build, convo: next } : null);
       if (autoBuild && result.build) void build(result.build, next);
+      if (result.undo) { if (undo) void undoBuild(); else setMsgs(m => [...m, { id: `a${Date.now()}n`, role: "assistant", content: "No hay un cambio reciente para deshacer." }]); }
       if (result.templateImport) { const imp = result.templateImport; const followUp = result.build; void (async () => { await importTemplate(imp); if (followUp) void build(followUp, next); })(); }
     } catch (e) { setMsgs(m => m.filter(x => x.content !== "")); setError(e instanceof Error ? e.message : "Something went wrong. Your message is still in the box."); } finally { setBusy(false); }
   }
