@@ -165,3 +165,15 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
   la forma, pero el pipeline la deja pasar cuando el corrective pass no puede
   ejecutarse — no es un gap de regla, es de resiliencia del pipeline.
 - Tally honesto sin cambios: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/5, C-12 0/2.
+
+## Medición live re9-final (mismo deploy 97ef03e, 2026-10-22 ~17:30 UTC)
+
+- C-09: FAIL confirmado en re-medición limpia (mismo workflow v5o24mdtv4ui97xlkebqt,
+  2/3: pay_3 sólo por presencia, ord_7 ausente). Con el modelo ya responsivo el
+  builder completó la configuración pendiente (recipient_email) en un pass
+  posterior, pero la proyección `stripe` de la Fórmula quedó publicada: el
+  corrective pass no la reparó aunque la regla anti-proyección la rechaza
+  (verificado en tests). Conclusión del ciclo: las reglas atrapan todas las
+  formas fake observadas, pero el pipeline publica igual cuando el corrective
+  no corre o no logra reparar. Se agota el cupo de 2 ciclos tighten-and-measure.
+- Tally honesto final: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/5, C-12 0/2.
