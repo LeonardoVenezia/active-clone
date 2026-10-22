@@ -1,0 +1,171 @@
+{
+ "id": "v5o24mdtv4ui97xlkebqt",
+ "name": "Reconciliación Diaria Stripe y Tiendanube",
+ "description": "Ejecuta todos los días a las 8 AM, trae pagos de Stripe y órdenes de Tiendanube, compara diferencias, anota en Google Sheets y envía resumen por Gmail.",
+ "nodes": [
+  {
+   "id": "buwpy6elFuNFSKNDDM9a8",
+   "data": {
+    "type": "trigger",
+    "label": "Programación 8:00 AM",
+    "config": {
+     "triggerType": "Schedule",
+     "scheduleCron": "0 8 * * *"
+    },
+    "status": "idle",
+    "description": "Se ejecuta todos los días a las 8 AM"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 90,
+    "y": 185
+   },
+   "selected": false
+  },
+  {
+   "id": "stripe-payments",
+   "data": {
+    "type": "action",
+    "label": "Cobros Stripe",
+    "config": {
+     "limit": "50",
+     "actionType": "stripe/list-payments"
+    },
+    "status": "idle",
+    "description": "Traer cobros del día anterior"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 260
+   }
+  },
+  {
+   "id": "tiendanube-orders",
+   "data": {
+    "type": "action",
+    "label": "Órdenes Tiendanube",
+    "config": {
+     "limit": 50,
+     "status": "any",
+     "actionType": "tiendanube/search-orders"
+    },
+    "status": "idle",
+    "description": "Traer órdenes del día anterior"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 110
+   }
+  },
+  {
+   "id": "compare-data",
+   "data": {
+    "type": "action",
+    "label": "Comparar Pagos y Órdenes",
+    "config": {
+     "input": "{\"stripe\": {{@stripe-payments:Cobros Stripe.payments}}, \"tiendanube\": {{@tiendanube-orders:Órdenes Tiendanube.orders}}}",
+     "actionType": "Fórmula",
+     "expression": "stripe"
+    },
+    "status": "idle",
+    "description": "Detectar cobros sin orden u órdenes sin cobro"
+   },
+   "type": "action",
+   "position": {
+    "x": 830,
+    "y": 185
+   }
+  },
+  {
+   "id": "create-sheet",
+   "data": {
+    "type": "action",
+    "label": "Crear Planilla Reconciliación",
+    "config": {
+     "tool": "GOOGLESHEETS_CREATE_GOOGLE_SHEET1",
+     "toolkit": "googlesheets",
+     "arguments": "{\"title\": \"Reconciliación Diaria\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle",
+    "description": "Crear planilla de Google Sheets"
+   },
+   "type": "action",
+   "position": {
+    "x": 1200,
+    "y": 185
+   }
+  },
+  {
+   "id": "send-gmail",
+   "data": {
+    "type": "action",
+    "label": "Enviar Resumen Finanzas",
+    "config": {
+     "tool": "GMAIL_SEND_EMAIL",
+     "toolkit": "gmail",
+     "arguments": "{\"recipient_email\": \"finanzas@example.com\", \"subject\": \"Resumen de Reconciliación Diaria\", \"body\": \"Hola equipo, adjunto el resumen de diferencias de la reconciliación diaria: {{@compare-data:Comparar Pagos y Órdenes.result}}\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle",
+    "description": "Enviar resumen por Gmail al equipo de finanzas"
+   },
+   "type": "action",
+   "position": {
+    "x": 1570,
+    "y": 185
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "buwpy6elFuNFSKNDDM9a8",
+   "target": "stripe-payments"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "buwpy6elFuNFSKNDDM9a8",
+   "target": "tiendanube-orders"
+  },
+  {
+   "id": "e3",
+   "type": "animated",
+   "source": "stripe-payments",
+   "target": "compare-data"
+  },
+  {
+   "id": "e4",
+   "type": "animated",
+   "source": "tiendanube-orders",
+   "target": "compare-data"
+  },
+  {
+   "id": "e5",
+   "type": "animated",
+   "source": "compare-data",
+   "target": "create-sheet"
+  },
+  {
+   "id": "e6",
+   "type": "animated",
+   "source": "create-sheet",
+   "target": "send-gmail"
+  }
+ ],
+ "visibility": "private",
+ "active": false,
+ "createdAt": "2026-10-22T14:57:03.489Z",
+ "updatedAt": "2026-10-22T15:13:38.691Z",
+ "isOwner": true,
+ "canEdit": true,
+ "shared": false
+}

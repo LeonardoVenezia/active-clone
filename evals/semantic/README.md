@@ -152,3 +152,16 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
   en el cruce, las keys del input deben apuntar al output ARRAY de la lista
   (payments/orders), no a escalares (count/hasMore/total).
 - Tally honesto sin cambios: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/5, C-12 0/2.
+
+## Medición live re9 (deploy 97ef03e con array-binding, 2026-10-22 ~15:20 UTC)
+
+- C-09: FAIL (v5o24mdtv4ui97xlkebqt), 2/3 checks. El array-binding funcionó:
+  el input de la Fórmula ahora referencia `.payments` y `.orders` (arrays).
+  Pero la expression volvió a la proyección `stripe` — la regla anti-proyección
+  la RECHAZA (tiendanube sin usar), sólo que la ola busy del modelo free
+  dejó el corrective pass sin respuestas (2 reintentos, empty) y la app
+  publicó el flujo con el error sin corregir. pay_3 aparece sólo por presencia
+  (volcado crudo), ord_7 ausente. Hallazgo estructural: el validador atrapa
+  la forma, pero el pipeline la deja pasar cuando el corrective pass no puede
+  ejecutarse — no es un gap de regla, es de resiliencia del pipeline.
+- Tally honesto sin cambios: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/5, C-12 0/2.
