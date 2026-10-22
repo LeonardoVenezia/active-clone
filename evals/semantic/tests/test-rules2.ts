@@ -1,6 +1,6 @@
 import "/home/sandbox/ac/plugins/index";
 import { readFileSync, readdirSync } from "node:fs";
-import { validateFlow, conditionExpressionError, listCrossingError, type FlowNode, type FlowEdge } from "/home/sandbox/ac/lib/flow-validator";
+import { validateFlow, conditionExpressionError, formulaExpressionError, listCrossingError, type FlowNode, type FlowEdge } from "/home/sandbox/ac/lib/flow-validator";
 import { getActionOutputFields, getActionOutputItemFields } from "/home/sandbox/ac/plugins/registry";
 
 let bad = 0;
@@ -61,6 +61,15 @@ if (!fakeErr.some(e => e.includes("placeholder"))) { console.log("MISS placehold
 {
   const err = listCrossingError(c09, load("re7-opx0evpqmbdtg0u5tbeqg.json").nodes as FlowNode[]);
   if (err) { console.log("FP listCrossing re7-opx0 array-binding:", err); bad++; }
+}
+
+// Plantilla prebuilt de reconciliación: no debe disparar NINGUNA regla
+{
+  const wf = load("template-c09-reference.json");
+  const fErr = formulaExpressionError(wf.nodes as FlowNode[]);
+  if (fErr) { console.log("FP formula plantilla:", fErr.slice(0, 100)); bad++; }
+  const xErr = listCrossingError(c09, wf.nodes as FlowNode[]);
+  if (xErr) { console.log("FP listCrossing plantilla:", xErr.slice(0, 100)); bad++; }
 }
 
 console.log(bad === 0 ? "ALL-RULES2 OK" : `${bad} problems`);

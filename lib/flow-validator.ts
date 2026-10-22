@@ -813,7 +813,7 @@ export function formulaExpressionError(nodes: FlowNode[]): string | null {
     });
     const unused = listKeys.filter((k) => !keyUsed(k));
     if (unused.length > 0) {
-      return `semántica: Fórmula node "${n.id}" (${label}) declares list input(s) ${unused.map((u) => `"${u}"`).join(", ")} but never uses them in the expression; when a Fórmula receives two lists its JSONata MUST use BOTH (e.g. $filter(pagos, function($p) { $not($p.id in ordenes.id) })), never return one of them unchanged`;
+      return `semántica: Fórmula node "${n.id}" (${label}) declares list input(s) ${unused.map((u) => `"${u}"`).join(", ")} but never uses them in the expression; when a Fórmula receives two lists use the PREBUILT reconcile template verbatim (fill only key/field names): {"soloEnA": $filter(keyA, function($x) { $not($number($x.fieldA) in $map(keyB, function($y){ $number($y.fieldB) })) }), "soloEnB": $filter(keyB, function($y) { $not($number($y.fieldB) in $map(keyA, function($x){ $number($x.fieldA) })) })} (numeric join) - never return one list unchanged`;
     }
   }
   return null;
@@ -986,7 +986,7 @@ export function listCrossingError(promptText: string, nodes: FlowNode[]): string
   });
   if (scalarBinding) {
     const b = scalarBinding as { id: string; label: string; field: string };
-    return `semántica: Fórmula node "${b.id}" (${b.label}) binds "${b.field}", a scalar/indexed output; to CROSS two lists the "input" MUST bind each list's ARRAY output (e.g. {"pagos": {{@stripe:....payments}}, "ordenes": {{@tienda:....orders}}}) and the JSONata must filter/map items of one list against the other - comparing counts or single items is not a reconciliation`;
+    return `semántica: Fórmula node "${b.id}" (${b.label}) binds "${b.field}", a scalar/indexed output; to CROSS two lists the "input" MUST bind each list's ARRAY output (e.g. {"pagos": {{@stripe:....payments}}, "ordenes": {{@tienda:....orders}}}) and the expression MUST be the PREBUILT reconcile template ({"soloEnA": $filter(keyA, ...), "soloEnB": $filter(keyB, ...)} with $number($x.fieldA) in $map(keyB, ...) for numeric joins) - comparing counts or single items is not a reconciliation`;
   }
   if (hasCrossFormula) return null;
   const hasCrossLoop = nodes.some((n) => {

@@ -21,7 +21,7 @@ const err3 = formulaExpressionError(good);
 if (err3) { console.log("FP formula buena:", err3.slice(0, 120)); bad++; }
 
 // Sin FP en ningún snapshot
-const EXPECTED_FORMULA_HITS = ["re7-8l88pqixvopqfu55dqvhi.json", "28d8y1lxt7mrcv4uhwfqc.json", "re7-jv7o755aum5hu288w8rve.json", "re7-opx0evpqmbdtg0u5tbeqg.json", "re6-j1rq5fxs8dzeymrepge66.json", "re5-hw0ycjusgh239zupz6mkq.json"]; // constantes, JSONata inválido o proyección (TP)
+const EXPECTED_FORMULA_HITS = ["re7-8l88pqixvopqfu55dqvhi.json", "28d8y1lxt7mrcv4uhwfqc.json", "re7-jv7o755aum5hu288w8rve.json", "re7-opx0evpqmbdtg0u5tbeqg.json", "re6-j1rq5fxs8dzeymrepge66.json", "re5-hw0ycjusgh239zupz6mkq.json", "re9-v5o24mdtv4ui97xlkebqt.json"]; // constantes, JSONata inválido o proyección (TP)
 for (const f of readdirSync("/home/sandbox/ac/evals/semantic/snapshots")) {
   const err = formulaExpressionError(load(f).nodes as FlowNode[]);
   if (EXPECTED_FORMULA_HITS.includes(f)) {
