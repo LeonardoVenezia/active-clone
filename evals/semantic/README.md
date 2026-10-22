@@ -99,3 +99,22 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
 - Nota de honestidad: el PASS de C-09/re7 (snapshot mqu47m0c) era solo por
   presencia: los ids aparecían via volcado crudo del listado en el cuerpo
   del mail, no por reconciliación computada.
+
+
+## Medición live re7-c (deploy 6f90175 con levers 1-3, 2026-10-22 ~12:30 UTC)
+
+- **C-02: PASS 4/4 live** (tnl6kz9k3e22une0nr4du): trigger order-created →
+  get-shipment (orderId del trigger) → Condition con enum inglés 'delayed'
+  → Slack dispara, WhatsApp con ZN-TRACK-123, todos los campos resuelven.
+  La metadata de list-shipments + enums visibles en el prompt funcionaron.
+- C-09: FAIL live (1bwvgsza2a52hzg35hzat). Estructura determinística
+  (2 Loops con Fórmula inner, sin IA), pero las Fórmulas son eco por ítem
+  (`paymentId ? amount : 0`): ninguna mira la otra lista; el mail reporta
+  counts. La regla anti-ceremonial no lo atrapa (sí referencia sus inputs).
+  Además referencia `create-sheet.data` inexistente. Hallazgo: para cruzar
+  dos listas hace falta UNA Fórmula con AMBAS listas en el input; el modelo
+  tiende a loops paralelos. Posible regla futura: si el prompt pide
+  comparar/cruzar/reconciliar, exigir Fórmula con ≥2 refs a outputs de listas.
+- C-12: no medible esta corrida — el modelo free devolvió vacío/respuesta
+  no usable en 3 intentos seguidos (busy). Sin cambios: 0/2 genuino de re6.
+- Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/5, C-12 0/2.
