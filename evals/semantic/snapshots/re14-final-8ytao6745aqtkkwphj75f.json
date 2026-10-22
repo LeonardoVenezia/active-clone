@@ -1,0 +1,252 @@
+{
+  "id": "8ytao6745aqtkkwphj75f",
+  "name": "Reconciliación Diaria de Cobros y Órdenes",
+  "description": "Flujo diario para conciliar cobros de Stripe y órdenes de Tiendanube, registrando diferencias en Google Sheets y enviando resumen por Gmail.",
+  "nodes": [
+    {
+      "id": "4FEOFxE-gbk3COGqz40YP",
+      "data": {
+        "type": "trigger",
+        "label": "Trigger Diario 8 AM",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 8 * * *"
+        },
+        "status": "idle",
+        "description": "Se ejecuta todos los días a las 8 de la mañana"
+      },
+      "type": "trigger",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 260
+      },
+      "selected": false
+    },
+    {
+      "id": "stripe-payments",
+      "data": {
+        "type": "action",
+        "label": "Cobros Stripe Ayer",
+        "config": {
+          "limit": "100",
+          "actionType": "stripe/list-payments"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 460,
+        "y": 303
+      }
+    },
+    {
+      "id": "tiendanube-orders",
+      "data": {
+        "type": "action",
+        "label": "Órdenes Tiendanube Ayer",
+        "config": {
+          "limit": 100,
+          "status": "any",
+          "actionType": "tiendanube/search-orders",
+          "paymentStatus": "any",
+          "shippingStatus": "any"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 460,
+        "y": 153
+      }
+    },
+    {
+      "id": "reconcile-formula",
+      "data": {
+        "type": "action",
+        "label": "Comparar Cobros y Órdenes",
+        "config": {
+          "input": "{\"pagos\": {{@stripe-payments:Cobros Stripe Ayer.payments}}, \"ordenes\": {{@tiendanube-orders:Órdenes Tiendanube Ayer.orders}}}",
+          "actionType": "Fórmula",
+          "expression": "{\"soloEnA\": $filter(pagos, function($x) { $not($number($x.amount) in $map(ordenes, function($y){ $number($y.total) })) }), \"ordenesSinCobro\": $filter(ordenes, function($y) { $not($number($y.total) in $map(pagos, function($x){ $number($x.amount) })) })}"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 260
+      }
+    },
+    {
+      "id": "loop-cobros",
+      "data": {
+        "type": "action",
+        "label": "Procesar Cobros sin Orden",
+        "config": {
+          "steps": [
+            {
+              "id": "guardar-cobro",
+              "config": {
+                "tool": "GOOGLESHEETS_BATCH_UPDATE",
+                "toolkit": "googlesheets",
+                "arguments": "{\"spreadsheet_id\": \"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms\", \"sheet_name\": \"Diferencias\", \"values\": [[ \"Cobro sin orden\", \"{{@item:Item.id}}\", \"{{@item:Item.amount}}\" ]], \"value_input_option\": \"USER_ENTERED\"}"
+              },
+              "actionType": "composio/run-tool"
+            }
+          ],
+          "source": "{{@reconcile-formula:Comparar Cobros y Órdenes.result.soloEnA}}",
+          "maxItems": 50,
+          "actionType": "Loop"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 260
+      }
+    },
+    {
+      "id": "loop-ordenes",
+      "data": {
+        "type": "action",
+        "label": "Procesar Órdenes sin Cobro",
+        "config": {
+          "steps": [
+            {
+              "id": "guardar-orden",
+              "config": {
+                "tool": "GOOGLESHEETS_BATCH_UPDATE",
+                "toolkit": "googlesheets",
+                "arguments": "{\"spreadsheet_id\": \"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms\", \"sheet_name\": \"Diferencias\", \"values\": [[ \"Orden sin cobro\", \"{{@item:Item.id}}\", \"{{@item:Item.total}}\" ]], \"value_input_option\": \"USER_ENTERED\"}"
+              },
+              "actionType": "composio/run-tool"
+            }
+          ],
+          "source": "{{@reconcile-formula:Comparar Cobros y Órdenes.result.ordenesSinCobro}}",
+          "maxItems": 50,
+          "actionType": "Loop"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 110
+      }
+    },
+    {
+      "id": "sheets-append",
+      "data": {
+        "type": "action",
+        "label": "Guardar Diferencias en Sheets",
+        "config": {
+          "tool": "GOOGLESHEETS_BATCH_UPDATE",
+          "toolkit": "googlesheets",
+          "arguments": "{\"spreadsheet_id\": \"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms\", \"sheet_name\": \"Diferencias\", \"values\": [[ \"Resumen procesado exitosamente\" ]], \"value_input_option\": \"USER_ENTERED\"}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 260
+      }
+    },
+    {
+      "id": "gmail-send",
+      "data": {
+        "type": "action",
+        "label": "Enviar Resumen por Gmail",
+        "config": {
+          "tool": "GMAIL_SEND_EMAIL",
+          "toolkit": "gmail",
+          "arguments": "{\"recipient_email\": \"finanzas@example.com\", \"subject\": \"Resumen de Reconciliación Diaria\", \"body\": \"Hola equipo,\\n\\nLa reconciliación diaria se ha completado. Revise la planilla de Google Sheets para ver el detalle de las diferencias.\"}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 260
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "type": "animated",
+      "source": "4FEOFxE-gbk3COGqz40YP",
+      "target": "stripe-payments"
+    },
+    {
+      "id": "e2",
+      "type": "animated",
+      "source": "4FEOFxE-gbk3COGqz40YP",
+      "target": "tiendanube-orders"
+    },
+    {
+      "id": "e3",
+      "type": "animated",
+      "source": "stripe-payments",
+      "target": "reconcile-formula"
+    },
+    {
+      "id": "e4",
+      "type": "animated",
+      "source": "tiendanube-orders",
+      "target": "reconcile-formula"
+    },
+    {
+      "id": "e-compare-loop1",
+      "type": "animated",
+      "source": "reconcile-formula",
+      "target": "loop-cobros"
+    },
+    {
+      "id": "e-compare-loop2",
+      "type": "animated",
+      "source": "reconcile-formula",
+      "target": "loop-ordenes"
+    },
+    {
+      "id": "e-loop1-sheets",
+      "type": "animated",
+      "source": "loop-cobros",
+      "target": "sheets-append"
+    },
+    {
+      "id": "e-loop2-sheets",
+      "type": "animated",
+      "source": "loop-ordenes",
+      "target": "sheets-append"
+    },
+    {
+      "id": "e5",
+      "type": "animated",
+      "source": "sheets-append",
+      "target": "gmail-send"
+    }
+  ],
+  "visibility": "private",
+  "active": false,
+  "createdAt": "2026-10-22T19:24:18.148Z",
+  "updatedAt": "2026-10-22T19:33:37.331Z",
+  "isOwner": true,
+  "canEdit": true,
+  "shared": false
+}

@@ -5,8 +5,9 @@ const fx = JSON.parse(readFileSync("evals/semantic/fixtures/c09-reconciliation.j
 const f = wf.nodes.find(n => n.data.config?.actionType === "Fórmula");
 const data = { pagos: fx.sources["stripe/list-payments"].payments, ordenes: fx.sources["tiendanube/search-orders"].orders };
 const result = await jsonata(f.data.config.expression).evaluate(data);
-const a = [result?.soloEnA].flat().filter(Boolean).map(x => x.id);
-const b = [result?.soloEnB].flat().filter(Boolean).map(x => x.id);
-console.log("soloEnA ids:", JSON.stringify(a), "soloEnB ids:", JSON.stringify(b));
-console.log("expected: soloEnA=[pay_3] soloEnB=[ord_7]");
-console.log(a.join() === "pay_3" && b.join() === "ord_7" ? "EXPRESSION CORRECT" : "EXPRESSION WRONG");
+const keys = result && typeof result === "object" ? Object.keys(result) : [];
+const a = [result?.[keys[0]]].flat().filter(Boolean).map(x => x.id);
+const b = [result?.[keys[1]]].flat().filter(Boolean).map(x => x.id);
+console.log("keys:", JSON.stringify(keys), "A ids:", JSON.stringify(a), "B ids:", JSON.stringify(b));
+console.log("expected: A=[pay_3] B=[ord_7]");
+console.log(keys.length === 2 && a.join() === "pay_3" && b.join() === "ord_7" ? "EXPRESSION CORRECT" : "EXPRESSION WRONG");

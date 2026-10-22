@@ -247,3 +247,14 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
   diferencias. El config pass solo completó recipient_email. Ni pay_3 ni ord_7
   llegan. Modo de falla nuevo: refs {{@...}} ausentes en los pasos finales.
 - Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 1/9, C-12 0/2.
+
+## Medición live re14 (mismo deploy 065f4f4, 2026-10-22 ~19:34 UTC)
+
+- C-09: FAIL (1/3). Fórmula con template (renombre permitido: ordenesSinCobro)
+  + DOS Loops consumiendo .result.soloEnA / .result.ordenesSinCobro
+  correctamente — pero Sheets y Gmail otra vez SIN refs {{@...}} (segunda vez
+  en 3 runs post-fix). La variancia ya no está en la Fórmula sino en el wiring
+  de los pasos finales. (verify-re11.mjs ahora lee las keys dinámicamente:
+  el "EXPRESSION WRONG" inicial era artefacto del script, la expresión es
+  correcta.)
+- Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 1/10, C-12 0/2.
