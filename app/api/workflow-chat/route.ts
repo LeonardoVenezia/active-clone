@@ -46,7 +46,7 @@ CUSTOM APIS: when the user wants the flow to call their own API or endpoint (an 
 
 MAIL TRIGGERS: the canvas cannot start a workflow from a new incoming email yet (it only has Manual, Schedule and Webhook). When the user wants something to happen when a mail arrives (for example saving mails in a spreadsheet), never build a Webhook and never pretend it is a mail trigger. Say in one plain sentence that for mail the app has a ready-made "Email to sheet" flow in the Flows page (menu "Flows"), that it reacts to real incoming mail, and ask if they want to use it. Do NOT add a BUILD marker for the mail trigger in that reply.
 DRAFT MODE: when the user explicitly declines to connect accounts for now (a mockup, demo, draft, "maqueta", "borrador sin conectar", "sin conectar nada", "sin ejecutar nada real"), do NOT insist on connecting and NEVER emit a [[CONNECT: ...]] marker, no matter which app a step uses. Plan and build anyway with clearly-marked example values, and mention in one short sentence which steps will need a real connection later (the connection is requested only when the user runs the workflow for real). The user is in charge; a draft on the canvas costs nothing.
-SAVED TEMPLATES: the block below lists flows the user already saved as templates. When the user's request clearly matches one, offer it in ONE short sentence with its name and what it does, and end your reply with the exact marker [[TEMPLATE: its_id]] using only an id from that list, never an invented one. If they say no or ask for something different, continue the normal flow. Never combine TEMPLATE with BUILD, FORM or CONNECT in the same reply. If the list says there are none, never mention templates.
+SAVED TEMPLATES: the block below lists flows the user already saved as templates. When the user's request clearly matches one, offer it in ONE short sentence with its name and what it does, and end your reply with the exact marker [[TEMPLATE: its_id]] using only an id from that list, never an invented one. If they say no or ask for something different, continue the normal flow. Never combine TEMPLATE with BUILD, FORM or CONNECT in the same reply. If the list says there are none, never mention templates. When the user then accepts the offered template - any conversational yes, including a conditional one like "sí pero cambiá X" - end your reply with the exact marker [[TEMPLATE-IMPORT: its_id]] (again only an id from the list) so the app imports it into the canvas right away; if the same message asked for adjustments, ALSO put [[BUILD: those exact adjustments on top of the imported template]] AFTER the import marker. If they decline or ask to build from scratch, no marker: continue the normal flow.
 STRICT RULES:
 - Never announce an intention without acting. Forbidden: "voy a crear", "voy a preparar", "on it", "lo voy a hacer", "I'll build". Either include the [[BUILD: ...]] marker in the same reply, or ask the specific question you still need. Never write a reply that only promises.
 - Never claim the change is done before the build succeeds. Never mention or promise a link, button, or click in prose; only the app shows connection cards.
@@ -189,6 +189,13 @@ export async function POST(r: Request) {
       if (parts.length >= 2 && labels.length) form = { title: parts[0].slice(0, 80), fields: labels.map((l, i) => ({ key: `f${i}`, label: l.slice(0, 80) })), offerCreate };
       reply = reply.replace(/\s*\[\[FORM:[^\]]*\]\]\s*/gi, "\n").trim() || (form ? form.title : "Necesito un dato.");
     }
+    let templateImport: { id: string; name: string; description: string } | null = null;
+    const tim = reply.match(/\[\[TEMPLATE-IMPORT:\s*([A-Za-z0-9_-]{3,64})\s*\]\]/i);
+    if (tim) {
+      const hit = templatesVisible.find(t => t.id === tim[1]);
+      if (hit) templateImport = hit;
+      reply = reply.replace(/\s*\[\[TEMPLATE-IMPORT:[^\]]*\]\]\s*/gi, "\n").trim();
+    }
     let template: { id: string; name: string; description: string } | null = null;
     const tm = reply.match(/\[\[TEMPLATE:\s*([A-Za-z0-9_-]{3,64})\s*\]\]/i);
     if (tm) {
@@ -257,7 +264,7 @@ export async function POST(r: Request) {
       writer.write({ type: "data-replace-text", data: { text: shown } });
     }
     await append(id, b.workflowId as string, "assistant", shown);
-    writer.write({ type: "data-chat-result", data: { build, connect, form: connect || build || template ? null : form, template: connect || build ? null : template, autoBuild: !!build && !connect && !template && (explicitBuildIntent || recentlyConfirmedPlan) } });
+    writer.write({ type: "data-chat-result", data: { build, connect, form: connect || build || template || templateImport ? null : form, template: connect || build || templateImport ? null : template, templateImport: connect ? null : templateImport, autoBuild: !!build && !connect && !template && !templateImport && (explicitBuildIntent || recentlyConfirmedPlan) } });
 
         } catch {
           try { writer.write({ type: "data-chat-error", data: { error: "Something went wrong. Your message was kept; try again." } }); } catch { /* stream already closed */ }

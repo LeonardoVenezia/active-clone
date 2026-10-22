@@ -148,6 +148,8 @@ Node structure:
   }
 }
 
+SCOPE RULE: build ONLY the steps and apps the user asked for. Never add extra steps with apps the user did not mention - no extra notifications (Slack/WhatsApp/email), no extra platforms, no extra tickets - even if they seem useful.
+
 NODE POSITIONING RULES:
 - Nodes are squares, so use equal spacing in both directions
 - Horizontal spacing between sequential nodes: 250px (e.g., x: 100, then x: 350, then x: 600)
@@ -158,6 +160,7 @@ NODE POSITIONING RULES:
 - When adding nodes to existing workflows, position new nodes 250px away from existing nodes
 
 Trigger types:
+- Choose the trigger from the user's words: anything repeating ("todos los días", "cada mañana", "every day", "a las 8", "diario", "semanal", "cada hora") is ALWAYS Schedule with the right scheduleCron, NEVER Manual. Manual only when the user asks to run it by hand.
 - Manual: {"triggerType": "Manual"}
 - Webhook: {"triggerType": "Webhook", "webhookPath": "/webhooks/name", ...}
 - Schedule: {"triggerType": "Schedule", "scheduleCron": "0 9 * * *", ...}
@@ -316,7 +319,7 @@ export async function POST(request: Request) {
     if (existingWorkflow) {
       const nodesList = (existingWorkflow.nodes || []).map((n: { id: string; data?: { label?: string } }) => `- ${n.id} (${n.data?.label || "Unlabeled"})`).join("\n");
       const edgesList = (existingWorkflow.edges || []).map((e: { id: string; source: string; target: string }) => `- ${e.id}: ${e.source} -> ${e.target}`).join("\n");
-      userPrompt = `I have an existing workflow. Make ONLY the changes requested.\nCurrent workflow nodes:\n${nodesList}\nCurrent workflow edges:\n${edgesList}\nFull workflow data (do not recreate existing nodes):\n${JSON.stringify(existingWorkflow, null, 2)}\nUser request: ${prompt}${contractPromptBlock(sourceContracts)}\nOutput only operations needed. Add new edges after nodes. Use existing node ids; avoid overlaps; preserve structure.`;
+      userPrompt = `I have an existing workflow. Make ONLY the changes requested. If the request only supplies missing setup values (a spreadsheet id or name, an email address, a channel, a folder), apply them with updateNode operations ONLY: do NOT add, remove, replace, retype or rewire any node, and NEVER replace a Fórmula node with another action type (Loop, AI text, etc.) - the existing structure was already validated, preserve every node id, action type and expression verbatim.\nCurrent workflow nodes:\n${nodesList}\nCurrent workflow edges:\n${edgesList}\nFull workflow data (do not recreate existing nodes):\n${JSON.stringify(existingWorkflow, null, 2)}\nUser request: ${prompt}${contractPromptBlock(sourceContracts)}\nOutput only operations needed. Add new edges after nodes. Use existing node ids; avoid overlaps; preserve structure.`;
     }
     async function* textChunks() {
       const failures: string[] = [];
