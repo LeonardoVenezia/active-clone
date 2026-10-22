@@ -1,0 +1,12 @@
+import jsonata from "jsonata";
+import { readFileSync } from "node:fs";
+const wf = JSON.parse(readFileSync(process.argv[2], "utf8"));
+const fx = JSON.parse(readFileSync("evals/semantic/fixtures/c09-reconciliation.json", "utf8"));
+const f = wf.nodes.find(n => n.data.config?.actionType === "Fórmula");
+const data = { pagos: fx.sources["stripe/list-payments"].payments, ordenes: fx.sources["tiendanube/search-orders"].orders };
+const result = await jsonata(f.data.config.expression).evaluate(data);
+const a = [result?.soloEnA].flat().filter(Boolean).map(x => x.id);
+const b = [result?.soloEnB].flat().filter(Boolean).map(x => x.id);
+console.log("soloEnA ids:", JSON.stringify(a), "soloEnB ids:", JSON.stringify(b));
+console.log("expected: soloEnA=[pay_3] soloEnB=[ord_7]");
+console.log(a.join() === "pay_3" && b.join() === "ord_7" ? "EXPRESSION CORRECT" : "EXPRESSION WRONG");

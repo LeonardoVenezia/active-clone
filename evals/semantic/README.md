@@ -191,9 +191,35 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
   "resumir" en vez de "cruzar". Config pass posterior (con Reintentar) tampoco
   lo corrigió.
 - Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/6, C-12 0/2.
-- CAVEAT (17:58 UTC): el deploy de Vercel de bc8dc8d (17:47 UTC) seguía SIN
-  servirse a las 17:58 UTC (>10 min). Si f22f341 (17:40 UTC) tardó parecido,
-  los builds de las 17:44-17:46 corrieron contra código PRE-template y la
-  conclusión "el modelo ignoró el template" queda invalidada: re10 mediría el
-  comportamiento viejo. Se re-mide C-09 apenas se confirme el deploy live
-  (chunk-scan "Importar plantilla" como marca del bundle nuevo).
+- CAVEAT RESUELTO (18:35 UTC): confirmado que NINGÚN push del día deployó
+  hasta las 18:35 UTC — Vercel bloqueaba todos los deploys porque el autor de
+  los commits (agent@instinct.com) no matcheaba una cuenta GitHub, y después
+  fallaba el typecheck por imports absolutos /home/sandbox en evals/tests
+  (arreglado en a2dec6e; autor arreglado en a98c51f). O sea re10 midió código
+  VIEJO (sin template) — su "count-summary" NO prueba que el modelo ignore el
+  template. Todas las mediciones live anteriores al 22/10 18:35 UTC corrieron
+  contra un deploy desactualizado.
+
+## Medición live re11 (PRIMER deploy real post-template, a2dec6e, 2026-10-22 ~19:05 UTC)
+
+- Build inicial (snapshot re11-raw): el modelo ADOPTÓ EL TEMPLATE verbatim —
+  variante NUMERIC JOIN con $number() de ambos lados, keys pagos/ordenes,
+  campos amount/total. Verificado offline con JSONata contra el fixture:
+  soloEnA=[pay_3], soloEnB=[ord_7] EXACTO (verify-re11.mjs). Primer build live
+  con la reconciliación semánticamente correcta.
+  Defectos del build raw: 7 nodos basura no pedidos (zipnova/slack/whatsapp/
+  MP/ML/linear/github en una rama aparte del trigger), trigger Manual en vez
+  de Schedule, y downstream medio-consumido: Sheets y Gmail referencian SOLO
+  soloEnA — soloEnB (ord_7) no llega a ningún lado.
+- Config pass (snapshot re11-final, tras responder spreadsheet_id +
+  recipient_email): DESTRUYÓ el template — regeneró el grafo entero,
+  reemplazó la Fórmula por un Loop ("Procesador de Cobros") y los refs
+  downstream quedaron en `compare-reconciliation.count`. C-09 final: FAIL.
+- Hallazgo estructural NUEVO: el config pass es una regeneración completa que
+  tira los nodos validados del build inicial. El template mandate aguanta la
+  primera generación; el segundo pass re-tira los dados. Palancas posibles:
+  config pass incremental (patch, no regenerate), pasar el grafo previo con
+  instrucción de preservar, o validator+repair sobre el output final.
+- Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/7, C-12 0/2
+  (re10 y anteriores a 18:35 UTC miden deploy viejo; el tally live pre-template
+  queda como referencia histórica).

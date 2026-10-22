@@ -1,0 +1,334 @@
+{
+  "id": "f942f6pouyd35ig0zfk0u",
+  "name": "Reconciliación Diaria Stripe y Tiendanube",
+  "description": "Reconciliación diaria a las 8 AM: trae cobros de Stripe y órdenes de Tiendanube, compara diferencias, anota en Google Sheets y envía resumen por Gmail.",
+  "nodes": [
+    {
+      "id": "-2nrlxYQobiWC5YJjtNFI",
+      "data": {
+        "type": "trigger",
+        "label": "Diario 8 AM",
+        "config": {
+          "placeholder": true,
+          "triggerType": "Manual"
+        },
+        "status": "idle",
+        "description": "Se ejecuta todos los días a las 8 AM",
+        "triggerType": "Schedule",
+        "scheduleCron": "0 8 * * *"
+      },
+      "type": "trigger",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 335
+      },
+      "selected": false
+    },
+    {
+      "id": "stripe-payments",
+      "data": {
+        "type": "action",
+        "label": "Cobros Stripe",
+        "config": {
+          "limit": "100",
+          "actionType": "stripe/list-payments"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 560
+      }
+    },
+    {
+      "id": "tiendanube-orders",
+      "data": {
+        "type": "action",
+        "label": "Órdenes Tiendanube",
+        "config": {
+          "limit": 100,
+          "status": "any",
+          "actionType": "tiendanube/search-orders"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 410
+      }
+    },
+    {
+      "id": "compare-reconciliation",
+      "data": {
+        "type": "action",
+        "label": "Procesador de Cobros",
+        "config": {
+          "input": "{\"pagos\": {{@stripe-payments:Cobros Stripe.payments}}, \"ordenes\": {{@tiendanube-orders:Órdenes Tiendanube.orders}}}",
+          "actionType": "Fórmula",
+          "expression": "{\"soloEnA\": $filter(pagos, function($x) { $not($number($x.amount) in $map(ordenes, function($y){ $number($y.total) })) }), \"soloEnB\": $filter(ordenes, function($y) { $not($number($y.total) in $map(pagos, function($x){ $number($x.amount) })) })}"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 485
+      }
+    },
+    {
+      "id": "sheets-append",
+      "data": {
+        "type": "action",
+        "label": "Anotar en Google Sheets",
+        "config": {
+          "tool": "GOOGLESHEETS_BATCH_UPDATE",
+          "toolkit": "googlesheets",
+          "arguments": "{\"spreadsheet_id\": \"spreadsheet_id_placeholder\", \"sheet_name\": \"Diferencias\", \"values\": [[\"{{@compare-reconciliation:Procesador de Cobros.soloEnA}}\"]]}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 485
+      }
+    },
+    {
+      "id": "gmail-send",
+      "data": {
+        "type": "action",
+        "label": "Enviar Resumen Gmail",
+        "config": {
+          "tool": "GMAIL_SEND_EMAIL",
+          "toolkit": "gmail",
+          "arguments": "{\"recipient_email\": \"finanzas@example.com\", \"subject\": \"Resumen de Reconciliación Diaria\", \"body\": \"Hola equipo de finanzas,\\n\\nSe han procesado los cobros de Stripe y las órdenes de Tiendanube.\\nTotal diferencias encontradas: {{@compare-reconciliation:Procesador de Cobros.soloEnA}}\"}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 485
+      }
+    },
+    {
+      "id": "zipnova-action",
+      "data": {
+        "type": "action",
+        "label": "Zipnova Shipments",
+        "config": {
+          "actionType": "zipnova/list-shipments"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      }
+    },
+    {
+      "id": "slack-action",
+      "data": {
+        "type": "action",
+        "label": "Slack Notify",
+        "config": {
+          "actionType": "slack/send-message",
+          "slackChannel": "#finanzas",
+          "slackMessage": "Reconciliación y envíos procesados."
+        }
+      },
+      "type": "action",
+      "status": "idle",
+      "position": {
+        "x": 830,
+        "y": 260
+      }
+    },
+    {
+      "id": "whatsapp-action",
+      "data": {
+        "type": "action",
+        "label": "WhatsApp Alert",
+        "config": {
+          "to": "5491112345678",
+          "text": "Resumen diario de finanzas enviado.",
+          "actionType": "whatsapp/send-message"
+        }
+      },
+      "type": "action",
+      "status": "idle",
+      "position": {
+        "x": 1200,
+        "y": 260
+      }
+    },
+    {
+      "id": "mercadopago-action",
+      "data": {
+        "type": "action",
+        "label": "Mercado Pago Payments",
+        "config": {
+          "actionType": "mercadopago/search-payments",
+          "externalReference": "order-1234"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      }
+    },
+    {
+      "id": "mercadolibre-action",
+      "data": {
+        "type": "action",
+        "label": "Mercado Libre Orders",
+        "config": {
+          "actionType": "mercadolibre/search-orders"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      }
+    },
+    {
+      "id": "linear-action",
+      "data": {
+        "type": "action",
+        "label": "Linear Ticket",
+        "config": {
+          "actionType": "linear/create-ticket",
+          "ticketTitle": "Revisar diferencias de reconciliación",
+          "ticketPriority": "2",
+          "ticketDescription": "Se detectaron diferencias en el proceso diario."
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 110
+      }
+    },
+    {
+      "id": "github-action",
+      "data": {
+        "type": "action",
+        "label": "GitHub Issue",
+        "config": {
+          "body": "Ejecución finalizada con éxito.",
+          "repo": "finance",
+          "owner": "org",
+          "title": "Reconciliación diaria completada",
+          "actionType": "github/create-issue"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 110
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-trig-stripe",
+      "type": "animated",
+      "source": "-2nrlxYQobiWC5YJjtNFI",
+      "target": "stripe-payments"
+    },
+    {
+      "id": "e-trig-tiendanube",
+      "type": "animated",
+      "source": "-2nrlxYQobiWC5YJjtNFI",
+      "target": "tiendanube-orders"
+    },
+    {
+      "id": "e-stripe-compare",
+      "type": "animated",
+      "source": "stripe-payments",
+      "target": "compare-reconciliation"
+    },
+    {
+      "id": "e-tiendanube-compare",
+      "type": "animated",
+      "source": "tiendanube-orders",
+      "target": "compare-reconciliation"
+    },
+    {
+      "id": "e-compare-sheets",
+      "type": "animated",
+      "source": "compare-reconciliation",
+      "target": "sheets-append"
+    },
+    {
+      "id": "e-sheets-gmail",
+      "type": "animated",
+      "source": "sheets-append",
+      "target": "gmail-send"
+    },
+    {
+      "id": "e-zipnova",
+      "type": "animated",
+      "source": "-2nrlxYQobiWC5YJjtNFI",
+      "target": "zipnova-action"
+    },
+    {
+      "id": "e-slack",
+      "type": "animated",
+      "source": "zipnova-action",
+      "target": "slack-action"
+    },
+    {
+      "id": "e-whatsapp",
+      "type": "animated",
+      "source": "slack-action",
+      "target": "whatsapp-action"
+    },
+    {
+      "id": "e-mp",
+      "type": "animated",
+      "source": "-2nrlxYQobiWC5YJjtNFI",
+      "target": "mercadopago-action"
+    },
+    {
+      "id": "e-ml",
+      "type": "animated",
+      "source": "mercadopago-action",
+      "target": "mercadolibre-action"
+    },
+    {
+      "id": "e-linear",
+      "type": "animated",
+      "source": "mercadolibre-action",
+      "target": "linear-action"
+    },
+    {
+      "id": "e-github",
+      "type": "animated",
+      "source": "linear-action",
+      "target": "github-action"
+    }
+  ],
+  "visibility": "private",
+  "active": false,
+  "createdAt": "2026-10-22T18:37:47.750Z",
+  "updatedAt": "2026-10-22T19:04:26.786Z",
+  "isOwner": true,
+  "canEdit": true,
+  "shared": false
+}
