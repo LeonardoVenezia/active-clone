@@ -54,3 +54,27 @@ estructural 6/6 **fallan la aceptación semántica** (0/4). Causas:
    get-item por ID) → el caso no es construible semánticamente hoy. Además
    C-12-a pierde la identidad del ítem (loop sobre `.results` de otro loop) y
    en ambos la condición ">3 en falta" no dispara Slack (cuenta 1 > 3).
+
+
+## Resultado re7 (2026-10-22, post-reglas validator + fix sim)
+
+Commit 15408f9: `conditionExpressionError` (conds con identificadores
+inventados), listCrossing relajado (Fórmula ya no cuenta como joiner: el
+FALLBACK legítimo), skip de placeholder para literales provistos por el
+usuario; fix del simulador: Condition evalúa la expresión cruda (como el
+executor, que convierte templates en variables) en vez de valores inline.
+
+Retro-validación sobre snapshots re6 con el sim corregido: **C-02 2/2 PASS**
+(las condiciones del modelo siempre estuvieron bien; era bug del sim).
+
+Medición live re7 (workflow mqu47m0c379zzsu1960c1):
+- C-09-b: estructural OK, generación sin retries forzados (la relajación de
+  listCrossing funciona: ya no se exige Loop). Pero el modelo eligió un
+  patrón "IA compara las listas" (ai-gateway/generate-text recibe ambos
+  listados crudos y redacta): la aceptación semántica determinística sigue
+  en FAIL (pay_3/ord_7 no aparecen en la salida simulada). Además el body
+  del mail embebe JSON crudo con comillas dentro de un config JSON-string
+  de composio: rompe el parse (bug genuino, el executor real falla igual).
+  Abierto: definir si la reconciliación debe ser determinística (Fórmula/
+  Loop) y guiar al modelo hacia eso, o aceptar IA-compara y extender el
+  harness para evaluarla.
