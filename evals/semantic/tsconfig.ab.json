@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "server-only": ["./evals/semantic/stubs/server-only.ts"],
+      "@/*": ["./*"]
+    }
+  }
+}

@@ -337,3 +337,13 @@ Mismo modelo (deepseek-v4.1-flash-fast, Refuseless), mismo harness local, mismo 
 
 Checks totales: ops 8/19, tools 11/19. semanticPass: 1/5 cada uno.
 Fallas compartidas (C-05 slack, C-07 políticas) apuntan a gaps del prompt/base de conocimiento, no al protocolo de construcción.
+
+## Iteración 2 (misma rama): hints de Fórmula + reparo determinístico de referencias
+
+Cambios: (a) el error semántico de referencia a Fórmula ahora sugiere la sintaxis `result.<field>`; (b) reparo determinístico en el builder: referencias a una Fórmula sin el wrapper `result.` se reescriben mecánicamente antes de gastar una ronda del modelo; (c) 3ra ronda correctiva solo para errores de consistencia (app pedida ausente).
+
+Resultados tools-mode post-iteración (local, pago):
+- C-09: PASS 3/3 muestras, las 3 con fórmula verificada offline CORRECT (histórico del caso: 2/13, nunca fórmula correcta).
+- C-12: PASS 4/4 (primera vez tools; la muestra ds-4 quedó invalidada por un bug de escaping en el reparo, corregido en 93a1c02).
+- Estado del builder actual vs pipeline de main (mismo modelo/harness): C-09 tools 3/3 vs ops 0/1; C-12 1/1 vs 1/1; C-02 tools 0/2 vs ops 0/1; C-05 empate FAIL; C-07 empate FAIL.
+- Debilidades restantes, compartidas por ambos modos: C-02 (adivina valores enum, ej. 'fulfilled' vs 'shipped'; inventa nodos-lista fuera del contrato), C-05 (no manda Slack por pregunta), C-07 (la respuesta no refleja el Doc de políticas). Son gaps de conocimiento/prompt, no del protocolo de construcción.

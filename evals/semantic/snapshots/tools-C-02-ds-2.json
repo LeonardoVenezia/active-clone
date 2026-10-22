@@ -1,0 +1,206 @@
+{
+  "name": "Tracking Proactivo de Envíos — Tiendanube + Zipnova",
+  "nodes": [
+    {
+      "id": "trigger-order",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 260
+      },
+      "data": {
+        "label": "Tiendanube Order Created",
+        "type": "trigger",
+        "config": {
+          "triggerType": "tiendanube/order-created"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "get-order",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "Get Order - Tiendanube",
+        "type": "action",
+        "config": {
+          "orderId": "{{@trigger-order:Tiendanube Order Created.orderId}}",
+          "actionType": "tiendanube/get-order"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "is-shipped",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 260
+      },
+      "data": {
+        "label": "Is Shipped",
+        "type": "action",
+        "config": {
+          "condition": "{{@get-order:Get Order.shippingStatus}} === 'fulfilled'",
+          "actionType": "Condition"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "list-shipments",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 260
+      },
+      "data": {
+        "label": "List Shipments - Zipnova",
+        "type": "action",
+        "config": {
+          "externalId": "{{@get-order:Get Order.id}}",
+          "actionType": "zipnova/list-shipments"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "get-shipment",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 260
+      },
+      "data": {
+        "label": "Get Shipment - Zipnova",
+        "type": "action",
+        "config": {
+          "shipmentId": "{{@list-shipments:List Shipments.shipments[0].id}}",
+          "actionType": "zipnova/get-shipment"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "is-delayed",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 410
+      },
+      "data": {
+        "label": "Is Delayed",
+        "type": "action",
+        "config": {
+          "condition": "{{@get-shipment:Get Shipment.status}} === 'delayed'",
+          "actionType": "Condition"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "has-problem",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 260
+      },
+      "data": {
+        "label": "Has Problem",
+        "type": "action",
+        "config": {
+          "condition": "{{@get-shipment:Get Shipment.status}} === 'not_delivered'",
+          "actionType": "Condition"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "notify-slack",
+      "type": "action",
+      "position": {
+        "x": 2310,
+        "y": 335
+      },
+      "data": {
+        "label": "Notify Slack",
+        "type": "action",
+        "config": {
+          "slackChannel": "#envios",
+          "slackMessage": "⚠️ Envío con problema — Orden #{{@get-order:Get Order.number}} ({{@get-order:Get Order.customerName}})\nEstado Zipnova: {{@get-shipment:Get Shipment.status}} ({{@get-shipment:Get Shipment.statusDetail}})\nCarrier: {{@get-shipment:Get Shipment.carrier}}\nTracking: {{@get-shipment:Get Shipment.tracking}}\nEntrega estimada: {{@get-shipment:Get Shipment.estimatedDelivery}}",
+          "actionType": "slack/send-message"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "notify-whatsapp",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 110
+      },
+      "data": {
+        "label": "Notify WhatsApp",
+        "type": "action",
+        "config": {
+          "to": "{{@get-order:Get Order.customerPhone}}",
+          "text": "¡Hola {{@get-order:Get Order.customerName}}! 👋 Te contamos cómo va tu pedido #{{@get-order:Get Order.number}}:\n\nEstado del envío: {{@get-shipment:Get Shipment.status}} ({{@get-shipment:Get Shipment.statusDetail}})\nTransportista: {{@get-shipment:Get Shipment.carrier}}\nNúmero de tracking: {{@get-shipment:Get Shipment.tracking}}\nEntrega estimada: {{@get-shipment:Get Shipment.estimatedDelivery}}\n\nCualquier duda, respondé este mensaje.",
+          "actionType": "whatsapp/send-message"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "trigger-order",
+      "target": "get-order",
+      "id": "e-trigger-order-get-order"
+    },
+    {
+      "source": "get-order",
+      "target": "is-shipped",
+      "id": "e-get-order-is-shipped"
+    },
+    {
+      "source": "is-shipped",
+      "target": "list-shipments",
+      "id": "e-is-shipped-list-shipments"
+    },
+    {
+      "source": "list-shipments",
+      "target": "get-shipment",
+      "id": "e-list-shipments-get-shipment"
+    },
+    {
+      "source": "get-shipment",
+      "target": "is-delayed",
+      "id": "e-get-shipment-is-delayed"
+    },
+    {
+      "source": "get-shipment",
+      "target": "has-problem",
+      "id": "e-get-shipment-has-problem"
+    },
+    {
+      "source": "is-delayed",
+      "target": "notify-slack",
+      "id": "e-is-delayed-notify-slack"
+    },
+    {
+      "source": "has-problem",
+      "target": "notify-slack",
+      "id": "e-has-problem-notify-slack"
+    },
+    {
+      "source": "get-shipment",
+      "target": "notify-whatsapp",
+      "id": "e-get-shipment-notify-whatsapp"
+    }
+  ]
+}

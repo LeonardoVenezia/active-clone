@@ -1,0 +1,251 @@
+{
+  "name": "Control de Stock Diario - Tiendanube + Mercado Libre",
+  "nodes": [
+    {
+      "id": "trigger-9am",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Cada día 9:00",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 9 * * *",
+          "timezone": "America/Argentina/Buenos_Aires"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "list-tn-products",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "Productos Tiendanube",
+        "type": "action",
+        "config": {
+          "query": "",
+          "limit": "50",
+          "actionType": "tiendanube/list-products"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "list-ml-items",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Ítems Mercado Libre",
+        "type": "action",
+        "config": {
+          "query": "",
+          "status": "any",
+          "limit": "50",
+          "actionType": "mercadolibre/list-items"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-tn",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 260
+      },
+      "data": {
+        "label": "Revisar Productos Tiendanube",
+        "type": "action",
+        "config": {
+          "source": "{{@list-tn-products:Productos Tiendanube.products}}",
+          "maxItems": 50,
+          "steps": [
+            {
+              "id": "tn-stock-bajo",
+              "actionType": "Condition",
+              "config": {
+                "condition": "{{@item:Item.totalStock}} < 5"
+              }
+            },
+            {
+              "id": "tn-anotar",
+              "actionType": "composio/run-tool",
+              "config": {
+                "toolkit": "googlesheets",
+                "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+                "arguments": "{\"spreadsheet_id\": \"TU_SPREADSHEET_ID\", \"range\": \"Stock!A:D\", \"value_input_option\": \"USER_ENTERED\", \"values\": [[\"{{@item:Item.name}}\", \"{{@item:Item.totalStock}}\", \"{{@item:Item.id}}\", \"Tiendanube\"]]}"
+              }
+            }
+          ],
+          "actionType": "Loop"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-ml",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Revisar Ítems Mercado Libre",
+        "type": "action",
+        "config": {
+          "source": "{{@list-ml-items:Ítems Mercado Libre.items}}",
+          "maxItems": 50,
+          "steps": [
+            {
+              "id": "ml-stock-bajo",
+              "actionType": "Condition",
+              "config": {
+                "condition": "{{@item:Item.availableQuantity}} < 5"
+              }
+            },
+            {
+              "id": "ml-anotar",
+              "actionType": "composio/run-tool",
+              "config": {
+                "toolkit": "googlesheets",
+                "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+                "arguments": "{\"spreadsheet_id\": \"TU_SPREADSHEET_ID\", \"range\": \"Stock!A:D\", \"value_input_option\": \"USER_ENTERED\", \"values\": [[\"{{@item:Item.title}}\", \"{{@item:Item.availableQuantity}}\", \"{{@item:Item.id}}\", \"Mercado Libre\"]]}"
+              }
+            }
+          ],
+          "actionType": "Loop"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "contar-faltantes",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "Contar Faltantes",
+        "type": "action",
+        "config": {
+          "input": "{\"tn\": {{@loop-tn:Revisar Productos Tiendanube.results}}, \"ml\": {{@loop-ml:Revisar Ítems Mercado Libre.results}}}",
+          "expression": "$count(tn) + $count(ml)",
+          "actionType": "Fórmula"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "mas-de-3",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 260
+      },
+      "data": {
+        "label": "¿Más de 3 Faltantes?",
+        "type": "action",
+        "config": {
+          "condition": "{{@${id}:${label}.result.${rest}}} > 3",
+          "actionType": "Condition"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "avisar-compras",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 260
+      },
+      "data": {
+        "label": "Avisar #compras - Slack",
+        "type": "action",
+        "config": {
+          "slackChannel": "#compras",
+          "slackMessage": "⚠️ Control de stock diario: hay {{@${id}:${label}.result.${rest}}} productos con stock menor a 5 unidades. Detalle cargado en la planilla de Google Sheets.",
+          "actionType": "slack/send-message"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "registrar-resumen-sheet",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 110
+      },
+      "data": {
+        "label": "Registrar Resumen en Planilla",
+        "type": "action",
+        "config": {
+          "toolkit": "googlesheets",
+          "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+          "arguments": "{\"spreadsheet_id\": \"TU_SPREADSHEET_ID\", \"range\": \"Resumen!A:C\", \"value_input_option\": \"USER_ENTERED\", \"values\": [[\"Control diario 9:00\", \"{{@${id}:${label}.result.${rest}}}\", \"Productos con stock menor a 5 (Tiendanube + Mercado Libre)\"]]}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "trigger-9am",
+      "target": "list-tn-products",
+      "id": "e-trigger-9am-list-tn-products"
+    },
+    {
+      "source": "trigger-9am",
+      "target": "list-ml-items",
+      "id": "e-trigger-9am-list-ml-items"
+    },
+    {
+      "source": "list-tn-products",
+      "target": "loop-tn",
+      "id": "e-list-tn-products-loop-tn"
+    },
+    {
+      "source": "list-ml-items",
+      "target": "loop-ml",
+      "id": "e-list-ml-items-loop-ml"
+    },
+    {
+      "source": "loop-tn",
+      "target": "contar-faltantes",
+      "id": "e-loop-tn-contar-faltantes"
+    },
+    {
+      "source": "loop-ml",
+      "target": "contar-faltantes",
+      "id": "e-loop-ml-contar-faltantes"
+    },
+    {
+      "source": "contar-faltantes",
+      "target": "mas-de-3",
+      "id": "e-contar-faltantes-mas-de-3"
+    },
+    {
+      "source": "mas-de-3",
+      "target": "avisar-compras",
+      "id": "e-mas-de-3-avisar-compras"
+    },
+    {
+      "source": "contar-faltantes",
+      "target": "registrar-resumen-sheet",
+      "id": "e-contar-faltantes-registrar-resumen-sheet"
+    }
+  ]
+}

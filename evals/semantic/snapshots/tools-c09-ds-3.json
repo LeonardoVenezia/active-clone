@@ -1,0 +1,269 @@
+{
+  "name": "Reconciliación Diaria Stripe ↔ Tiendanube",
+  "nodes": [
+    {
+      "id": "trigger-diario",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Diario 08:00",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 8 * * *",
+          "timezone": "America/Argentina/Buenos_Aires"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "cobros-stripe",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "Cobros Stripe",
+        "type": "action",
+        "config": {
+          "customerId": "",
+          "limit": "100",
+          "actionType": "stripe/list-payments"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "ordenes-tiendanube",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Ordenes Tiendanube",
+        "type": "action",
+        "config": {
+          "query": "",
+          "status": "any",
+          "paymentStatus": "any",
+          "shippingStatus": "any",
+          "limit": 100,
+          "actionType": "tiendanube/search-orders"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "comparar",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 185
+      },
+      "data": {
+        "label": "Comparar Diferencias",
+        "type": "action",
+        "config": {
+          "input": "{\"cobros\": {{@cobros-stripe:Cobros Stripe.payments}}, \"ordenes\": {{@ordenes-tiendanube:Ordenes Tiendanube.orders}}}",
+          "expression": "{\"cobrosSinOrden\": $filter(cobros, function($x) { $not($number($x.amount) in $map(ordenes, function($y){ $number($y.total) })) }), \"ordenesSinCobro\": $filter(ordenes, function($y) { $not($number($y.total) in $map(cobros, function($x){ $number($x.amount) })) })}",
+          "actionType": "Fórmula"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "resumen-gmail",
+      "type": "action",
+      "position": {
+        "x": 2310,
+        "y": 185
+      },
+      "data": {
+        "label": "Resumen por Gmail",
+        "type": "action",
+        "config": {
+          "toolkit": "gmail",
+          "tool": "GMAIL_SEND_EMAIL",
+          "arguments": "{\"recipient_email\": \"finanzas@tuempresa.com\", \"subject\": \"Reconciliacion diaria Stripe vs Tiendanube - diferencias detectadas\", \"body\": \"Hola equipo de finanzas,\\n\\nSe ejecuto la reconciliacion diaria en modo maqueta (sin movimientos reales).\\n\\n1) Cobros de Stripe sin orden asociada:\\n{{@comparar:Comparar Diferencias.result.cobrosSinOrden}}\\n\\n2) Ordenes de Tiendanube sin cobro:\\n{{@comparar:Comparar Diferencias.result.ordenesSinCobro}}\\n\\nEl detalle quedo registrado en la planilla de Google Sheets (hoja Reconciliacion).\\n\\nSaludos,\\nAutomatizacion de finanzas\"}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "preparar-planilla",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "Preparar Planilla Sheets",
+        "type": "action",
+        "config": {
+          "toolkit": "googlesheets",
+          "tool": "GOOGLESHEETS_SPREADSHEET_VALUES_UPDATE",
+          "arguments": "{\"spreadsheet_id\": \"PEGA_EL_ID_DE_LA_PLANILLA\", \"range\": \"Reconciliacion!A1:F3\", \"values\": [[\"Tipo de diferencia\", \"Referencia\", \"Monto\", \"Moneda\", \"Estado\", \"Fecha\"], [\"Cobros Stripe sin orden\", \"{{@comparar:Comparar Diferencias.result.cobrosSinOrden}}\", \"\", \"\", \"\", \"{{@cobros-stripe:Cobros Stripe.count}}\"], [\"Ordenes Tiendanube sin cobro\", \"{{@comparar:Comparar Diferencias.result.ordenesSinCobro}}\", \"\", \"\", \"\", \"{{@ordenes-tiendanube:Ordenes Tiendanube.count}}\"]]}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "extraer-cobros-sin-orden",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 260
+      },
+      "data": {
+        "label": "Extraer Cobros Sin Orden",
+        "type": "action",
+        "config": {
+          "input": "{\"diferencias\": {{@comparar:Comparar Diferencias.result}}}",
+          "expression": "diferencias.cobrosSinOrden",
+          "actionType": "Fórmula"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "extraer-ordenes-sin-cobro",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 110
+      },
+      "data": {
+        "label": "Extraer Ordenes Sin Cobro",
+        "type": "action",
+        "config": {
+          "input": "{\"diferencias\": {{@comparar:Comparar Diferencias.result}}}",
+          "expression": "diferencias.ordenesSinCobro",
+          "actionType": "Fórmula"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-cobros-sin-orden",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 260
+      },
+      "data": {
+        "label": "Anotar Cobros Sin Orden",
+        "type": "action",
+        "config": {
+          "maxItems": 100,
+          "source": "{{@extraer-cobros-sin-orden:Extraer Cobros Sin Orden.result}}",
+          "steps": [
+            {
+              "id": "anotar-cobro",
+              "actionType": "composio/run-tool",
+              "config": {
+                "toolkit": "googlesheets",
+                "tool": "GOOGLESHEETS_SPREADSHEET_VALUES_APPEND",
+                "arguments": "{\"spreadsheet_id\": \"PEGA_EL_ID_DE_LA_PLANILLA\", \"range\": \"Reconciliacion!A1\", \"values\": [[\"Cobro sin orden\", \"{{@item:Item.id}}\", \"{{@item:Item.amount}}\", \"{{@item:Item.currency}}\", \"{{@item:Item.status}}\", \"{{@item:Item.created}}\"]]}"
+              }
+            }
+          ],
+          "actionType": "Loop"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-ordenes-sin-cobro",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 110
+      },
+      "data": {
+        "label": "Anotar Ordenes Sin Cobro",
+        "type": "action",
+        "config": {
+          "maxItems": 100,
+          "source": "{{@extraer-ordenes-sin-cobro:Extraer Ordenes Sin Cobro.result}}",
+          "steps": [
+            {
+              "id": "anotar-orden",
+              "actionType": "composio/run-tool",
+              "config": {
+                "toolkit": "googlesheets",
+                "tool": "GOOGLESHEETS_SPREADSHEET_VALUES_APPEND",
+                "arguments": "{\"spreadsheet_id\": \"PEGA_EL_ID_DE_LA_PLANILLA\", \"range\": \"Reconciliacion!A1\", \"values\": [[\"Orden sin cobro\", \"{{@item:Item.number}}\", \"{{@item:Item.total}}\", \"{{@item:Item.currency}}\", \"{{@item:Item.paymentStatus}}\", \"{{@item:Item.createdAt}}\"]]}"
+              }
+            }
+          ],
+          "actionType": "Loop"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "trigger-diario",
+      "target": "cobros-stripe",
+      "id": "e-trigger-diario-cobros-stripe"
+    },
+    {
+      "source": "trigger-diario",
+      "target": "ordenes-tiendanube",
+      "id": "e-trigger-diario-ordenes-tiendanube"
+    },
+    {
+      "source": "cobros-stripe",
+      "target": "comparar",
+      "id": "e-cobros-stripe-comparar"
+    },
+    {
+      "source": "ordenes-tiendanube",
+      "target": "comparar",
+      "id": "e-ordenes-tiendanube-comparar"
+    },
+    {
+      "source": "comparar",
+      "target": "preparar-planilla",
+      "id": "e-comparar-preparar-planilla"
+    },
+    {
+      "source": "preparar-planilla",
+      "target": "extraer-cobros-sin-orden",
+      "id": "e-preparar-planilla-extraer-cobros-sin-orden"
+    },
+    {
+      "source": "preparar-planilla",
+      "target": "extraer-ordenes-sin-cobro",
+      "id": "e-preparar-planilla-extraer-ordenes-sin-cobro"
+    },
+    {
+      "source": "extraer-cobros-sin-orden",
+      "target": "loop-cobros-sin-orden",
+      "id": "e-extraer-cobros-sin-orden-loop-cobros-sin-orden"
+    },
+    {
+      "source": "extraer-ordenes-sin-cobro",
+      "target": "loop-ordenes-sin-cobro",
+      "id": "e-extraer-ordenes-sin-cobro-loop-ordenes-sin-cobro"
+    },
+    {
+      "source": "loop-cobros-sin-orden",
+      "target": "resumen-gmail",
+      "id": "e-loop-cobros-sin-orden-resumen-gmail"
+    },
+    {
+      "source": "loop-ordenes-sin-cobro",
+      "target": "resumen-gmail",
+      "id": "e-loop-ordenes-sin-cobro-resumen-gmail"
+    }
+  ]
+}

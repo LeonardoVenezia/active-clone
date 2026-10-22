@@ -1,0 +1,179 @@
+{
+  "name": "Control de Stock Diario (maqueta)",
+  "nodes": [
+    {
+      "id": "trigger-diario-9am",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Todos los días 9:00",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 9 * * *",
+          "timezone": "America/Argentina/Buenos_Aires"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "tn-productos",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "Productos Tiendanube",
+        "type": "action",
+        "config": {
+          "limit": "200",
+          "query": "",
+          "actionType": "tiendanube/list-products"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "ml-items",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Publicaciones Mercado Libre",
+        "type": "action",
+        "config": {
+          "status": "active",
+          "limit": "200",
+          "query": "",
+          "actionType": "mercadolibre/list-items"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "normalizar-stock",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 185
+      },
+      "data": {
+        "label": "Unificar y filtrar stock bajo",
+        "type": "action",
+        "config": {
+          "expression": "($bajo := $filter($append($map(tn, function($p){ {\"origen\": \"Tiendanube\", \"producto\": $p.name, \"stock\": $p.totalStock, \"id\": $p.id} }), $map(ml, function($i){ {\"origen\": \"Mercado Libre\", \"producto\": $i.title, \"stock\": $i.availableQuantity, \"id\": $i.id} })), function($x){ $number($x.stock) < 5 }); {\"productos\": $bajo, \"total\": $count($bajo)})",
+          "input": "{\"tn\": {{@tn-productos:Productos Tiendanube.products}}, \"ml\": {{@ml-items:Publicaciones Mercado Libre.items}}}",
+          "actionType": "Fórmula"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-stock-bajo",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "Anotar cada producto en Google Sheets",
+        "type": "action",
+        "config": {
+          "source": "{{@normalizar-stock:Unificar y filtrar stock bajo.productos}}",
+          "maxItems": 50,
+          "steps": [
+            {
+              "id": "anotar-fila",
+              "actionType": "composio/run-tool",
+              "config": {
+                "toolkit": "googlesheets",
+                "tool": "GOOGLESHEETS_SPREADSHEET_VALUES_APPEND",
+                "arguments": "{\"spreadsheet_id\": \"PEGA_AQUI_EL_ID_DE_TU_PLANILLA\", \"range\": \"Stock!A:D\", \"values\": [[\"{{@item:Item.origen}}\", \"{{@item:Item.producto}}\", \"{{@item:Item.stock}}\", \"{{@item:Item.id}}\"]]}"
+              }
+            }
+          ],
+          "actionType": "Loop"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "cond-mas-de-3",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      },
+      "data": {
+        "label": "¿Más de 3 productos con stock bajo?",
+        "type": "action",
+        "config": {
+          "condition": "{{@normalizar-stock:Unificar y filtrar stock bajo.total}} > 3",
+          "actionType": "Condition"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "slack-aviso-compras",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 185
+      },
+      "data": {
+        "label": "Avisar a #compras - Slack",
+        "type": "action",
+        "config": {
+          "slackChannel": "#compras",
+          "slackMessage": "⚠️ Control de stock diario: hay {{@normalizar-stock:Unificar y filtrar stock bajo.total}} productos con menos de 5 unidades (Tiendanube + Mercado Libre). Ya quedaron registrados en la planilla de Google Sheets. Revisar reposición.",
+          "actionType": "slack/send-message"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "trigger-diario-9am",
+      "target": "tn-productos",
+      "id": "e-trigger-diario-9am-tn-productos"
+    },
+    {
+      "source": "trigger-diario-9am",
+      "target": "ml-items",
+      "id": "e-trigger-diario-9am-ml-items"
+    },
+    {
+      "source": "tn-productos",
+      "target": "normalizar-stock",
+      "id": "e-tn-productos-normalizar-stock"
+    },
+    {
+      "source": "ml-items",
+      "target": "normalizar-stock",
+      "id": "e-ml-items-normalizar-stock"
+    },
+    {
+      "source": "normalizar-stock",
+      "target": "loop-stock-bajo",
+      "id": "e-normalizar-stock-loop-stock-bajo"
+    },
+    {
+      "source": "loop-stock-bajo",
+      "target": "cond-mas-de-3",
+      "id": "e-loop-stock-bajo-cond-mas-de-3"
+    },
+    {
+      "source": "cond-mas-de-3",
+      "target": "slack-aviso-compras",
+      "id": "e-cond-mas-de-3-slack-aviso-compras"
+    }
+  ]
+}
