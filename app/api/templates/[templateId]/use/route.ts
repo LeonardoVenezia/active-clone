@@ -125,6 +125,31 @@ export async function POST(
       workflowName = `${template.name} ${counter}`;
     }
 
+    // Optional: import INTO an existing workflow (chat "Importar plantilla")
+    // instead of creating a new one. Replaces its canvas content.
+    const body = (await request.json().catch(() => null)) as { workflowId?: unknown } | null;
+    const targetWorkflowId = typeof body?.workflowId === "string" ? body.workflowId : null;
+    if (targetWorkflowId) {
+      const target = await db.query.workflows.findFirst({
+        where: and(eq(workflows.id, targetWorkflowId), eq(workflows.userId, ctx.userId)),
+      });
+      if (!target) {
+        return NextResponse.json({ error: "Workflow not found" }, { status: 404 });
+      }
+      await db
+        .update(workflows)
+        .set({ nodes: newNodes, edges: newEdges, updatedAt: new Date() })
+        .where(eq(workflows.id, target.id));
+      return NextResponse.json({
+        id: target.id,
+        name: target.name,
+        templateName: template.name,
+        nodes: newNodes,
+        edges: newEdges,
+        droppedConnections: strippedConnections,
+      });
+    }
+
     const [newWorkflow] = await db
       .insert(workflows)
       .values({

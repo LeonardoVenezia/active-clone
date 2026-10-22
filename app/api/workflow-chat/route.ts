@@ -7,7 +7,11 @@ import { createUIMessageStream, createUIMessageStreamResponse, streamText } from
 import { z } from "zod";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { NextResponse } from "next/server";
+import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { workflowTemplates } from "@/lib/db/schema";
+import { getOrgContext } from "@/lib/org-utils";
 import { append, history, recentUserMessages, validWorkflowId } from "@/lib/workflow-chat";
 export const maxDuration = 60;
 const ORIGINS = ["https://active-clone.vercel.app", "https://active-clone-leonardo-venezias-projects.vercel.app"];
@@ -42,6 +46,7 @@ CUSTOM APIS: when the user wants the flow to call their own API or endpoint (an 
 
 MAIL TRIGGERS: the canvas cannot start a workflow from a new incoming email yet (it only has Manual, Schedule and Webhook). When the user wants something to happen when a mail arrives (for example saving mails in a spreadsheet), never build a Webhook and never pretend it is a mail trigger. Say in one plain sentence that for mail the app has a ready-made "Email to sheet" flow in the Flows page (menu "Flows"), that it reacts to real incoming mail, and ask if they want to use it. Do NOT add a BUILD marker for the mail trigger in that reply.
 DRAFT MODE: when the user explicitly declines to connect accounts for now (a mockup, demo, draft, "maqueta", "borrador sin conectar", "sin conectar nada", "sin ejecutar nada real"), do NOT insist on connecting and NEVER emit a [[CONNECT: ...]] marker, no matter which app a step uses. Plan and build anyway with clearly-marked example values, and mention in one short sentence which steps will need a real connection later (the connection is requested only when the user runs the workflow for real). The user is in charge; a draft on the canvas costs nothing.
+SAVED TEMPLATES: the block below lists flows the user already saved as templates. When the user's request clearly matches one, offer it in ONE short sentence with its name and what it does, and end your reply with the exact marker [[TEMPLATE: its_id]] using only an id from that list, never an invented one. If they say no or ask for something different, continue the normal flow. Never combine TEMPLATE with BUILD, FORM or CONNECT in the same reply. If the list says there are none, never mention templates.
 STRICT RULES:
 - Never announce an intention without acting. Forbidden: "voy a crear", "voy a preparar", "on it", "lo voy a hacer", "I'll build". Either include the [[BUILD: ...]] marker in the same reply, or ask the specific question you still need. Never write a reply that only promises.
 - Never claim the change is done before the build succeeds. Never mention or promise a link, button, or click in prose; only the app shows connection cards.
@@ -107,7 +112,20 @@ export async function POST(r: Request) {
     }
     const nativeInfo = await nativeChatContext(id).catch(() => "");
     if (nativeInfo) connectionStatusContext = `${connectionStatusContext}\n\n${nativeInfo}`;
-    const messages = [{ role: "system" as const, content: `${SYSTEM}\n\n${connectionStatusContext}\n\n${describe(b.snapshot)}` }, ...past.map(m => ({ role: m.role, content: m.content })), { role: "user" as const, content: text }];
+    let templateContext = "Saved templates: none.";
+    let templatesVisible: { id: string; name: string; description: string }[] = [];
+    try {
+      const ctx = await getOrgContext(r);
+      if (ctx) {
+        const visibility = ctx.activeOrganizationId
+          ? or(and(eq(workflowTemplates.userId, ctx.userId), isNull(workflowTemplates.orgId)), eq(workflowTemplates.orgId, ctx.activeOrganizationId))
+          : and(eq(workflowTemplates.userId, ctx.userId), isNull(workflowTemplates.orgId));
+        const rows = await db.query.workflowTemplates.findMany({ where: visibility, orderBy: [desc(workflowTemplates.updatedAt)], limit: 12 });
+        templatesVisible = rows.map(t => ({ id: t.id, name: String(t.name).slice(0, 80), description: String(t.description ?? "").slice(0, 160) }));
+        if (templatesVisible.length) templateContext = `Saved templates the user already has (offer with [[TEMPLATE: id]] when the request matches):\n${templatesVisible.map(t => `- ${t.id}: "${t.name}" - ${t.description || "sin descripción"}`).join("\n")}`;
+      }
+    } catch (e) { console.error("[workflow-chat] template list failed", e instanceof Error ? e.message : "unknown"); }
+    const messages = [{ role: "system" as const, content: `${SYSTEM}\n\n${connectionStatusContext}\n\n${templateContext}\n\n${describe(b.snapshot)}` }, ...past.map(m => ({ role: m.role, content: m.content })), { role: "user" as const, content: text }];
   return createUIMessageStreamResponse({
     stream: createUIMessageStream({
       execute: async ({ writer }) => {
@@ -171,6 +189,14 @@ export async function POST(r: Request) {
       if (parts.length >= 2 && labels.length) form = { title: parts[0].slice(0, 80), fields: labels.map((l, i) => ({ key: `f${i}`, label: l.slice(0, 80) })), offerCreate };
       reply = reply.replace(/\s*\[\[FORM:[^\]]*\]\]\s*/gi, "\n").trim() || (form ? form.title : "Necesito un dato.");
     }
+    let template: { id: string; name: string; description: string } | null = null;
+    const tm = reply.match(/\[\[TEMPLATE:\s*([A-Za-z0-9_-]{3,64})\s*\]\]/i);
+    if (tm) {
+      const hit = templatesVisible.find(t => t.id === tm[1]);
+      if (hit) template = hit;
+      reply = reply.replace(/\s*\[\[TEMPLATE:[^\]]*\]\]\s*/gi, "\n").trim();
+      if (!reply) reply = template ? `Tengo una plantilla lista: "${template.name}". ¿La importo?` : "¿Querés que te lo arme?";
+    }
     const draftMode = /\b(maqueta|mockup|demo|borrador|sin\s+conectar|sin\s+ejecutar\s+nada\s+real)\b/i.test([...past.filter(m => m.role === "user").map(m => m.content), text].join("\n"));
     const cm = reply.match(/\[{1,2}CONNECT\s*[:(=]?\s*(?:slug\s*=\s*)?['"]?([a-z0-9_]{1,40})['"]?\s*\)?\s*\]{1,2}/i);
     let connect: Record<string, unknown> | null = null;
@@ -231,7 +257,7 @@ export async function POST(r: Request) {
       writer.write({ type: "data-replace-text", data: { text: shown } });
     }
     await append(id, b.workflowId as string, "assistant", shown);
-    writer.write({ type: "data-chat-result", data: { build, connect, form: connect || build ? null : form, autoBuild: !!build && !connect && (explicitBuildIntent || recentlyConfirmedPlan) } });
+    writer.write({ type: "data-chat-result", data: { build, connect, form: connect || build || template ? null : form, template: connect || build ? null : template, autoBuild: !!build && !connect && !template && (explicitBuildIntent || recentlyConfirmedPlan) } });
 
         } catch {
           try { writer.write({ type: "data-chat-error", data: { error: "Something went wrong. Your message was kept; try again." } }); } catch { /* stream already closed */ }
