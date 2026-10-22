@@ -1,5 +1,8 @@
 import { llmRoutes } from "@/lib/free-models";
 import OpenAI from "openai";
+import { generateText, stepCountIs, tool } from "ai";
+import { z } from "zod";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
@@ -103,12 +106,8 @@ async function processOperationStream(textStream: AsyncIterable<string>, encoder
   if (operationCount === 0) throw new Error(chunkCount === 0 ? "The free AI model returned nothing (it may be busy). Your prompt was kept. Try again in a moment." : "The AI answered, but not in a form that could change the workflow. Your prompt was kept. Try rephrasing it.");
   return operationCount;
 }
-function getSystemPrompt(composioCatalog = ""): string {
-  const pluginActionPrompts = generateAIActionPrompts();
-  const pluginTriggerPrompts = generateAITriggerPrompts();
-  return `You are a workflow automation expert. Generate a workflow based on the user's description.
 
-CRITICAL: Output your workflow as INDIVIDUAL OPERATIONS, one per line in JSONL format.
+const OPS_FORMAT = `CRITICAL: Output your workflow as INDIVIDUAL OPERATIONS, one per line in JSONL format.
 Each line must be a complete, separate JSON object.
 
 Operations you can output:
@@ -132,7 +131,52 @@ IMPORTANT RULES:
 - To update node positions or properties, use updateNode operation
 - NEVER output explanatory text - ONLY JSON operations
 - Do NOT wrap in markdown code blocks
-- Do NOT add explanatory text
+- Do NOT add explanatory text`;
+
+const OPS_EXAMPLES = `Example output (linear workflow with 250px horizontal spacing):
+{"op": "setName", "name": "Contact Form Workflow"}
+{"op": "setDescription", "description": "Processes contact form submissions"}
+{"op": "addNode", "node": {"id": "trigger-1", "type": "trigger", "position": {"x": 100, "y": 200}, "data": {"label": "Contact Form", "type": "trigger", "config": {"triggerType": "Manual"}, "status": "idle"}}}
+{"op": "addNode", "node": {"id": "draft-message", "type": "action", "position": {"x": 350, "y": 200}, "data": {"label": "Draft Message", "type": "action", "config": {"actionType": "ai-gateway/generate-text", "prompt": "Write a short welcome message for the new contact form submission"}, "status": "idle"}}}
+{"op": "addNode", "node": {"id": "notify-channel", "type": "action", "position": {"x": 600, "y": 200}, "data": {"label": "Notify Channel", "type": "action", "config": {"actionType": "slack/send-message", "channel": "#general", "text": "{{@draft-message:Draft Message.text}}"}, "status": "idle"}}}
+{"op": "addEdge", "edge": {"id": "e1", "source": "trigger-1", "target": "draft-message", "type": "default"}}
+{"op": "addEdge", "edge": {"id": "e2", "source": "draft-message", "target": "notify-channel", "type": "default"}}
+
+Example output (branching workflow with 250px vertical spacing):
+{"op": "addNode", "node": {"id": "trigger-1", "type": "trigger", "position": {"x": 100, "y": 200}, "data": {"label": "Webhook", "type": "trigger", "config": {"triggerType": "Webhook", "webhookPath": "/webhooks/new-order"}, "status": "idle"}}}
+{"op": "addNode", "node": {"id": "branch-a", "type": "action", "position": {"x": 350, "y": 75}, "data": {"label": "Branch A", "type": "action", "config": {"actionType": "slack/send-message", "channel": "#general", "text": "New order received"}, "status": "idle"}}}
+{"op": "addNode", "node": {"id": "branch-b", "type": "action", "position": {"x": 350, "y": 325}, "data": {"label": "Branch B", "type": "action", "config": {"actionType": "tiendanube/search-orders"}, "status": "idle"}}}
+{"op": "addEdge", "edge": {"id": "e1", "source": "trigger-1", "target": "branch-a", "type": "default"}}
+{"op": "addEdge", "edge": {"id": "e2", "source": "trigger-1", "target": "branch-b", "type": "default"}}`;
+
+const TOOL_FORMAT = `CRITICAL: Build the workflow by CALLING THE PROVIDED TOOLS - never by writing JSON, JSONL, markdown fences or explanatory text as your reply.
+
+Tools you can call:
+- set_name(name, description?) - call once, first.
+- add_node(id, nodeType, label, actionType, config?) - add ONE node. nodeType is "trigger" or "action". actionType is the trigger/action type (e.g. "Schedule", "slack/send-message", "Condition", "Loop", "Fórmula"); config carries the node settings, the same "config" object shape described below (a trigger's config carries triggerType instead of actionType).
+- connect(source, target) - wire one node's output into another node's input; both ids must already exist.
+- update_parameters(nodeId, config) - merge new settings into an existing node (fix or complete its config).
+- remove_node(nodeId) - remove a wrong node and its wires.
+
+IMPORTANT RULES:
+- Every workflow must have EXACTLY ONE trigger node
+- Apps with a NATIVE plugin (whatsapp, slack, tiendanube, mercadolibre, zipnova, stripe, github, linear, mercadopago) MUST use the plugin's own action (e.g. whatsapp/send-message, slack/send-message, mercadolibre/get-order): never the generic "Send Message"/"Send Email" actions, never a hand-rolled HTTP Request, and never the Composio toolkit for those apps
+- Call set_name first, then add nodes one at a time, then connect them
+- CRITICAL: Every node (except the last) MUST be connected to at least one other node
+- Each tool call is validated immediately: if a call returns an error, fix exactly THAT call and retry it - do NOT rebuild everything from scratch`;
+
+const TOOL_EXAMPLES = `Example build sequence (linear workflow): set_name("Contact Form Workflow") -> add_node({"id":"trigger-1","nodeType":"trigger","label":"Contact Form","actionType":"Manual"}) -> add_node({"id":"draft-message","nodeType":"action","label":"Draft Message","actionType":"ai-gateway/generate-text","config":{"prompt":"Write a short welcome message for the new contact form submission"}}) -> add_node({"id":"notify-channel","nodeType":"action","label":"Notify Channel","actionType":"slack/send-message","config":{"channel":"#general","text":"{{@draft-message:Draft Message.text}}"}}) -> connect("trigger-1","draft-message") -> connect("draft-message","notify-channel")`;
+
+const OPS_OUTRO = `REMEMBER: After adding all nodes, you MUST add edges to connect them! Every node should be reachable from the trigger.`;
+
+const TOOL_OUTRO = `REMEMBER: after adding all nodes you MUST call connect for every wire! Every node should be reachable from the trigger. When the graph is complete and every node is wired, stop calling tools.`;
+
+function getSystemPrompt(composioCatalog = "", mode: "ops" | "tools" = "ops"): string {
+  const pluginActionPrompts = generateAIActionPrompts();
+  const pluginTriggerPrompts = generateAITriggerPrompts();
+  return `You are a workflow automation expert. Generate a workflow based on the user's description.
+
+${mode === "tools" ? TOOL_FORMAT : OPS_FORMAT}
 
 Node structure:
 {
@@ -229,24 +273,10 @@ WORKFLOW FLOW:
 - For linear workflows: trigger -> action1 -> action2 -> etc
 - For branching (conditions): one source can connect to multiple targets
 
-Example output (linear workflow with 250px horizontal spacing):
-{"op": "setName", "name": "Contact Form Workflow"}
-{"op": "setDescription", "description": "Processes contact form submissions"}
-{"op": "addNode", "node": {"id": "trigger-1", "type": "trigger", "position": {"x": 100, "y": 200}, "data": {"label": "Contact Form", "type": "trigger", "config": {"triggerType": "Manual"}, "status": "idle"}}}
-{"op": "addNode", "node": {"id": "draft-message", "type": "action", "position": {"x": 350, "y": 200}, "data": {"label": "Draft Message", "type": "action", "config": {"actionType": "ai-gateway/generate-text", "prompt": "Write a short welcome message for the new contact form submission"}, "status": "idle"}}}
-{"op": "addNode", "node": {"id": "notify-channel", "type": "action", "position": {"x": 600, "y": 200}, "data": {"label": "Notify Channel", "type": "action", "config": {"actionType": "slack/send-message", "channel": "#general", "text": "{{@draft-message:Draft Message.text}}"}, "status": "idle"}}}
-{"op": "addEdge", "edge": {"id": "e1", "source": "trigger-1", "target": "draft-message", "type": "default"}}
-{"op": "addEdge", "edge": {"id": "e2", "source": "draft-message", "target": "notify-channel", "type": "default"}}
-
-Example output (branching workflow with 250px vertical spacing):
-{"op": "addNode", "node": {"id": "trigger-1", "type": "trigger", "position": {"x": 100, "y": 200}, "data": {"label": "Webhook", "type": "trigger", "config": {"triggerType": "Webhook", "webhookPath": "/webhooks/new-order"}, "status": "idle"}}}
-{"op": "addNode", "node": {"id": "branch-a", "type": "action", "position": {"x": 350, "y": 75}, "data": {"label": "Branch A", "type": "action", "config": {"actionType": "slack/send-message", "channel": "#general", "text": "New order received"}, "status": "idle"}}}
-{"op": "addNode", "node": {"id": "branch-b", "type": "action", "position": {"x": 350, "y": 325}, "data": {"label": "Branch B", "type": "action", "config": {"actionType": "tiendanube/search-orders"}, "status": "idle"}}}
-{"op": "addEdge", "edge": {"id": "e1", "source": "trigger-1", "target": "branch-a", "type": "default"}}
-{"op": "addEdge", "edge": {"id": "e2", "source": "trigger-1", "target": "branch-b", "type": "default"}}
+${mode === "ops" ? OPS_EXAMPLES : TOOL_EXAMPLES}
 
 ${composioCatalog ? `\n${composioCatalog}\n` : ""}
-REMEMBER: After adding all nodes, you MUST add edges to connect them! Every node should be reachable from the trigger.`;
+${mode === "tools" ? TOOL_OUTRO : OPS_OUTRO}`;
 }
 
 
@@ -273,7 +303,7 @@ export async function POST(request: Request) {
   try {
     const session = await auth.api.getSession({ headers: request.headers });
     if (!session?.user || session.user.isAnonymous) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const body = await request.json(); const { prompt, existingWorkflow, toolkits, model } = body; const evalMode = body.evalMode === "fullJson" ? "fullJson" : "ops";
+    const body = await request.json(); const { prompt, existingWorkflow, toolkits, model } = body; const evalMode = body.evalMode === "fullJson" ? "fullJson" : "ops"; const builderMode = body.builder === "tools" ? "tools" : "ops";
     if (!prompt) return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     if (!llmRoutes().length) return NextResponse.json({ error: "AI API key not configured on server." }, { status: 500 });
     // Optional model pin (used by the eval harness): restrict to the route whose model matches.
@@ -503,8 +533,100 @@ export async function POST(request: Request) {
       console.info("[ai-generate] fullJson materialized ops:", count, "nodes:", finalNodes.length, "edges:", finalEdges.length);
       return count;
     }
+    // Tools mode (research 2026-10-22, Leo-approved): the model BUILDS the graph
+    // through validated tool calls (add_node/connect/update_parameters/remove_node)
+    // instead of emitting free-text JSONL that is repaired afterwards. Each call is
+    // checked at the boundary (valid types, existing ids); the deterministic
+    // validator battery stays as the final checker with up to 2 corrective rounds.
+    async function runToolsGeneration(encoder: TextEncoder, controller: ReadableStreamDefaultController): Promise<number> {
+      const sysPrompt = getSystemPrompt(composioCatalog, "tools");
+      let localName = "";
+      const mkTools = () => ({
+        set_name: tool({
+          description: "Set the workflow name and optional description. Call once, first.",
+          inputSchema: z.object({ name: z.string(), description: z.string().optional() }),
+          execute: async ({ name, description }) => { localName = name; shadowApply({ op: "setName", name }, shadow); if (description) shadowApply({ op: "setDescription", description }, shadow); return { ok: true }; },
+        }),
+        add_node: tool({
+          description: "Add ONE node to the workflow. nodeType 'trigger' or 'action'; actionType is the trigger/action type; config carries the node settings.",
+          inputSchema: z.object({ id: z.string().describe("unique kebab-case id"), nodeType: z.enum(["trigger", "action"]), label: z.string(), actionType: z.string(), config: z.record(z.string(), z.unknown()).optional() }),
+          execute: async ({ id, nodeType, label, actionType, config }) => {
+            const valid = nodeType === "trigger" ? getValidTriggerTypes() : getValidActionTypes();
+            const match = [...valid].find(v => v === actionType || v.toLowerCase() === actionType.toLowerCase());
+            if (!match) return { ok: false, error: `unknown ${nodeType} type "${actionType}". Valid types include: ${[...valid].slice(0, 50).join(", ")}` };
+            const cfg = { ...(config ?? {}), ...(nodeType === "trigger" ? { triggerType: match } : { actionType: match }) };
+            const ok = shadowApply({ op: "addNode", node: { id, type: nodeType, position: { x: 120 + shadow.nodes.length * 260, y: 120 }, data: { label, type: nodeType, config: cfg, status: "idle" } } }, shadow);
+            return ok ? { ok: true } : { ok: false, error: `node id "${id}" already exists or is invalid - pick a new unique id` };
+          },
+        }),
+        connect: tool({
+          description: "Wire one node's output into another node's input. Both ids must already exist.",
+          inputSchema: z.object({ source: z.string(), target: z.string() }),
+          execute: async ({ source, target }) => {
+            const ok = shadowApply({ op: "addEdge", edge: { source, target } }, shadow);
+            return ok ? { ok: true } : { ok: false, error: `cannot connect ${source} -> ${target}: both nodes must already exist and the edge must not duplicate an existing one` };
+          },
+        }),
+        update_parameters: tool({
+          description: "Merge new config values into an existing node (fix or complete its settings).",
+          inputSchema: z.object({ nodeId: z.string(), config: z.record(z.string(), z.unknown()) }),
+          execute: async ({ nodeId, config }) => {
+            const ok = shadowApply({ op: "updateNode", nodeId, updates: { data: { config } } }, shadow);
+            return ok ? { ok: true } : { ok: false, error: `node "${nodeId}" does not exist` };
+          },
+        }),
+        remove_node: tool({
+          description: "Remove a wrong node and its wires.",
+          inputSchema: z.object({ nodeId: z.string() }),
+          execute: async ({ nodeId }) => { shadowApply({ op: "removeNode", nodeId }, shadow); return { ok: true }; },
+        }),
+      });
+      const runOnce = async (fixErrors: string[]): Promise<void> => {
+        for (const route of activeRoutes) {
+          try {
+            console.info("[ai-generate] tools attempt", route.name, route.model, fixErrors.length ? "(corrective)" : "");
+            const provider = createOpenAICompatible({ name: route.name, apiKey: route.apiKey, baseURL: route.baseURL });
+            const messages: { role: "system" | "user"; content: string }[] = [{ role: "system", content: sysPrompt }];
+            if (fixErrors.length) {
+              const nodeList = shadow.nodes.map(n => `- ${n.id}: ${JSON.stringify({ label: n.data?.label, config: n.data?.config })}`).join("\n");
+              const edgeList = shadow.edges.map(e => `- ${e.source} -> ${e.target}`).join("\n");
+              messages.push({ role: "user", content: `The workflow built so far has these DETERMINISTIC VALIDATION ERRORS:\n${fixErrors.map(e => `- ${e}`).join("\n")}\n\nCurrent nodes:\n${nodeList}\nCurrent edges:\n${edgeList}\n\nFix exactly these errors with tool calls (update_parameters / connect / add_node / remove_node). Do NOT rebuild from scratch; reuse existing node ids. Original request: ${userPrompt}` });
+            } else {
+              messages.push({ role: "user", content: userPrompt });
+            }
+            const res = await generateText({ model: provider(route.model), messages, tools: mkTools(), stopWhen: stepCountIs(25), maxOutputTokens: Math.max(8192, route.maxTokens), temperature: 0.2, maxRetries: 0 });
+            console.info("[ai-generate] tools usage", route.name, JSON.stringify(res.usage));
+            if (shadow.nodes.length > 0 || fixErrors.length) return;
+          } catch (error) { console.error("[ai-generate] tools pass failed", route.name, error instanceof Error ? error.message.slice(0, 240) : "unknown"); }
+        }
+      };
+      await runOnce([]);
+      for (let round = 0; round < 2; round++) {
+        const errs = computeErrors();
+        if (!errs.length) break;
+        console.warn("[ai-generate] tools corrective round", round + 1, errs);
+        await runOnce(errs);
+      }
+      const finalNodes = shadow.nodes;
+      const finalEdges = shadow.edges;
+      if (!finalNodes.length) {
+        controller.enqueue(encodeMessage(encoder, { type: "validation", errors: ["tools: the model did not build any nodes"] }));
+        return 0;
+      }
+      shadow.nodes = [];
+      shadow.edges = [];
+      let count = 0;
+      if (localName) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "setName", name: localName }), encoder, controller, count, shadow);
+      for (const n of finalNodes) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "addNode", node: n }), encoder, controller, count, shadow);
+      for (const e of finalEdges) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "addEdge", edge: e }), encoder, controller, count, shadow);
+      console.info("[ai-generate] tools materialized ops:", count, "nodes:", finalNodes.length, "edges:", finalEdges.length);
+      return count;
+    }
     const stream = new ReadableStream({ async start(controller) { try { let operationCount = 0;
-          if (evalMode === "fullJson" && !existingWorkflow) {
+          if (builderMode === "tools" && !existingWorkflow) {
+            operationCount = await runToolsGeneration(encoder, controller);
+          } else if (evalMode === "fullJson" && !existingWorkflow) {
+
             operationCount = await runFullJsonGeneration(encoder, controller);
           } else {
             operationCount = await processOperationStream(textChunks(), encoder, controller, shadow); if (streamState.truncated) operationCount = await runContinuationPass(operationCount, encoder, controller); for (let pass = 0; pass < 4; pass++) {
