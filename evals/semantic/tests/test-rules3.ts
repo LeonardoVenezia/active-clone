@@ -1,10 +1,10 @@
-import "/home/sandbox/ac/plugins/index";
+import "../../../plugins/index";
 import { readFileSync, readdirSync } from "node:fs";
-import { formulaExpressionError, type FlowNode } from "/home/sandbox/ac/lib/flow-validator";
-import { getActionOutputFields, generateAIActionPrompts } from "/home/sandbox/ac/plugins/registry";
+import { formulaExpressionError, type FlowNode } from "../../../lib/flow-validator";
+import { getActionOutputFields, generateAIActionPrompts } from "../../../plugins/registry";
 
 let bad = 0;
-const load = (f: string) => JSON.parse(readFileSync("/home/sandbox/ac/evals/semantic/snapshots/" + f, "utf8"));
+const load = (f: string) => JSON.parse(readFileSync("evals/semantic/snapshots/" + f, "utf8"));
 
 // Positivo: Fórmula ceremonial del live re7 C-09
 const ceremonial = load("re7-8l88pqixvopqfu55dqvhi.json").nodes as FlowNode[];
@@ -22,7 +22,7 @@ if (err3) { console.log("FP formula buena:", err3.slice(0, 120)); bad++; }
 
 // Sin FP en ningún snapshot
 const EXPECTED_FORMULA_HITS = ["re7-8l88pqixvopqfu55dqvhi.json", "28d8y1lxt7mrcv4uhwfqc.json", "re7-jv7o755aum5hu288w8rve.json", "re7-opx0evpqmbdtg0u5tbeqg.json", "re6-j1rq5fxs8dzeymrepge66.json", "re5-hw0ycjusgh239zupz6mkq.json", "re9-v5o24mdtv4ui97xlkebqt.json"]; // constantes, JSONata inválido o proyección (TP)
-for (const f of readdirSync("/home/sandbox/ac/evals/semantic/snapshots")) {
+for (const f of readdirSync("evals/semantic/snapshots")) {
   const err = formulaExpressionError(load(f).nodes as FlowNode[]);
   if (EXPECTED_FORMULA_HITS.includes(f)) {
     if (!err) { console.log(`MISS formula esperada en ${f}`); bad++; }

@@ -1,16 +1,16 @@
-import "/home/sandbox/ac/plugins/index";
+import "../../../plugins/index";
 import { readFileSync, readdirSync } from "node:fs";
-import { validateFlow, conditionExpressionError, formulaExpressionError, listCrossingError, type FlowNode, type FlowEdge } from "/home/sandbox/ac/lib/flow-validator";
-import { getActionOutputFields, getActionOutputItemFields } from "/home/sandbox/ac/plugins/registry";
+import { validateFlow, conditionExpressionError, formulaExpressionError, listCrossingError, type FlowNode, type FlowEdge } from "../../../lib/flow-validator";
+import { getActionOutputFields, getActionOutputItemFields } from "../../../plugins/registry";
 
 let bad = 0;
 const promptOf = (id: string) => {
-  for (const l of readFileSync("/home/sandbox/ac/evals/cases.jsonl", "utf8").trim().split("\n")) {
+  for (const l of readFileSync("evals/cases.jsonl", "utf8").trim().split("\n")) {
     const c = JSON.parse(l); if (c.id === id) return c.prompt as string;
   }
   return "";
 };
-const load = (f: string) => JSON.parse(readFileSync("/home/sandbox/ac/evals/semantic/snapshots/" + f, "utf8"));
+const load = (f: string) => JSON.parse(readFileSync("evals/semantic/snapshots/" + f, "utf8"));
 
 // conditionExpressionError: sintéticos
 const condNode = (expr: string) => ({ id: "c1", type: "action", data: { label: "C", config: { actionType: "Condition", condition: expr } } });
@@ -23,7 +23,7 @@ if (!conditionExpressionError([loopBare] as never[])) { console.log("MISS inner 
 // Sin FP sobre TODOS los snapshots reales
 // fulljson-k1m4t47 usa `x contains 'y'` infijo, sintaxis inválida en runtime (TP)
 const EXPECTED_COND_HIT = "fulljson-k1m4t47iuliuj6vb7pq6c.json";
-for (const f of readdirSync("/home/sandbox/ac/evals/semantic/snapshots")) {
+for (const f of readdirSync("evals/semantic/snapshots")) {
   const wf = load(f);
   const err = conditionExpressionError((wf.nodes ?? []) as FlowNode[]);
   if (f === EXPECTED_COND_HIT) {

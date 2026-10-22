@@ -1,11 +1,11 @@
 // cyclicFlowError: TP en re7-91vject (ciclo real), sin FP en el resto
 import { readFileSync, readdirSync } from "node:fs";
-import { cyclicFlowError } from "/home/sandbox/ac/lib/flow-validator";
+import { cyclicFlowError } from "../../../lib/flow-validator";
 
-const load = (f: string) => JSON.parse(readFileSync(`/home/sandbox/ac/evals/semantic/snapshots/${f}`, "utf8"));
+const load = (f: string) => JSON.parse(readFileSync(`evals/semantic/snapshots/${f}`, "utf8"));
 let bad = 0;
 const EXPECTED = ["re7-91vject1e06fe38oef79e.json"];
-for (const f of readdirSync("/home/sandbox/ac/evals/semantic/snapshots")) {
+for (const f of readdirSync("evals/semantic/snapshots")) {
   const wf = load(f);
   const err = cyclicFlowError(wf.nodes ?? [], wf.edges ?? []);
   const expected = EXPECTED.includes(f);

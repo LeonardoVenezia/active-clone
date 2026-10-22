@@ -1,10 +1,10 @@
-import "/home/sandbox/ac/plugins/index";
+import "../../../plugins/index";
 import { readFileSync, readdirSync } from "node:fs";
-import { listCrossingError, type FlowNode } from "/home/sandbox/ac/lib/flow-validator";
+import { listCrossingError, type FlowNode } from "../../../lib/flow-validator";
 
 let bad = 0;
-const c09 = readFileSync("/home/sandbox/ac/evals/cases.jsonl", "utf8").trim().split("\n").map(l => JSON.parse(l)).find(c => c.id === "C-09").prompt;
-const load = (f: string) => JSON.parse(readFileSync("/home/sandbox/ac/evals/semantic/snapshots/" + f, "utf8"));
+const c09 = readFileSync("evals/cases.jsonl", "utf8").trim().split("\n").map(l => JSON.parse(l)).find(c => c.id === "C-09").prompt;
+const load = (f: string) => JSON.parse(readFileSync("evals/semantic/snapshots/" + f, "utf8"));
 
 const expect: Array<[string, boolean, string]> = [
   // [snapshot, shouldPassValidation, nota]
@@ -20,7 +20,7 @@ for (const [f, shouldPass, note] of expect) {
   if (passes !== shouldPass) { console.log(`${passes ? "FP" : "MISS"} (C-09 prompt) ${f} [${note}] err=${(err ?? "").slice(0, 80)}`); bad++; }
 }
 // C-12 con su propio prompt no debe disparar la regla de cruce
-const c12 = readFileSync("/home/sandbox/ac/evals/cases.jsonl", "utf8").trim().split("\n").map(l => JSON.parse(l)).find(c => c.id === "C-12").prompt;
+const c12 = readFileSync("evals/cases.jsonl", "utf8").trim().split("\n").map(l => JSON.parse(l)).find(c => c.id === "C-12").prompt;
 for (const f of ["re6-hoqkrboswh3oizv1mo1xx.json", "re6-opzkh4wjvjtwxl4yrur6p.json"]) {
   const err = listCrossingError(c12, load(f).nodes as FlowNode[]);
   if (err) { console.log(`FP C-12 ${f}: ${err.slice(0, 100)}`); bad++; }
