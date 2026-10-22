@@ -191,3 +191,9 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
   "resumir" en vez de "cruzar". Config pass posterior (con Reintentar) tampoco
   lo corrigió.
 - Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/6, C-12 0/2.
+- CAVEAT (17:58 UTC): el deploy de Vercel de bc8dc8d (17:47 UTC) seguía SIN
+  servirse a las 17:58 UTC (>10 min). Si f22f341 (17:40 UTC) tardó parecido,
+  los builds de las 17:44-17:46 corrieron contra código PRE-template y la
+  conclusión "el modelo ignoró el template" queda invalidada: re10 mediría el
+  comportamiento viejo. Se re-mide C-09 apenas se confirme el deploy live
+  (chunk-scan "Importar plantilla" como marca del bundle nuevo).
