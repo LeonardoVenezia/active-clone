@@ -614,7 +614,7 @@ export async function POST(request: Request) {
             return val.replace(/\{\{@([A-Za-z0-9_-]+):([^}:.]+)\.(?!result[.\[])([^}]+)\}\}/g, (m, id: string, label: string, rest: string) => {
               if (!formulaIds.has(id)) return m;
               fixed++;
-              return `{{@\${id}:\${label}.result.\${rest}}}`;
+              return `{{@${id}:${label}.result.${rest}}}`;
             });
           }
           if (Array.isArray(val)) return val.map(walk);
