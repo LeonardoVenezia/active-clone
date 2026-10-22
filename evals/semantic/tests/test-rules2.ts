@@ -52,4 +52,16 @@ const fakeNodes = [{ id: "w1", type: "action", data: { label: "Mail", config: { 
 const fakeErr = validateFlow(fakeNodes as never[], [], {}, undefined, { userPrompt: "mandame un mail a otro@dominio real" });
 if (!fakeErr.some(e => e.includes("placeholder"))) { console.log("MISS placeholder inventado"); bad++; }
 
+// Array-binding tightening: Fórmula de cruce con bindings a escalares (.count) debe fallar
+{
+  const err = listCrossingError(c09, load("re8-38xmvyn4cywwbeg4isxga.json").nodes as FlowNode[]);
+  if (!err || !err.includes("scalar")) { console.log("MISS listCrossing re8 count-binding:", err); bad++; }
+}
+// Bindings al array (re7-opx0: payments/orders) siguen pasando (la proyección es trabajo de formulaExpressionError)
+{
+  const err = listCrossingError(c09, load("re7-opx0evpqmbdtg0u5tbeqg.json").nodes as FlowNode[]);
+  if (err) { console.log("FP listCrossing re7-opx0 array-binding:", err); bad++; }
+}
+
 console.log(bad === 0 ? "ALL-RULES2 OK" : `${bad} problems`);
+if (bad) process.exit(1);

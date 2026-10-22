@@ -962,13 +962,32 @@ export function listCrossingError(promptText: string, nodes: FlowNode[]): string
   // (b) a Loop over one list whose inner steps consult the OTHER list: a
   //     template ref to another list node, or an inner list action keyed by
   //     {{@item:...}} (per-item lookup).
+  // A cross Fórmula must bind the ARRAY output of each list (payments/orders/
+  // items), not a scalar (count/hasMore) or one indexed element: crossing
+  // counts or first items computes nothing per-item.
+  const SCALAR_OUTPUT_RE = /^(count|hasMore|has_more|total|totalCount|total_count|page|pages|limit|offset|size|nextCursor|next_cursor|cursor)$/i;
+  let scalarBinding: { id: string; label: string; field: string } | null = null;
   const hasCrossFormula = nodes.some((n) => {
     if (actionTypeOf(n) !== "Fórmula") return false;
     const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
     const input = typeof cfg.input === "string" ? cfg.input : "";
-    const refs = new Set([...input.matchAll(/\{\{@([\w-]+):/g)].map((m) => m[1]));
-    return [...refs].filter((id) => isList(byId.get(id))).length >= 2;
+    const refs = [...input.matchAll(/\{\{@([\w-]+):[^}]*?\.([\w.\[\]]+)\}\}/g)]
+      .map((m) => ({ id: m[1], field: m[2] }))
+      .filter((r) => isList(byId.get(r.id)));
+    if (new Set(refs.map((r) => r.id)).size < 2) return false;
+    for (const r of refs) {
+      const leaf = r.field.split(".").pop() ?? r.field;
+      if (SCALAR_OUTPUT_RE.test(leaf) || /\[\d+\]/.test(r.field)) {
+        scalarBinding = { id: n.id, label: n.data?.label ?? n.id, field: `${r.id}.${r.field}` };
+        return false;
+      }
+    }
+    return true;
   });
+  if (scalarBinding) {
+    const b = scalarBinding as { id: string; label: string; field: string };
+    return `semántica: Fórmula node "${b.id}" (${b.label}) binds "${b.field}", a scalar/indexed output; to CROSS two lists the "input" MUST bind each list's ARRAY output (e.g. {"pagos": {{@stripe:....payments}}, "ordenes": {{@tienda:....orders}}}) and the JSONata must filter/map items of one list against the other - comparing counts or single items is not a reconciliation`;
+  }
   if (hasCrossFormula) return null;
   const hasCrossLoop = nodes.some((n) => {
     if (actionTypeOf(n) !== "Loop") return false;
