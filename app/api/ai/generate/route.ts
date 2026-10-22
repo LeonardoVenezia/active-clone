@@ -329,7 +329,7 @@ export async function POST(request: Request) {
         try {
           console.info("[ai-generate] provider attempt", route.name, route.model);
           const provider = new OpenAI({ apiKey: route.apiKey, baseURL: route.baseURL, maxRetries: 0, timeout: 15000 });
-          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: userPrompt }], stream: true, max_tokens: 8192, temperature: 0.2 });
+          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: userPrompt }], stream: true, max_tokens: Math.max(8192, route.maxTokens), temperature: 0.2 });
           for await (const chunk of result) { if (chunk.choices[0]?.finish_reason === "length") streamState.truncated = true; const value = chunk.choices[0]?.delta?.content; if (value) { got = true; yield value; } }
           if (got) return;
           failures.push(`${route.name}/${route.model}: empty stream`); console.warn("[ai-generate] provider returned no text", route.name, route.model);
@@ -386,7 +386,7 @@ export async function POST(request: Request) {
         try {
           console.info("[ai-generate] corrective attempt", route.name, route.model);
           const provider = new OpenAI({ apiKey: route.apiKey, baseURL: route.baseURL, maxRetries: 0, timeout: 20000 });
-          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: fixPrompt }], max_tokens: 4096, temperature: 0.2 });
+          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: fixPrompt }], max_tokens: Math.max(4096, route.maxTokens), temperature: 0.2 });
           const text = result.choices[0]?.message?.content ?? "";
           if (!text) continue;
           let count = operationCount;
@@ -408,7 +408,7 @@ export async function POST(request: Request) {
         try {
           console.info("[ai-generate] continuation attempt", route.name, route.model);
           const provider = new OpenAI({ apiKey: route.apiKey, baseURL: route.baseURL, maxRetries: 0, timeout: 20000 });
-          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: contPrompt }], max_tokens: 8192 });
+          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: contPrompt }], max_tokens: Math.max(8192, route.maxTokens) });
           const text = result.choices[0]?.message?.content ?? "";
           if (!text) continue;
           let count = operationCount;
@@ -440,7 +440,7 @@ export async function POST(request: Request) {
         try {
           console.info("[ai-generate] fullJson attempt", route.name, route.model);
           const provider = new OpenAI({ apiKey: route.apiKey, baseURL: route.baseURL, maxRetries: 0, timeout: 60000 });
-          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: `${userPrompt}${formatInstr}` }], max_tokens: 8192, temperature: 0.2 });
+          const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: `${userPrompt}${formatInstr}` }], max_tokens: Math.max(8192, route.maxTokens), temperature: 0.2 });
           const text = result.choices[0]?.message?.content ?? "";
           if (!text) continue;
           graph = parseGraphJson(text);
@@ -473,7 +473,7 @@ export async function POST(request: Request) {
           try {
             console.info("[ai-generate] fullJson corrective attempt", route.name, route.model);
             const provider = new OpenAI({ apiKey: route.apiKey, baseURL: route.baseURL, maxRetries: 0, timeout: 60000 });
-            const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: fixPrompt }], max_tokens: 8192, temperature: 0.2 });
+            const result = await provider.chat.completions.create({ model: route.model, messages: [{ role: "system", content: getSystemPrompt(composioCatalog) }, { role: "user", content: fixPrompt }], max_tokens: Math.max(8192, route.maxTokens), temperature: 0.2 });
             const text = result.choices[0]?.message?.content ?? "";
             const g = text ? parseGraphJson(text) : null;
             if (g) { loadGraph(g); if (g.name) graphName = g.name; fixed = true; break; }

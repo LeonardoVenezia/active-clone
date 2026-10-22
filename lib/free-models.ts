@@ -16,6 +16,6 @@ export function llmRoutes(): LlmRoute[] {
     ...g("openai/gpt-oss-120b"),
     ...o("nvidia/nemotron-3-super-120b-a12b:free"),
     ...o("openrouter/free"),
-    ...(refuseless ? [{ name: "refuseless" as const, baseURL: "https://api.refuseless.com/v1", apiKey: refuseless, model: "deepseek-v4.1-flash-fast", maxTokens: 4096 }] : []),
+    ...(refuseless ? [{ name: "refuseless" as const, baseURL: "https://api.refuseless.com/v1", apiKey: refuseless, model: "deepseek-v4.1-flash-fast", maxTokens: 16384 }] : []),
   ];
 }
