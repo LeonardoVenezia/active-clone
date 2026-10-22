@@ -1,0 +1,310 @@
+{
+ "id": "91vject1e06fe38oef79e",
+ "name": "Untitled 188",
+ "description": "",
+ "nodes": [
+  {
+   "id": "x8WpNwhUW0tCcI2HgqIUU",
+   "data": {
+    "type": "trigger",
+    "label": "Daily 9 AM",
+    "config": {
+     "triggerType": "Schedule",
+     "scheduleCron": "0 9 * * *",
+     "scheduleTimezone": "America/Argentina/Buenos_Aires"
+    },
+    "status": "idle",
+    "description": "Runs every day at 9:00 AM"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 90,
+    "y": 110
+   },
+   "selected": false
+  },
+  {
+   "id": "get-tiendanube-products",
+   "data": {
+    "type": "action",
+    "label": "Get Tiendanube Products",
+    "config": {
+     "limit": "200",
+     "query": "",
+     "actionType": "tiendanube/list-products"
+    },
+    "status": "idle",
+    "description": "Fetch all products from Tiendanube"
+   },
+   "type": "action",
+   "position": {
+    "x": 460,
+    "y": 258
+   }
+  },
+  {
+   "id": "get-mercadolibre-items",
+   "data": {
+    "type": "action",
+    "label": "Get Mercado Libre Items",
+    "config": {
+     "limit": "200",
+     "query": "",
+     "status": "any",
+     "actionType": "mercadolibre/list-items"
+    },
+    "status": "idle",
+    "description": "Fetch all items from Mercado Libre"
+   },
+   "type": "action",
+   "position": {
+    "x": 1200,
+    "y": 110
+   }
+  },
+  {
+   "id": "create-sheet",
+   "data": {
+    "type": "action",
+    "label": "Create Stock Diario Sheet",
+    "config": {
+     "tool": "GOOGLESHEETS_CREATE_GOOGLE_SHEET1",
+     "toolkit": "googlesheets",
+     "arguments": "{\"title\": \"Stock Diario\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle",
+    "description": "Create the Google Sheets spreadsheet (mock)"
+   },
+   "type": "action",
+   "position": {
+    "x": 1200,
+    "y": 290
+   }
+  },
+  {
+   "id": "check-count",
+   "data": {
+    "type": "action",
+    "label": "More Than 3 Low Stock?",
+    "config": {
+     "condition": "{{@combine-filter:Combine & Filter Low Stock.result.length}} > 3",
+     "actionType": "Condition"
+    },
+    "status": "idle",
+    "description": "Check if more than 3 products have low stock"
+   },
+   "type": "action",
+   "position": {
+    "x": 2310,
+    "y": 270
+   }
+  },
+  {
+   "id": "slack-alert",
+   "data": {
+    "type": "action",
+    "label": "Alert #compras on Slack",
+    "config": {
+     "actionType": "slack/send-message",
+     "slackChannel": "#compras",
+     "slackMessage": "⚠️ *Alerta de stock diario*\nHay *{{@combine-filter:Combine & Filter Low Stock.result.length}}* productos con stock menor a 5 unidades:\n\nRevisar planilla *Stock Diario*."
+    },
+    "status": "idle",
+    "description": "Send Slack notification to #compras channel (mock)"
+   },
+   "type": "action",
+   "position": {
+    "x": 2680,
+    "y": 270
+   }
+  },
+  {
+   "id": "loop-tiendanube",
+   "data": {
+    "type": "action",
+    "label": "Process Tiendanube Products",
+    "config": {
+     "steps": [
+      {
+       "id": "check-tn-stock",
+       "config": {
+        "condition": "{{@item:Item.totalStock}} < 5"
+       },
+       "actionType": "Condition"
+      },
+      {
+       "id": "append-tn-sheet",
+       "config": {
+        "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+        "toolkit": "googlesheets",
+        "arguments": "{\"spreadsheetId\": \"{{@create-sheet:Create Stock Diario Sheet.spreadsheet_id}}\", \"range\": \"A:D\", \"valueInputOption\": \"USER_ENTERED\", \"values\": [[\"{{@item:Item.id}}\", \"{{@item:Item.name}}\", \"{{@item:Item.totalStock}}\", \"Tiendanube\"]]}"
+       },
+       "actionType": "composio/run-tool"
+      }
+     ],
+     "source": "{{@get-tiendanube-products:Get Tiendanube Products.products}}",
+     "maxItems": 200,
+     "actionType": "Loop"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 830,
+    "y": 258
+   }
+  },
+  {
+   "id": "loop-mercadolibre",
+   "data": {
+    "type": "action",
+    "label": "Process Mercado Libre Items",
+    "config": {
+     "steps": [
+      {
+       "id": "check-ml-stock",
+       "config": {
+        "condition": "{{@item:Item.availableQuantity}} < 5"
+       },
+       "actionType": "Condition"
+      },
+      {
+       "id": "append-ml-sheet",
+       "config": {
+        "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+        "toolkit": "googlesheets",
+        "arguments": "{\"spreadsheetId\": \"{{@create-sheet:Create Stock Diario Sheet.spreadsheet_id}}\", \"range\": \"A:D\", \"valueInputOption\": \"USER_ENTERED\", \"values\": [[\"{{@item:Item.id}}\", \"{{@item:Item.title}}\", \"{{@item:Item.availableQuantity}}\", \"Mercado Libre\"]]}"
+       },
+       "actionType": "composio/run-tool"
+      }
+     ],
+     "source": "{{@get-mercadolibre-items:Get Mercado Libre Items.items}}",
+     "maxItems": 200,
+     "actionType": "Loop"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1570,
+    "y": 280
+   }
+  },
+  {
+   "id": "combine-filter",
+   "data": {
+    "type": "action",
+    "label": "Combine & Filter Low Stock",
+    "config": {
+     "input": "{\"tn\": {{@loop-tiendanube:Process Tiendanube Products.items}}, \"ml\": {{@loop-mercadolibre:Process Mercado Libre Items.items}}",
+     "actionType": "Fórmula",
+     "expression": "$append(tn.steps.check_tn_stock ? [tn.item] : [], ml.steps.check_ml_stock ? [ml.item] : [])"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "position": {
+    "x": 1940,
+    "y": 228
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "x8WpNwhUW0tCcI2HgqIUU",
+   "target": "get-tiendanube-products"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "x8WpNwhUW0tCcI2HgqIUU",
+   "target": "get-mercadolibre-items"
+  },
+  {
+   "id": "e9",
+   "type": "animated",
+   "source": "check-count",
+   "target": "slack-alert"
+  },
+  {
+   "id": "e-loop-tn",
+   "type": "animated",
+   "source": "get-tiendanube-products",
+   "target": "loop-tiendanube"
+  },
+  {
+   "id": "e-loop-ml",
+   "type": "animated",
+   "source": "get-mercadolibre-items",
+   "target": "loop-mercadolibre"
+  },
+  {
+   "id": "e-sheet-tn",
+   "type": "animated",
+   "source": "loop-tiendanube",
+   "target": "create-sheet"
+  },
+  {
+   "id": "e-sheet-ml",
+   "type": "animated",
+   "source": "loop-mercadolibre",
+   "target": "create-sheet"
+  },
+  {
+   "id": "e-check-count",
+   "type": "animated",
+   "source": "create-sheet",
+   "target": "check-count"
+  },
+  {
+   "id": "e-sheet-tn",
+   "type": "animated",
+   "source": "create-sheet",
+   "target": "loop-tiendanube"
+  },
+  {
+   "id": "e-sheet-ml",
+   "type": "animated",
+   "source": "create-sheet",
+   "target": "loop-mercadolibre"
+  },
+  {
+   "id": "e-trig-sheet",
+   "type": "animated",
+   "source": "x8WpNwhUW0tCcI2HgqIUU",
+   "target": "create-sheet"
+  },
+  {
+   "id": "e-loop-tn-comb",
+   "type": "animated",
+   "source": "loop-tiendanube",
+   "target": "combine-filter"
+  },
+  {
+   "id": "e-loop-ml-comb",
+   "type": "animated",
+   "source": "loop-mercadolibre",
+   "target": "combine-filter"
+  },
+  {
+   "id": "e-comb-check",
+   "type": "animated",
+   "source": "combine-filter",
+   "target": "check-count"
+  }
+ ],
+ "visibility": "private",
+ "active": false,
+ "createdAt": "2026-10-22T14:28:49.862Z",
+ "updatedAt": "2026-10-22T14:37:02.038Z",
+ "isOwner": true,
+ "canEdit": true,
+ "shared": false
+}
