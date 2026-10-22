@@ -63,7 +63,9 @@ async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
 // AI API
 
 type StreamMessage = {
-  type: "operation" | "complete" | "error";
+  type: "operation" | "complete" | "error" | "validation" | "summary" | "question";
+  text?: string;
+  errors?: string[];
   operation?: {
     op:
       | "setName"
@@ -212,7 +214,8 @@ function applyOperation(
 function processStreamLine(
   line: string,
   onUpdate: (data: WorkflowData) => void,
-  state: StreamState
+  state: StreamState,
+  onEvent?: (msg: StreamMessage) => void
 ): void {
   if (!line.trim()) {
     return;
@@ -227,6 +230,8 @@ function processStreamLine(
     } else if (message.type === "error") {
       console.error("[API Client] Error:", message.error);
       state.streamError = message.error || "The AI request failed.";
+    } else if (message.type === "summary" || message.type === "question" || message.type === "validation") {
+      onEvent?.(message);
     }
   } catch (error) {
     console.error("[API Client] Failed to parse JSONL line:", error);
@@ -237,7 +242,8 @@ function processStreamChunk(
   value: Uint8Array,
   decoder: TextDecoder,
   onUpdate: (data: WorkflowData) => void,
-  state: StreamState
+  state: StreamState,
+  onEvent?: (msg: StreamMessage) => void
 ): void {
   state.buffer += decoder.decode(value, { stream: true });
 
@@ -246,7 +252,7 @@ function processStreamChunk(
   state.buffer = lines.pop() || "";
 
   for (const line of lines) {
-    processStreamLine(line, onUpdate, state);
+    processStreamLine(line, onUpdate, state, onEvent);
   }
 }
 
@@ -273,7 +279,8 @@ export const aiApi = {
     },
     toolkits?: string[],
     model?: string,
-    evalMode?: string
+    evalMode?: string,
+    onEvent?: (msg: StreamMessage) => void
   ): Promise<WorkflowData> => {
     const response = await fetch("/api/ai/generate", {
       method: "POST",
@@ -314,7 +321,7 @@ export const aiApi = {
           break;
         }
 
-        processStreamChunk(value, decoder, onUpdate, state);
+        processStreamChunk(value, decoder, onUpdate, state, onEvent);
       }
 
       // A server-reported failure must reach the caller, not be swallowed by the line parser.

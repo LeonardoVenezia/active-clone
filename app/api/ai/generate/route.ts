@@ -165,7 +165,9 @@ IMPORTANT RULES:
 - Apps covered by the Composio catalog (gmail, googlesheets, googledocs, googledrive, notion, airtable, hubspot, jira, outlook) MUST go through composio/run-tool with that toolkit: never a hand-rolled HTTP Request to their API (no raw https://sheets.googleapis.com, gmail, or similar URLs)
 - Call set_name first, then add nodes one at a time, then connect them
 - CRITICAL: Every node (except the last) MUST be connected to at least one other node
-- Each tool call is validated immediately: if a call returns an error, fix exactly THAT call and retry it - do NOT rebuild everything from scratch`;
+- Each tool call is validated immediately: if a call returns an error, fix exactly THAT call and retry it - do NOT rebuild everything from scratch
+- If a value the flow needs is missing and no earlier step can produce it (a destination, an account, an id, the exact message text), call ask_user BEFORE adding nodes; never invent those values
+- Always close with a short conversational message in Spanish: what you built, anything you assumed, and any open question. Never stay silent and never say you could not - if something is missing, say what and ask`;
 
 const TOOL_EXAMPLES = `Example build sequence (linear workflow): set_name("Contact Form Workflow") -> add_node({"id":"trigger-1","nodeType":"trigger","label":"Contact Form","actionType":"Manual"}) -> add_node({"id":"draft-message","nodeType":"action","label":"Draft Message","actionType":"ai-gateway/generate-text","config":{"prompt":"Write a short welcome message for the new contact form submission"}}) -> add_node({"id":"notify-channel","nodeType":"action","label":"Notify Channel","actionType":"slack/send-message","config":{"channel":"#general","text":"{{@draft-message:Draft Message.text}}"}}) -> connect("trigger-1","draft-message") -> connect("draft-message","notify-channel")`;
 
@@ -543,11 +545,18 @@ export async function POST(request: Request) {
     async function runToolsGeneration(encoder: TextEncoder, controller: ReadableStreamDefaultController): Promise<number> {
       const sysPrompt = getSystemPrompt(composioCatalog, "tools");
       let localName = "";
+      let lastModelText = "";
+      let askedQuestion = "";
       const mkTools = () => ({
         set_name: tool({
           description: "Set the workflow name and optional description. Call once, first.",
           inputSchema: z.object({ name: z.string(), description: z.string().optional() }),
           execute: async ({ name, description }) => { localName = name; shadowApply({ op: "setName", name }, shadow); if (description) shadowApply({ op: "setDescription", description }, shadow); return { ok: true }; },
+        }),
+        ask_user: tool({
+          description: "Ask the user for missing information BEFORE building. Use when a value the flow needs is not provided and no earlier step can produce it. Do not build until they answer.",
+          inputSchema: z.object({ question: z.string().describe("the concrete question for the user, in Spanish, conversational") }),
+          execute: async ({ question }) => { askedQuestion = question; return { ok: true }; },
         }),
         add_node: tool({
           description: "Add ONE node to the workflow. nodeType 'trigger' or 'action'; actionType is the trigger/action type; config carries the node settings.",
@@ -598,6 +607,8 @@ export async function POST(request: Request) {
             }
             const res = await generateText({ model: provider(route.model), messages, tools: mkTools(), stopWhen: stepCountIs(25), maxOutputTokens: Math.max(8192, route.maxTokens), temperature: 0.2, maxRetries: 0 });
             console.info("[ai-generate] tools usage", route.name, JSON.stringify(res.usage));
+            const outText = (res.text || "").trim();
+            if (outText) lastModelText = outText;
             if (shadow.nodes.length > 0 || fixErrors.length) return;
           } catch (error) { console.error("[ai-generate] tools pass failed", route.name, error instanceof Error ? error.message.slice(0, 240) : "unknown"); }
         }
@@ -628,6 +639,12 @@ export async function POST(request: Request) {
         return fixed;
       };
       await runOnce([]);
+      // Leo's rule: if the model asked for missing data before building, the
+      // question goes to the conversation and nothing is materialized yet.
+      if (askedQuestion && !shadow.nodes.length) {
+        controller.enqueue(encodeMessage(encoder, { type: "question", text: askedQuestion }));
+        return 0;
+      }
       // Up to 2 corrective rounds, plus one extra when the only remaining
       // errors are consistency-class (e.g. an app the request explicitly
       // asks for is still missing) - those are worth one more shot.
@@ -653,6 +670,33 @@ export async function POST(request: Request) {
       for (const n of finalNodes) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "addNode", node: n }), encoder, controller, count, shadow);
       for (const e of finalEdges) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "addEdge", edge: e }), encoder, controller, count, shadow);
       console.info("[ai-generate] tools materialized ops:", count, "nodes:", finalNodes.length, "edges:", finalEdges.length);
+      // Leo's rule: the build is finished; now tell the user, in the
+      // conversation, what was built, what was assumed or is missing, and ask.
+      const writeClosingNote = async (errs: string[], question: string): Promise<string> => {
+        for (const route of activeRoutes) {
+          try {
+            const provider = createOpenAICompatible({ name: route.name, apiKey: route.apiKey, baseURL: route.baseURL });
+            const res = await generateText({
+              model: provider(route.model),
+              messages: [
+                { role: "system", content: "Sos el asistente que acaba de armar un workflow en el lienzo del usuario. Respondé en español, breve y conversacional." },
+                { role: "user", content: `El flujo ya quedó armado en el lienzo.${errs.length ? ` Quedaron estos temas sin resolver: ${errs.join(" | ")}.` : ""}${question ? ` Antes de armar le pediste este dato al usuario: "${question}".` : ""} Escribí el mensaje para el usuario: contale qué armaste, qué asumiste o qué falta, y hacé la pregunta que necesitás para dejarlo perfecto. Nunca digas que no pudiste; nunca lo dejes sin respuesta. Pedido original: ${userPrompt}` },
+              ],
+              maxOutputTokens: 4096, temperature: 0.4, maxRetries: 0,
+            });
+            const t = (res.text || "").trim();
+            if (t) return t;
+          } catch { /* next route */ }
+        }
+        return "";
+      };
+      const remainingAfter = computeErrors();
+      let closing = lastModelText;
+      if (remainingAfter.length || askedQuestion || !closing) {
+        const note = await writeClosingNote(remainingAfter, askedQuestion);
+        if (note) closing = note;
+      }
+      if (closing) controller.enqueue(encodeMessage(encoder, { type: "summary", text: closing }));
       return count;
     }
     const stream = new ReadableStream({ async start(controller) { try { let operationCount = 0;
