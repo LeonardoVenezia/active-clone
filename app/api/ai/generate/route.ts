@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
 import { generateAITriggerPrompts, getActionOutputFields, getActionOutputItemFields, getAllActions, getAllTriggers } from "@/plugins/registry";
-import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, requestCoverageError, sheetContractError, shipmentDetailError, validateFlow } from "@/lib/flow-validator";
+import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, requestCoverageError, sheetContractError, shipmentDetailError, validateFlow } from "@/lib/flow-validator";
 import { type SourceContract, contractPromptBlock, extractApiSample, inspectSheetsContracts } from "@/lib/source-inspector";
 import { layoutPositions } from "@/lib/auto-layout";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
@@ -21,6 +21,19 @@ function shadowApply(operation: Operation, shadow: Shadow): boolean {
     const node = operation.node as FlowNode | undefined;
     if (!node?.id || !node.data) return false;
     if (shadow.nodes.some((n) => n.id === node.id)) return false;
+    // Deterministic fix for a recurring model mistake: Loop inner steps must
+    // carry ALL parameters inside "config". Fold stray top-level keys in.
+    const cfg = node.data.config as Record<string, unknown> | undefined;
+    if (cfg?.actionType === "Loop" && Array.isArray(cfg.steps)) {
+      for (const step of cfg.steps as Array<Record<string, unknown>>) {
+        if (!step || typeof step !== "object") continue;
+        const inner = (step.config && typeof step.config === "object" ? { ...(step.config as Record<string, unknown>) } : {}) as Record<string, unknown>;
+        for (const [k, v] of Object.entries(step)) {
+          if (k !== "id" && k !== "actionType" && k !== "steps" && k !== "config") inner[k] = v;
+        }
+        step.config = inner;
+      }
+    }
     shadow.nodes.push(node);
     return true;
   }
@@ -330,7 +343,7 @@ export async function POST(request: Request) {
     // empty. Any real (user-arranged) node disables the auto-layout.
     const startedEmpty = (existingWorkflow?.nodes ?? []).every((n: FlowNode) => ((n.data as { config?: Record<string, unknown> } | undefined)?.config?.placeholder === true));
     const computeErrors = (): string[] => {
-      const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes(), { validTriggerTypes: getValidTriggerTypes(), composioCatalog: composioCatalogMap, actionItemFields: getActionOutputItemFields() });
+      const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes(), { validTriggerTypes: getValidTriggerTypes(), composioCatalog: composioCatalogMap, actionItemFields: getActionOutputItemFields(), userPrompt });
       const coverage = planCoverageError(userPrompt, shadow.nodes);
       if (coverage) errs.push(coverage);
       const appCoverage = requestCoverageError(userPrompt, shadow.nodes);
@@ -345,19 +358,21 @@ export async function POST(request: Request) {
       if (questions) errs.push(questions);
       const crossing = listCrossingError(userPrompt, shadow.nodes);
       if (crossing) errs.push(crossing);
+      const condExpr = conditionExpressionError(shadow.nodes);
+      if (condExpr) errs.push(condExpr);
       const sheetContract = sheetContractError(shadow.nodes, sheetContracts);
       if (sheetContract) errs.push(sheetContract);
       const httpSchema = httpSchemaError(shadow.nodes);
       if (httpSchema) errs.push(httpSchema);
       return errs;
     };
-    async function runCorrectivePass(operationCount: number, encoder: TextEncoder, controller: ReadableStreamDefaultController): Promise<number> {
+    async function runCorrectivePass(operationCount: number, encoder: TextEncoder, controller: ReadableStreamDefaultController, hint = ""): Promise<number> {
       const errors = computeErrors();
       if (!errors.length) return operationCount;
       console.warn("[ai-generate] validation errors", errors);
       const nodeList = shadow.nodes.map(n => `- ${n.id}: ${JSON.stringify({ label: n.data?.label, config: n.data?.config })}`).join("\n");
       const edgeList = shadow.edges.map(e => `- ${e.source} -> ${e.target}`).join("\n");
-      const fixPrompt = `The workflow you generated has these DETERMINISTIC VALIDATION ERRORS:\n${errors.map(e => `- ${e}`).join("\n")}\n\nCurrent nodes:\n${nodeList}\nCurrent edges:\n${edgeList}\n\nEmit ONLY the corrective operations needed to fix these exact errors (addNode/addEdge/removeNode/removeEdge/updateNode). Add nodes before the edges that use them. Do NOT recreate existing nodes; reuse their exact ids. Original request: ${userPrompt}`;
+      const fixPrompt = `The workflow you generated has these DETERMINISTIC VALIDATION ERRORS:\n${errors.map(e => `- ${e}`).join("\n")}\n\nCurrent nodes:\n${nodeList}\nCurrent edges:\n${edgeList}\n\nEmit ONLY the corrective operations needed to fix these exact errors (addNode/addEdge/removeNode/removeEdge/updateNode). Add nodes before the edges that use them. Do NOT recreate existing nodes; reuse their exact ids. Original request: ${userPrompt}${hint}`;
       for (const route of activeRoutes) {
         try {
           console.info("[ai-generate] corrective attempt", route.name, route.model);
@@ -483,7 +498,15 @@ export async function POST(request: Request) {
           if (evalMode === "fullJson" && !existingWorkflow) {
             operationCount = await runFullJsonGeneration(encoder, controller);
           } else {
-            operationCount = await processOperationStream(textChunks(), encoder, controller, shadow); if (streamState.truncated) operationCount = await runContinuationPass(operationCount, encoder, controller); for (let pass = 0; pass < 3; pass++) { if (!computeErrors().length) break; operationCount = await runCorrectivePass(operationCount, encoder, controller); }
+            operationCount = await processOperationStream(textChunks(), encoder, controller, shadow); if (streamState.truncated) operationCount = await runContinuationPass(operationCount, encoder, controller); for (let pass = 0; pass < 4; pass++) {
+              const remaining = computeErrors();
+              if (!remaining.length) break;
+              const structural = remaining.filter(e => /Loop|per-item|raw list|crosses TWO|compare\/cross|list-crossing/i.test(e));
+              const hint = pass >= 2 && structural.length
+                ? "\n\nHINT for the list-processing errors: replace any Fórmula/AI step that reads two lists with ONE Loop node shaped exactly like this: {\"actionType\": \"Loop\", \"source\": \"{{@<list-node-id>:<Label>.<arrayField>}}\", \"maxItems\": 50, \"steps\": [{\"id\": \"check\", \"actionType\": \"Condition\", \"config\": {\"condition\": \"{{@item:Item.<field>}} <comparison> <value>\"}}, {\"id\": \"act\", \"actionType\": \"<the write/notify action>\", \"config\": {...}}]} - a false inner Condition FILTERS the item, and aggregate/notify steps go AFTER the Loop referencing {{@<loop-id>:<Label>.count}} or .items. Keep every inner step's parameters inside its \"config\" object."
+                : "";
+              operationCount = await runCorrectivePass(operationCount, encoder, controller, hint);
+            }
           }
           // Deterministic cleanup: remove unreachable action nodes that nothing references
           // (leftovers a corrective pass replaced but did not remove).

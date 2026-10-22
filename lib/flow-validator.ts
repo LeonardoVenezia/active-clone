@@ -74,6 +74,9 @@ export type ValidateFlowOptions = {
   composioCatalog?: ReadonlyMap<string, string[]>;
   // actionId -> array output field -> item field names (for {{@item:Item.x}} checks)
   actionItemFields?: Record<string, Record<string, string[]>>;
+  // Original user request: placeholder-looking literals the user explicitly
+  // provided (e.g. a real email ending in example.com) are not placeholders.
+  userPrompt?: string;
 };
 
 export function validateFlow(
@@ -398,6 +401,12 @@ export function validateFlow(
       if (value.includes("/wp-json/")) continue;
       for (const re of PLACEHOLDER_RES) {
         if (re.test(value)) {
+          // User-provided literals are not placeholders: if every email/URL-ish
+          // token in this value appears verbatim in the original request, keep it.
+          if (options.userPrompt) {
+            const tokens = value.match(/[\w.+-]+@[\w-]+\.[\w.-]+|https?:\/\/[^\s"'}]+/g) ?? [];
+            if (tokens.length > 0 && tokens.every((t) => (options.userPrompt as string).includes(t))) continue;
+          }
           if (/endpoint|url/i.test(path)) {
             errors.push(`consistencia: node "${n.id}" (${label}) field "${path}" has a placeholder URL ("${value.slice(0, 60)}"); if an action for this app exists in the plugin list or the live Composio catalog you MUST use that action instead of a hand-rolled HTTP Request; otherwise set the real endpoint (if the user explicitly provided this exact value, keep it)`);
           } else {
@@ -691,6 +700,55 @@ export function questionActionError(promptText: string, nodes: FlowNode[]): stri
   return null;
 }
 
+const CONDITION_ALLOWED_IDENT = new Set(["true", "false", "null", "undefined", "Math", "JSON", "Number", "String", "Boolean", "parseFloat", "parseInt", "Array", "Object", "Date"]);
+
+function bareIdentifiersInCondition(expression: string): string[] {
+  // Strip {{@...}} templates, quoted strings, and numbers; what remains must be
+  // operators/punctuation only. Any identifier left is an invented variable.
+  const stripped = expression
+    .replace(/\{\{\@[^}]+\}\}/g, " ")
+    .replace(/'(?:[^'\\]|\\.)*'/g, " ")
+    .replace(/"(?:[^"\\]|\\.)*"/g, " ")
+    .replace(/\b\d+(?:\.\d+)?\b/g, " ");
+  const found = new Set<string>();
+  for (const m of stripped.matchAll(/(?<![.\w$])[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/g)) {
+    const root = m[0].split(".")[0];
+    if (!CONDITION_ALLOWED_IDENT.has(root)) found.add(m[0]);
+  }
+  return [...found];
+}
+
+/**
+ * Condition expressions must compare {{@...}} references or fixed values only.
+ * An invented variable (orderResult.status, delayed === 'delayed') can never
+ * resolve - the executor has no such scope.
+ */
+export function conditionExpressionError(nodes: FlowNode[]): string | null {
+  const check = (expression: unknown, where: string): string | null => {
+    if (typeof expression !== "string" || !expression.trim()) return null;
+    const bare = bareIdentifiersInCondition(expression);
+    if (!bare.length) return null;
+    return `semántica: ${where} uses invented variable(s) ${bare.map((b) => `"${b}"`).join(", ")}; conditions MUST compare {{@...}} template references or fixed values only (e.g. {{@get-order:Get Order.status}} === 'paid') - the executor has no variable named ${bare[0]}`;
+  };
+  for (const n of nodes) {
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    const label = n.data?.label ?? n.id;
+    if (actionTypeOf(n) === "Condition") {
+      const err = check(cfg.condition, `Condition node "${n.id}" (${label})`);
+      if (err) return err;
+    }
+    if (actionTypeOf(n) === "Loop" && Array.isArray(cfg.steps)) {
+      for (const st of cfg.steps as Array<{ id?: unknown; actionType?: unknown; config?: unknown }>) {
+        if (st?.actionType !== "Condition") continue;
+        const sc = (st.config ?? {}) as Record<string, unknown>;
+        const err = check(sc.condition, `Loop "${n.id}" inner step "${String(st.id ?? "?")}"`);
+        if (err) return err;
+      }
+    }
+  }
+  return null;
+}
+
 export type SheetColumnsContract = {
   spreadsheetId: string;
   sheets: Array<{ title: string; columns: string[] }>;
@@ -802,9 +860,9 @@ export function listCrossingError(promptText: string, nodes: FlowNode[]): string
   if (!wantsCross) return null;
   const listCount = nodes.filter((n) => isList(n)).length;
   if (listCount < 2) return null;
-  const hasJoiner = nodes.some((n) => ["Loop", "Fórmula", "Formula"].includes(actionTypeOf(n)));
+  const hasJoiner = nodes.some((n) => actionTypeOf(n) === "Loop");
   if (hasJoiner) return null;
-  return `consistencia: the request asks to compare/cross two lists but the canvas has no Loop or Fórmula to do it deterministically; add a Loop over one list with inner compare steps against the other (or a Fórmula that joins both), then write/notify the differences`;
+  return `consistencia: the request asks to compare/cross two lists but the canvas has no Loop to do it deterministically; add a Loop over one list whose inner steps look up / compare each element against the other list (Condition inside the Loop), then write/notify the differences AFTER the Loop`;
 }
 
 export function channelConsistencyError(promptText: string, nodes: FlowNode[]): string | null {

@@ -300,6 +300,9 @@ export async function simulate(workflow, fixture) {
         const { id: _i, actionType: _a, steps: _s, config: bodyConfig, ...top } = bodyStep;
         const stepWhere = { nodeId: where.nodeId, step: stepId, item: i };
         const processed = processTemplates({ ...top, ...(bodyConfig || {}) }, itemOutputs, stepWhere);
+        // Condition: el executor real NO sustituye valores inline en la expresión;
+        // los convierte en variables ($__v0). Pasar la expresión cruda a evalCondition.
+        if (stepAction === "Condition") processed.condition = (bodyConfig || top).condition;
         const bodyResult = await execAction(stepAction, processed, itemOutputs, stepWhere);
         if (bodyResult && typeof bodyResult === "object" && "success" in bodyResult && bodyResult.success === false) {
           failed.push({ index: i, step: stepAction, error: String(bodyResult.error || "failed") });
@@ -370,6 +373,7 @@ export async function simulate(workflow, fixture) {
     const processed = actionType === "Loop"
       ? config // el Loop resuelve su source y procesa inner steps por ítem
       : processTemplates(config, {}, where);
+    if (actionType === "Condition") processed.condition = config.condition;
     const result = await execAction(actionType, processed, {}, where);
     const ok = !(result && typeof result === "object" && "success" in result && result.success === false);
     outputs[sanitize(node.id)] = {
