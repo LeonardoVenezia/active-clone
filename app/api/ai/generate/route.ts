@@ -363,7 +363,7 @@ export async function POST(request: Request) {
       if (crossing) errs.push(crossing);
       const condExpr = conditionExpressionError(shadow.nodes);
       if (condExpr) errs.push(condExpr);
-      const formExpr = formulaExpressionError(shadow.nodes);
+      const formExpr = formulaExpressionError(shadow.nodes, getActionOutputItemFields());
       if (formExpr) errs.push(formExpr);
       const cyclic = cyclicFlowError(shadow.nodes, shadow.edges);
       if (cyclic) errs.push(cyclic);

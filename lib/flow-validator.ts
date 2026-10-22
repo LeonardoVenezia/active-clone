@@ -780,7 +780,7 @@ export function cyclicFlowError(nodes: FlowNode[], edges: FlowEdge[]): string | 
   return `estructura: el flujo tiene un CICLO: ${path}. Un workflow es un DAG: cada dato fluye en una sola dirección (listas -> merge/fórmula -> acciones). Quitá las aristas que cierran el ciclo (típicamente una arista que vuelve de un paso posterior hacia un Loop o una lista anterior) y conectá la salida del paso final hacia adelante, nunca hacia atrás`;
 }
 
-export function formulaExpressionError(nodes: FlowNode[]): string | null {
+export function formulaExpressionError(nodes: FlowNode[], itemFields?: Record<string, Record<string, string[]>>): string | null {
   const byId = new Map(nodes.map((x) => [x.id, x]));
   const isListNode = (id: string | undefined): boolean => {
     const n = id ? byId.get(id) : undefined;
@@ -822,6 +822,34 @@ export function formulaExpressionError(nodes: FlowNode[]): string | null {
     const unused = listKeys.filter((k) => !keyUsed(k));
     if (unused.length > 0) {
       return `semántica: Fórmula node "${n.id}" (${label}) declares list input(s) ${unused.map((u) => `"${u}"`).join(", ")} but never uses them in the expression; when a Fórmula receives two lists use the PREBUILT reconcile template verbatim (fill only key/field names): {"soloEnA": $filter(keyA, function($x) { $not($number($x.fieldA) in $map(keyB, function($y){ $number($y.fieldB) })) }), "soloEnB": $filter(keyB, function($y) { $not($number($y.fieldB) in $map(keyA, function($x){ $number($x.fieldA) })) })} (numeric join) - never return one list unchanged`;
+    }
+    // Join-field existence: for list-bound keys whose source item shape is
+    // known, every field the expression reads from that list must exist.
+    // Catches invented joins (re15: id/external_reference) the template avoids.
+    if (itemFields) {
+      for (const k of listKeys) {
+        const bind = new RegExp(`"${k}"\\s*:\\s*[^,{]*\\{\\{@([\\w-]+):[^.}]+\\.([\\w[\\]]+)`).exec(input);
+        if (!bind) continue;
+        const srcNode = byId.get(bind[1]);
+        const srcAction = srcNode ? actionTypeOf(srcNode) : "";
+        const arrField = (bind[2] ?? "").split("[")[0];
+        const shape = itemFields[srcAction]?.[arrField];
+        if (!shape || shape.length === 0) continue;
+        const bad = new Set<string>();
+        for (const dm of expression.matchAll(new RegExp(`(^|[^\\w$])${k}\\.(\\w+)`, "g"))) {
+          if (!shape.includes(dm[2])) bad.add(`${k}.${dm[2]}`);
+        }
+        for (const lm of expression.matchAll(new RegExp(`\\$(?:filter|map)\\(\\s*${k}\\s*,\\s*function\\(\\$(\\w+)\\)\\s*\\{([^}]*)\\}`, "g"))) {
+          const v = lm[1];
+          const body = lm[2];
+          for (const fm of body.matchAll(new RegExp(`\\$${v}\\.(\\w+)`, "g"))) {
+            if (!shape.includes(fm[1])) bad.add(`${k}.${fm[1]}`);
+          }
+        }
+        if (bad.size) {
+          return `semántica: Fórmula node "${n.id}" (${label}) reads field(s) ${[...bad].map((b) => `"${b}"`).join(", ")} but items from ${srcAction}.${arrField} only have: ${shape.join(", ")}; join the lists on REAL fields present in both (e.g. amount/total with $number(...) normalization) - use the PREBUILT reconcile template verbatim instead of inventing join fields`;
+        }
+      }
     }
   }
   return null;
