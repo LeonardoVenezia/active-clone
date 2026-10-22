@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
 import { generateAITriggerPrompts, getActionOutputFields, getActionOutputItemFields, getAllActions, getAllTriggers } from "@/plugins/registry";
-import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, requestCoverageError, sheetContractError, shipmentDetailError, validateFlow } from "@/lib/flow-validator";
+import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, cyclicFlowError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, requestCoverageError, sheetContractError, shipmentDetailError, validateFlow } from "@/lib/flow-validator";
 import { type SourceContract, contractPromptBlock, extractApiSample, inspectSheetsContracts } from "@/lib/source-inspector";
 import { layoutPositions } from "@/lib/auto-layout";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
@@ -362,6 +362,8 @@ export async function POST(request: Request) {
       if (condExpr) errs.push(condExpr);
       const formExpr = formulaExpressionError(shadow.nodes);
       if (formExpr) errs.push(formExpr);
+      const cyclic = cyclicFlowError(shadow.nodes, shadow.edges);
+      if (cyclic) errs.push(cyclic);
       const sheetContract = sheetContractError(shadow.nodes, sheetContracts);
       if (sheetContract) errs.push(sheetContract);
       const httpSchema = httpSchemaError(shadow.nodes);

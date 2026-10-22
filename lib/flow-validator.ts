@@ -732,6 +732,46 @@ function bareIdentifiersInCondition(expression: string): string[] {
  * input's fields. The input is a JSON string that may contain {{@...}}
  * templates; top-level keys are read with a tolerant regex.
  */
+export function cyclicFlowError(nodes: FlowNode[], edges: FlowEdge[]): string | null {
+  // The runtime executes the flow as a DAG; any directed cycle makes every
+  // node in (and downstream of) the cycle unexecutable. Detect one cycle and
+  // report the offending edges so the corrective pass can remove them.
+  const ids = new Set(nodes.map((n) => n.id));
+  const adj = new Map<string, string[]>();
+  for (const e of edges) {
+    if (!ids.has(e.source) || !ids.has(e.target)) continue;
+    if (!adj.has(e.source)) adj.set(e.source, []);
+    (adj.get(e.source) as string[]).push(e.target);
+  }
+  const state = new Map<string, number>(); // 0 unvisited, 1 in-stack, 2 done
+  const stack: string[] = [];
+  let cycle: string[] | null = null;
+  const dfs = (id: string): boolean => {
+    state.set(id, 1);
+    stack.push(id);
+    for (const next of adj.get(id) ?? []) {
+      const st = state.get(next) ?? 0;
+      if (st === 0) {
+        if (dfs(next)) return true;
+      } else if (st === 1) {
+        cycle = stack.slice(stack.indexOf(next)).concat(next);
+        return true;
+      }
+    }
+    stack.pop();
+    state.set(id, 2);
+    return false;
+  };
+  for (const id of ids) {
+    if ((state.get(id) ?? 0) === 0 && dfs(id)) break;
+  }
+  if (!cycle) return null;
+  const path = (cycle as string[])
+    .map((id) => `${id} (${nodes.find((n) => n.id === id)?.data?.label ?? id})`)
+    .join(" -> ");
+  return `estructura: el flujo tiene un CICLO: ${path}. Un workflow es un DAG: cada dato fluye en una sola dirección (listas -> merge/fórmula -> acciones). Quitá las aristas que cierran el ciclo (típicamente una arista que vuelve de un paso posterior hacia un Loop o una lista anterior) y conectá la salida del paso final hacia adelante, nunca hacia atrás`;
+}
+
 export function formulaExpressionError(nodes: FlowNode[]): string | null {
   const byId = new Map(nodes.map((x) => [x.id, x]));
   const isListNode = (id: string | undefined): boolean => {
