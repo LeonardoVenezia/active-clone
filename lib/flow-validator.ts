@@ -295,6 +295,11 @@ export function validateFlow(
       collectStrings(cfg, "", cfgStrings);
       for (const { path, value } of cfgStrings) {
         if (actionType === "Loop" && path === "source") continue;
+        // A Fórmula "input" legitimately binds raw list arrays: the prebuilt reconcile
+        // template requires it ({"pagos": {{@a:A.payments}}, "ordenes": {{@b:B.orders}}}),
+        // and wholesale aggregations do too. The Loop rule is about writing list data
+        // to single-value outputs, not about Fórmula inputs.
+        if (actionType === "Fórmula" && path === "input") continue;
         const rawList = value.match(rawListRe);
         if (!rawList || rawList[1] === "item") continue;
         errors.push(`semántica: node "${n.id}" (${label}) writes the raw list field ".${rawList[2]}" from "${rawList[1]}" as a single value; one row/item per list element MUST go through a Loop (with filter/compare as inner steps), aggregate the list to a scalar first (count, total, summary), or - when you need the DETAIL of one element (e.g. the latest order) - add the plugin's get-* detail step after "${rawList[1]}" and reference that instead`);
@@ -346,13 +351,17 @@ export function validateFlow(
     if (actionType === "Fórmula") {
       const txt = JSON.stringify(cfg);
       const refs = [...txt.matchAll(/\{\{@([\w-]+):/g)].map((m) => m[1]);
-      const listRef = refs.some((id) => {
+      const listRefIds = new Set(refs.filter((id) => {
         const target = byId.get(id);
         const targetType = target ? actionTypeOf(target) : "";
         return /search|list|get-question/i.test(targetType);
-      });
+      }));
+      const listRef = listRefIds.size > 0;
       const perItemIntent = /compar|diferenc|filtr|faltante|sin stock|stock bajo|cada|per[- ]item|por [íi]tem/i.test(`${label} ${txt.slice(0, 300)}`);
-      if (listRef && perItemIntent) {
+      // A Fórmula crossing TWO OR MORE list outputs is the mandated reconcile/join
+      // template - the per-item Loop rule would contradict it. Single-list per-item
+      // work still requires a Loop.
+      if (listRef && listRefIds.size < 2 && perItemIntent) {
         errors.push(`semántica: node "${n.id}" (${label}) compares/filters list outputs in a single Fórmula step; per-item list processing MUST be a Loop node whose inner steps do the per-item check (Condition inside the Loop for per-item filters/alerts); aggregate or notify AFTER the Loop`);
       }
     }
