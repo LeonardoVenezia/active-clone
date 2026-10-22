@@ -258,3 +258,19 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
   el "EXPRESSION WRONG" inicial era artefacto del script, la expresión es
   correcta.)
 - Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 1/10, C-12 0/2.
+
+## Medición live C-12 (mismo deploy 065f4f4, 2026-10-22 ~19:45 UTC)
+
+- C-12: PASS (4/4) — PRIMER PASS LIVE de C-12. 8 nodos: Schedule 9 AM,
+  Revisar Tiendanube + Revisar Mercado Libre, dos Loops con sub-pasos
+  Condition (stock < 5 sobre refs de item) + Sheets append escribiendo
+  identidad del ítem (fuente, nombre, stock vía {{@item:...}}), Fórmula
+  tn+ml sobre los .count de ambos loops, Condition > 3 sobre
+  formula-count.result, y Slack a #compras referenciando el total.
+- Honest check: no es presence-only — harness detectó exactamente
+  tn_p1, tn_p3, ml_p1, ml_p3 (los 4 correctos del fixture), 0 filas con
+  celdas vacías, 0 falsos positivos, Slack disparado una vez (>3 en falta).
+- Nota operativa: el build inicial quedó vacío (solo trigger persistido);
+  necesitó un nudge conversacional ("Dale, armalo así en el lienzo") y ahí
+  aplicó todo, incluida la respuesta de config ("Control de Stock").
+- Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 1/10, C-12 1/3.
