@@ -48,6 +48,7 @@ UNDO: when the user asks to undo or revert the last canvas change ("deshace", "v
 ACTING ON THE CANVAS: the app reads small markers at the end of your replies and performs the action itself; never mention markers, buttons, or mechanics in your prose.
 - BUILD: when the user confirms a plan or directly asks for a canvas change (any yes, ok, dale, listo, or a command like crea/arma), answer in one natural sentence and end with the exact marker [[BUILD: one plain sentence with the full requested canvas change including the collected details]]. Do not ask again, do not repeat the plan. Same for edits ("saca ese nodo", "cambia la hoja"): one sentence and [[BUILD: ...]] describing exactly that change. You may add, change and remove steps yourself. The user stays the final owner and can undo.
 STRICT RULES:
+- Never say the flow is built, armed, ready or done ("listo", "armado", "quedo", "ya esta", "done") unless that same reply ends with the [[BUILD: ...]] marker: without the marker NOTHING changes on the canvas and the claim is a lie. When the user wants it built, the marker IS the building.
 - Never announce an intention without acting. Forbidden: "voy a crear", "voy a preparar", "on it", "lo voy a hacer", "I'll build". Either include the [[BUILD: ...]] marker in the same reply, or ask the specific question you still need. Never write a reply that only promises.
 - Never claim the change is done before the build succeeds. Never mention or promise a link, button, or click in prose; only the app shows connection cards.
 - When an app is required, use the connection-status block below: never ask the user whether they already connected an account. If status is not_connected, include [[CONNECT: toolkit_slug]] using the exact lowercase slug from the status block. If status is needs_attention, say the existing connection needs reviewed permissions and include [[CONNECT: toolkit_slug]]. If status is connected, do not ask to connect it. If status is pending, say it is still finishing. If status is check_failed, say you could not verify and offer to retry; never include CONNECT. If both connection and build are needed, put CONNECT first and do not include BUILD until the connection exists. EXCEPTION: in DRAFT MODE never include CONNECT; build the draft with example values.
@@ -251,7 +252,19 @@ export async function POST(r: Request) {
       else if (/\bslack\b/i.test(reply) && /\b(?:canal|channel)\b/i.test(reply)) form = { title: "Slack", fields: [{ key: "f0", label: "Canal de Slack" }], offerCreate: false };
     }
     { const bm = reply.match(/\[\[BUILD:\s*([\s\S]{3,600}?)\]\]\s*$/); const arrival = /\b(?:lleg\w*|recib\w*|arrive\w*|receiv\w*|entr\w*)\s+(?:(?:un|una|el|los|nuevo|nueva|nuevos|any|a|an|new|alg[uú]n)\s+){0,3}(?:mails?|correos?|e-?mails?)\b|\b(?:mails?|correos?|e-?mails?)\s+(?:nuevo|new|entrante|incoming)\b/i;
-      if (bm && arrival.test(`${bm[1]} ${text}`)) { connect = null; form = null; reply = "Para mails que llegan, la app ya tiene un flujo real listo: \"Email to sheet\", en la página Flows (menú Flows). Reacciona a mails reales de verdad. El lienzo todavía no puede arrancar desde un mail nuevo, y no quiero armarte algo que parezca funcionar y no lo haga. ¿Querés usar ese flujo?"; } }
+      // Offer the ready-made mail flow only ONCE per conversation: if it was
+      // already pitched (and the user kept talking), a decline happened - let
+      // the canvas build (Schedule polling version) go through instead.
+      const alreadyPitched = past.some(m => m.role === "assistant" && /email to sheet|email a hoja/i.test(m.content));
+      if (bm && arrival.test(`${bm[1]} ${text}`) && !alreadyPitched) { connect = null; form = null; reply = "Para mails que llegan, la app ya tiene un flujo real listo: \"Email to sheet\", en la página Flows (menú Flows). Reacciona a mails reales de verdad. El lienzo todavía no puede arrancar desde un mail nuevo, y no quiero armarte algo que parezca funcionar y no lo haga. ¿Querés usar ese flujo?"; } }
+    // Completion-claim guard: a reply that announces a built flow while the
+    // canvas is still empty and no BUILD marker exists leaves the user with
+    // nothing. Recover by turning the claim itself into the build instruction.
+    const canvasBare = (b.snapshot?.nodes ?? []).length <= 1;
+    if (canvasBare && !form && !connect && !template && !templateImport && !undoRequested && !/\[\[BUILD:/i.test(reply) && /(?:listo|ya está|ya esta|ya quedó|ya quedo|armado|armé|done|built)\b[^\n]{0,160}?\b(?:flujo|workflow|maqueta|borrador|lienzo|canvas)\b/i.test(reply)) {
+      const instruction = reply.replace(/^(?:listo|ya está|ya esta|ya quedó|ya quedo)[:,]?\s*/i, "").replace(/\[\[|\]\]/g, "").replace(/\s+/g, " ").trim().slice(0, 500);
+      reply = `${reply}\n[[BUILD: ${instruction}]]`;
+    }
     const m = reply.match(/\[\[BUILD:\s*([\s\S]{3,600}?)\]\]\s*$/);
     const build = m ? m[1].trim() : null;
     const shown = m ? reply.slice(0, m.index).trim() || "Armando el flujo en el lienzo." : reply;
