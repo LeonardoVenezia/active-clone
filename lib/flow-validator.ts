@@ -887,11 +887,42 @@ export function listCrossingError(promptText: string, nodes: FlowNode[]): string
   }
   const wantsCross = /compar|cruz|reconcil|sin orden|sin cobro|sin pago|diferenc/i.test(promptText);
   if (!wantsCross) return null;
-  const listCount = nodes.filter((n) => isList(n)).length;
-  if (listCount < 2) return null;
-  const hasJoiner = nodes.some((n) => actionTypeOf(n) === "Loop");
-  if (hasJoiner) return null;
-  return `consistencia: the request asks to compare/cross two lists but the canvas has no Loop to do it deterministically; add a Loop over one list whose inner steps look up / compare each element against the other list (Condition inside the Loop), then write/notify the differences AFTER the Loop`;
+  const listNodes = nodes.filter((n) => isList(n));
+  if (listNodes.length < 2) return null;
+  // Accepted deterministic crossings:
+  // (a) ONE Fórmula whose "input" references TWO OR MORE distinct list outputs
+  //     (JSONata filters/maps over both - the canonical reconciliation shape);
+  // (b) a Loop over one list whose inner steps consult the OTHER list: a
+  //     template ref to another list node, or an inner list action keyed by
+  //     {{@item:...}} (per-item lookup).
+  const hasCrossFormula = nodes.some((n) => {
+    if (actionTypeOf(n) !== "Fórmula") return false;
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    const input = typeof cfg.input === "string" ? cfg.input : "";
+    const refs = new Set([...input.matchAll(/\{\{@([\w-]+):/g)].map((m) => m[1]));
+    return [...refs].filter((id) => isList(byId.get(id))).length >= 2;
+  });
+  if (hasCrossFormula) return null;
+  const hasCrossLoop = nodes.some((n) => {
+    if (actionTypeOf(n) !== "Loop") return false;
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    const sourceRef = /\{\{@([\w-]+):/.exec(typeof cfg.source === "string" ? cfg.source : "")?.[1];
+    const steps = Array.isArray(cfg.steps) ? (cfg.steps as Array<Record<string, unknown>>) : [];
+    const stepsJson = JSON.stringify(steps);
+    const refs = new Set([...stepsJson.matchAll(/\{\{@([\w-]+):/g)].map((m) => m[1]));
+    for (const id of refs) {
+      if (id !== "item" && id !== "index" && id !== sourceRef && isList(byId.get(id))) return true;
+    }
+    // per-item lookup: an inner list action keyed by the current item
+    return steps.some(
+      (st) =>
+        typeof st?.actionType === "string" &&
+        LIST_ACTION_RE.test(st.actionType as string) &&
+        JSON.stringify(st.config ?? {}).includes("{{@item:")
+    );
+  });
+  if (hasCrossLoop) return null;
+  return `consistencia: the request asks to compare/cross two lists but no step actually crosses them. Use ONE Fórmula whose "input" JSON includes BOTH list outputs (e.g. {"pagos": {{@a:A.payments}}, "ordenes": {{@b:B.orders}}}) with a JSONata expression that filters/maps one against the other ($filter, $map, $contains), OR a Loop over one list whose inner steps look each item up in the other list (an inner Search/List action keyed by {{@item:Item.id}} plus a Condition). Loops that only read their own items and AI text steps do NOT cross lists`;
 }
 
 export function channelConsistencyError(promptText: string, nodes: FlowNode[]): string | null {
