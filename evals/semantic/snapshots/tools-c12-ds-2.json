@@ -1,0 +1,186 @@
+{
+  "name": "Control de Stock Diario (Tiendanube + Mercado Libre)",
+  "nodes": [
+    {
+      "id": "trigger-9am",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Todos los días 9:00",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 9 * * *",
+          "timezone": "America/Argentina/Buenos_Aires"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "list-tiendanube",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "Listar Productos Tiendanube",
+        "type": "action",
+        "config": {
+          "query": "",
+          "limit": "200",
+          "actionType": "tiendanube/list-products"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "list-mercadolibre",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Listar Publicaciones Mercado Libre",
+        "type": "action",
+        "config": {
+          "query": "",
+          "status": "active",
+          "limit": "200",
+          "actionType": "mercadolibre/list-items"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "low-stock",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 185
+      },
+      "data": {
+        "label": "Productos con Stock Bajo",
+        "type": "action",
+        "config": {
+          "input": "{\"tn\": {{@list-tiendanube:Listar Productos Tiendanube.products}}, \"ml\": {{@list-mercadolibre:Listar Publicaciones Mercado Libre.items}}}",
+          "expression": "($t := $filter(tn, function($p){ $p.totalStock < 5 }); $m := $filter(ml, function($i){ $i.availableQuantity < 5 }); {\"total\": $count($t) + $count($m), \"bajos\": $append($map($t, function($p){ {\"origen\": \"Tiendanube\", \"producto\": $p.name, \"sku\": $p.variants[0].sku, \"stock\": $p.totalStock} }), $map($m, function($i){ {\"origen\": \"Mercado Libre\", \"producto\": $i.title, \"sku\": $i.id, \"stock\": $i.availableQuantity} }))})",
+          "actionType": "Fórmula"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "cond-mas-de-3",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      },
+      "data": {
+        "label": "¿Más de 3 Productos en Falta?",
+        "type": "action",
+        "config": {
+          "condition": "{{@low-stock:Productos con Stock Bajo.result.total}} > 3",
+          "actionType": "Condition"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "slack-compras",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 185
+      },
+      "data": {
+        "label": "Avisar a #compras - Slack",
+        "type": "action",
+        "config": {
+          "slackChannel": "#compras",
+          "slackMessage": "⚠️ Control de stock diario: hay {{@low-stock:Productos con Stock Bajo.result.total}} productos con menos de 5 unidades.\nDetalle (origen, producto, SKU, stock): {{@low-stock:Productos con Stock Bajo.result.bajos}}",
+          "actionType": "slack/send-message"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-bajos",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "Por Cada Producto con Stock Bajo",
+        "type": "action",
+        "config": {
+          "source": "{{@low-stock:Productos con Stock Bajo.result.bajos}}",
+          "maxItems": 200,
+          "steps": [
+            {
+              "id": "check-stock",
+              "actionType": "Condition",
+              "config": {
+                "condition": "{{@item:Item.stock}} < 5"
+              }
+            },
+            {
+              "id": "append-row",
+              "actionType": "composio/run-tool",
+              "config": {
+                "toolkit": "googlesheets",
+                "tool": "GOOGLESHEETS_APPEND_ROW",
+                "arguments": "{\"spreadsheet_id\": \"COMPLETAR_ID_DE_LA_PLANILLA\", \"worksheet\": \"Stock\", \"rows\": [[\"{{@item:Item.origen}}\", \"{{@item:Item.producto}}\", \"{{@item:Item.sku}}\", {{@item:Item.stock}}]]}"
+              }
+            }
+          ],
+          "actionType": "Loop"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "trigger-9am",
+      "target": "list-tiendanube",
+      "id": "e-trigger-9am-list-tiendanube"
+    },
+    {
+      "source": "trigger-9am",
+      "target": "list-mercadolibre",
+      "id": "e-trigger-9am-list-mercadolibre"
+    },
+    {
+      "source": "list-tiendanube",
+      "target": "low-stock",
+      "id": "e-list-tiendanube-low-stock"
+    },
+    {
+      "source": "list-mercadolibre",
+      "target": "low-stock",
+      "id": "e-list-mercadolibre-low-stock"
+    },
+    {
+      "source": "cond-mas-de-3",
+      "target": "slack-compras",
+      "id": "e-cond-mas-de-3-slack-compras"
+    },
+    {
+      "source": "low-stock",
+      "target": "loop-bajos",
+      "id": "e-low-stock-loop-bajos"
+    },
+    {
+      "source": "loop-bajos",
+      "target": "cond-mas-de-3",
+      "id": "e-loop-bajos-cond-mas-de-3"
+    }
+  ]
+}
