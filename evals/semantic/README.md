@@ -305,3 +305,20 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
   instrucción del parent.
 - Tally honesto final del día: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2,
   C-09 2/13, C-12 1/3.
+
+## A/B modelo pago (deepseek-v4.1-flash-fast, Refuseless) vs gratis — 2026-10-22
+
+Harness: `live-ab.mts` (route /api/ai/generate in-process, pipeline real) y
+`prod-fetch.mjs` (streams del endpoint prod con pin `model`). Modelo pago
+confirmado en catalogo vivo; ruta Refuseless = fallback pago ultimo (23ed4b5,
+45245e0, env var en Vercel Production). El modelo es reasoning: requiere
+max_tokens alto (fix 23ed4b5).
+
+| Caso | Pago local (sin catalogo Composio) | Pago prod | Gratis prod |
+|------|-----------------------------------|-----------|-------------|
+| C-09 | FAIL x2 (refs salida Formula sin .result) | FAIL (misma familia; verify-re11 EXPRESSION WRONG) | pendiente (modelo gratis colgado 18:39, 2 intentos "busy") |
+| C-12 | FAIL (sin filas Sheets) | **PASS** | pendiente |
+
+Senal preliminar: el pago NO arregla C-09 (0/3, mismas familias de error que
+el gratis) → C-09 es problema de codigo/prompt, no de modelo. C-12 con el pago
+paso en prod por primera vez.
