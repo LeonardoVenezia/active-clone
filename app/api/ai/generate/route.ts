@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
 import { generateAITriggerPrompts, getActionOutputFields, getActionOutputItemFields, getAllActions, getAllTriggers } from "@/plugins/registry";
-import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, cyclicFlowError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, requestCoverageError, sheetContractError, shipmentDetailError, validateFlow } from "@/lib/flow-validator";
+import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, cyclicFlowError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, requestCoverageError, sheetContractError, shipmentDetailError, unwiredReportStepError, validateFlow } from "@/lib/flow-validator";
 import { type SourceContract, contractPromptBlock, extractApiSample, inspectSheetsContracts } from "@/lib/source-inspector";
 import { layoutPositions } from "@/lib/auto-layout";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
@@ -371,6 +371,8 @@ export async function POST(request: Request) {
       if (sheetContract) errs.push(sheetContract);
       const httpSchema = httpSchemaError(shadow.nodes);
       if (httpSchema) errs.push(httpSchema);
+      const unwired = unwiredReportStepError(shadow.nodes, shadow.edges);
+      if (unwired) errs.push(unwired);
       return errs;
     };
     async function runCorrectivePass(operationCount: number, encoder: TextEncoder, controller: ReadableStreamDefaultController, hint = ""): Promise<number> {

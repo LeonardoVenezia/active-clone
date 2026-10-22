@@ -417,6 +417,14 @@ export function validateFlow(
           break;
         }
       }
+      // Invented resource ids ("1A2B3C4D5E6F_SPREADSHEET_ID_DRAFT"): the model
+      // fabricating a placeholder id instead of the resource name the user gave.
+      // Skipped when the exact value came from the user's own request.
+      if (!options.userPrompt || !options.userPrompt.includes(value)) {
+        if (/_DRAFT\b/i.test(value) || /(?:spreadsheet|sheet|document|calendar)[_-]?id"?\s*[:=]\s*"[^"]*(?:DRAFT|PLACEHOLDER|EXAMPLE|TBD|CHANGEME|INSERT|YOUR)[^"]*"/i.test(value)) {
+          errors.push(`consistencia: node "${n.id}" (${label}) field "${path}" has an invented placeholder id ("${value.slice(0, 60)}"); use the exact resource NAME the user gave in the request or their config answer (mock mode accepts a name) - never fabricate an id`);
+        }
+      }
       for (const match of value.matchAll(TEMPLATE_RE)) {
         const refId = match[1];
         if (refId === "index") continue;
@@ -1038,3 +1046,58 @@ export function channelConsistencyError(promptText: string, nodes: FlowNode[]): 
   return null;
 }
 
+
+/**
+ * unwiredReportStepError: a final/report step (Sheets append/update, Gmail or
+ * Slack send) whose config carries NO {{@...}} data reference at all, while an
+ * earlier data-producing step exists. Catches the re13/re14 shape: the Fórmula
+ * computes the differences and the report steps send static text instead.
+ * {{@item:...}} refs (inside Loops) count as wiring.
+ */
+const REPORT_COMPOSIO_TOOL_RE = /^(?:GOOGLESHEETS_\w*(?:APPEND|UPDATE)|GMAIL_\w*SEND|SLACK_\w*(?:SEND|POST))/;
+const REPORT_PLUGIN_ACTION_RE = /^(?:googlesheets|gmail|slack)[/-]\w*(?:send|append|update|post)/i;
+const REPORT_CONTROL_ACTIONS = new Set(["Condition", "Delay", "Approval"]);
+
+export function unwiredReportStepError(nodes: FlowNode[], edges: FlowEdge[]): string | null {
+  const byId = new Map<string, FlowNode>();
+  for (const n of nodes) byId.set(n.id, n);
+  const revAdj = new Map<string, string[]>();
+  for (const e of edges) {
+    if (!revAdj.has(e.target)) revAdj.set(e.target, []);
+    (revAdj.get(e.target) as string[]).push(e.source);
+  }
+  const ancestorsOf = (id: string): Set<string> => {
+    const seen = new Set<string>();
+    const queue = [...(revAdj.get(id) ?? [])];
+    while (queue.length) {
+      const c = queue.pop() as string;
+      if (seen.has(c)) continue;
+      seen.add(c);
+      queue.push(...(revAdj.get(c) ?? []));
+    }
+    return seen;
+  };
+  const errors: string[] = [];
+  for (const n of nodes) {
+    if (isTrigger(n)) continue;
+    const cfg = n.data?.config ?? {};
+    const tool = typeof cfg.tool === "string" ? cfg.tool : "";
+    const at = actionTypeOf(n);
+    if (!REPORT_COMPOSIO_TOOL_RE.test(tool) && !REPORT_PLUGIN_ACTION_RE.test(at)) continue;
+    const strings: Array<{ path: string; value: string }> = [];
+    collectStrings(cfg, "", strings);
+    const hasRef = strings.some(({ value }) => {
+      TEMPLATE_RE.lastIndex = 0;
+      return TEMPLATE_RE.test(value);
+    });
+    if (hasRef) continue;
+    const hasDataAncestor = [...ancestorsOf(n.id)].some((id) => {
+      const a = byId.get(id);
+      return !!a && !isTrigger(a) && !REPORT_CONTROL_ACTIONS.has(actionTypeOf(a));
+    });
+    if (!hasDataAncestor) continue;
+    const label = n.data?.label ?? n.id;
+    errors.push(`semántica: final step "${n.id}" (${label}) sends/writes STATIC text with no {{@...}} reference, but earlier steps already produce the data it should report - wire the real data in (e.g. {{@<node-id>:<Label>.result}} or fields of the earlier lists), never a fixed summary`);
+  }
+  return errors.length ? errors.join("\n") : null;
+}
