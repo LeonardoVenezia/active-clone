@@ -1,0 +1,165 @@
+{
+  "id": "q482692dkhdpdjryb7euu",
+  "name": "Reconciliación diaria Stripe y Tiendanube",
+  "description": "Flujo diario para comparar cobros de Stripe y órdenes de Tiendanube, registrar diferencias en Google Sheets y notificar por Gmail.",
+  "nodes": [
+    {
+      "id": "plCK2Hp8Ktl4wzZCogMF9",
+      "data": {
+        "type": "trigger",
+        "label": "Programador diario",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 8 * * *"
+        },
+        "status": "idle",
+        "description": "Se ejecuta todos los días a las 8 AM"
+      },
+      "type": "trigger",
+      "measured": {
+        "width": 192,
+        "height": 192
+      },
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "selected": false
+    },
+    {
+      "id": "stripe-payments",
+      "data": {
+        "type": "action",
+        "label": "Cobros Stripe",
+        "config": {
+          "limit": "10",
+          "actionType": "stripe/list-payments"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      }
+    },
+    {
+      "id": "tiendanube-orders",
+      "data": {
+        "type": "action",
+        "label": "Órdenes Tiendanube",
+        "config": {
+          "limit": 10,
+          "actionType": "tiendanube/search-orders"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      }
+    },
+    {
+      "id": "reconcile-compare",
+      "data": {
+        "type": "action",
+        "label": "Comparador de diferencias",
+        "config": {
+          "input": "{\"pagos\": {{@stripe-payments:Cobros Stripe.payments}}, \"ordenes\": {{@tiendanube-orders:Órdenes Tiendanube.orders}}}",
+          "actionType": "Fórmula",
+          "expression": "{\"soloEnA\": $filter(pagos, function($x) { $not($number($x.amount) in $map(ordenes, function($y){ $number($y.total) })) }), \"soloEnB\": $filter(ordenes, function($y) { $not($number($y.total) in $map(pagos, function($x){ $number($x.amount) })) })}"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 185
+      }
+    },
+    {
+      "id": "sheets-log",
+      "data": {
+        "type": "action",
+        "label": "Anotar en Google Sheets",
+        "config": {
+          "tool": "GOOGLESHEETS_BATCH_UPDATE",
+          "toolkit": "googlesheets",
+          "arguments": "{\"spreadsheet_id\": \"mock-spreadsheet-id\", \"sheet_name\": \"Diferencias\", \"values\": [[\"{{@reconcile-compare:Comparador de diferencias.result}}\"]]}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      }
+    },
+    {
+      "id": "gmail-summary",
+      "data": {
+        "type": "action",
+        "label": "Enviar resumen por Gmail",
+        "config": {
+          "tool": "GMAIL_SEND_EMAIL",
+          "toolkit": "gmail",
+          "arguments": "{\"recipient_email\": \"finanzas@example.com\", \"subject\": \"Resumen de Reconciliación Diaria\", \"body\": \"Hola equipo, aquí tienen el resumen de diferencias de la reconciliación diaria: {{@reconcile-compare:Comparador de diferencias.result}}\"}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      },
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "type": "animated",
+      "source": "plCK2Hp8Ktl4wzZCogMF9",
+      "target": "stripe-payments"
+    },
+    {
+      "id": "e2",
+      "type": "animated",
+      "source": "plCK2Hp8Ktl4wzZCogMF9",
+      "target": "tiendanube-orders"
+    },
+    {
+      "id": "e3",
+      "type": "animated",
+      "source": "stripe-payments",
+      "target": "reconcile-compare"
+    },
+    {
+      "id": "e4",
+      "type": "animated",
+      "source": "tiendanube-orders",
+      "target": "reconcile-compare"
+    },
+    {
+      "id": "e5",
+      "type": "animated",
+      "source": "reconcile-compare",
+      "target": "sheets-log"
+    },
+    {
+      "id": "e6",
+      "type": "animated",
+      "source": "sheets-log",
+      "target": "gmail-summary"
+    }
+  ],
+  "visibility": "private",
+  "active": false,
+  "createdAt": "2026-10-22T19:13:16.001Z",
+  "updatedAt": "2026-10-22T19:13:55.733Z",
+  "isOwner": true,
+  "canEdit": true,
+  "shared": false
+}

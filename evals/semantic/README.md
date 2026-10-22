@@ -223,3 +223,16 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
 - Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/7, C-12 0/2
   (re10 y anteriores a 18:35 UTC miden deploy viejo; el tally live pre-template
   queda como referencia histórica).
+
+## Medición live re12 (deploy 065f4f4: preserve-structure + scope + trigger rules, 2026-10-22 ~19:15 UTC)
+
+- C-09: PASS (3/3) — PRIMER PASS LIVE. Build limpio de 6 nodos (Schedule
+  0 8 * * *, sin nodos basura: scope rule funciona), Fórmula con el template
+  verbatim, downstream referenciando `.result` (lleva AMBAS listas).
+- CONFIG PASS PRESERVÓ TODO: mismos 6 nodos, misma Fórmula, mismos refs; solo
+  completó spreadsheet ("Reconciliación Diaria"/"Diferencias") y
+  recipient_email. La regla updateNode-only funciona.
+- Honest check: no es presence-only — verificación offline JSONata del
+  snapshot final: soloEnA=[pay_3], soloEnB=[ord_7] exacto contra el fixture,
+  y ambas salidas llegan a Sheets+Gmail vía .result.
+- Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 1/8, C-12 0/2.
