@@ -122,6 +122,7 @@ Operations you can output:
 IMPORTANT RULES:
 - Every workflow must have EXACTLY ONE trigger node
 - Apps with a NATIVE plugin (whatsapp, slack, tiendanube, mercadolibre, zipnova, stripe, github, linear, mercadopago) MUST use the plugin's own action (e.g. whatsapp/send-message, slack/send-message, mercadolibre/get-order): never the generic "Send Message"/"Send Email" actions, never a hand-rolled HTTP Request, and never the Composio toolkit for those apps
+- Apps covered by the Composio catalog (gmail, googlesheets, googledocs, googledrive, notion, airtable, hubspot, jira, outlook) MUST go through composio/run-tool with that toolkit: never a hand-rolled HTTP Request to their API (no raw https://sheets.googleapis.com, gmail, or similar URLs)
 - Output ONE operation per line
 - Each line must be complete, valid JSON
 - Start with setName and setDescription
@@ -161,6 +162,7 @@ Tools you can call:
 IMPORTANT RULES:
 - Every workflow must have EXACTLY ONE trigger node
 - Apps with a NATIVE plugin (whatsapp, slack, tiendanube, mercadolibre, zipnova, stripe, github, linear, mercadopago) MUST use the plugin's own action (e.g. whatsapp/send-message, slack/send-message, mercadolibre/get-order): never the generic "Send Message"/"Send Email" actions, never a hand-rolled HTTP Request, and never the Composio toolkit for those apps
+- Apps covered by the Composio catalog (gmail, googlesheets, googledocs, googledrive, notion, airtable, hubspot, jira, outlook) MUST go through composio/run-tool with that toolkit: never a hand-rolled HTTP Request to their API (no raw https://sheets.googleapis.com, gmail, or similar URLs)
 - Call set_name first, then add nodes one at a time, then connect them
 - CRITICAL: Every node (except the last) MUST be connected to at least one other node
 - Each tool call is validated immediately: if a call returns an error, fix exactly THAT call and retry it - do NOT rebuild everything from scratch`;
