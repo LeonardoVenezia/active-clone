@@ -1,0 +1,182 @@
+{
+ "id": "38xmvyn4cywwbeg4isxga",
+ "name": "Reconciliación Diaria Stripe - Tiendanube",
+ "description": "Flujo diario de reconciliación entre cobros de Stripe y órdenes de Tiendanube, crea hoja de reconciliación y envía resumen por Gmail a finanzas@example.com",
+ "nodes": [
+  {
+   "id": "1Fpn2D7jLvfXXLr0sLfHL",
+   "data": {
+    "type": "trigger",
+    "label": "Programador Diario",
+    "config": {
+     "triggerType": "Schedule",
+     "scheduleCron": "0 8 * * *"
+    },
+    "status": "idle",
+    "description": "Se ejecuta todos los días a las 8:00 AM"
+   },
+   "type": "trigger",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 90,
+    "y": 110
+   },
+   "selected": false
+  },
+  {
+   "id": "stripe-payments",
+   "data": {
+    "type": "action",
+    "label": "Traer Cobros Stripe",
+    "config": {
+     "limit": "100",
+     "actionType": "stripe/list-payments"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 460,
+    "y": 110
+   }
+  },
+  {
+   "id": "tiendanube-orders",
+   "data": {
+    "type": "action",
+    "label": "Traer Órdenes Tiendanube",
+    "config": {
+     "limit": 100,
+     "status": "any",
+     "actionType": "tiendanube/search-orders"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 830,
+    "y": 110
+   }
+  },
+  {
+   "id": "compare-data",
+   "data": {
+    "type": "action",
+    "label": "Comparar y Detectar Diferencias",
+    "config": {
+     "input": "{\"stripe\": {{@stripe-payments:Traer Cobros Stripe.count}}, \"tiendanube\": {{@tiendanube-orders:Traer Órdenes Tiendanube.count}}}",
+     "actionType": "Fórmula",
+     "expression": "stripe - tiendanube"
+    },
+    "status": "idle",
+    "description": "Compara los conteos de Stripe y Tiendanube para detectar diferencias"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 1200,
+    "y": 110
+   }
+  },
+  {
+   "id": "create-sheet",
+   "data": {
+    "type": "action",
+    "label": "Crear Hoja Reconciliación",
+    "config": {
+     "tool": "GOOGLESHEETS_CREATE_GOOGLE_SHEET1",
+     "toolkit": "googlesheets",
+     "arguments": "{\"title\": \"Reconciliación Diaria\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 1570,
+    "y": 110
+   }
+  },
+  {
+   "id": "send-email",
+   "data": {
+    "type": "action",
+    "label": "Enviar Resumen por Gmail",
+    "config": {
+     "tool": "GMAIL_SEND_EMAIL",
+     "toolkit": "gmail",
+     "arguments": "{\"recipient_email\": \"finanzas@example.com\", \"subject\": \"Resumen Reconciliación Diaria\", \"body\": \"Resumen de reconciliación diaria:\\nDiferencia en cobros/órdenes: {{@compare-data:Comparar y Detectar Diferencias.result}}\"}",
+     "actionType": "composio/run-tool"
+    },
+    "status": "idle",
+    "description": "Envía resumen por Gmail a finanzas@example.com"
+   },
+   "type": "action",
+   "measured": {
+    "width": 192,
+    "height": 192
+   },
+   "position": {
+    "x": 1940,
+    "y": 110
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "type": "animated",
+   "source": "1Fpn2D7jLvfXXLr0sLfHL",
+   "target": "stripe-payments"
+  },
+  {
+   "id": "e2",
+   "type": "animated",
+   "source": "stripe-payments",
+   "target": "tiendanube-orders"
+  },
+  {
+   "id": "e3",
+   "type": "animated",
+   "source": "tiendanube-orders",
+   "target": "compare-data"
+  },
+  {
+   "id": "e4",
+   "type": "animated",
+   "source": "compare-data",
+   "target": "create-sheet"
+  },
+  {
+   "id": "e5",
+   "type": "animated",
+   "source": "create-sheet",
+   "target": "send-email"
+  }
+ ],
+ "visibility": "private",
+ "active": false,
+ "createdAt": "2026-10-22T14:43:58.385Z",
+ "updatedAt": "2026-10-22T14:51:54.056Z",
+ "isOwner": true,
+ "canEdit": true,
+ "shared": false
+}

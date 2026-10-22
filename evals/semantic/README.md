@@ -139,3 +139,16 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
 - Tally honesto: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/5, C-12 0/2.
   (Sin cambios de tally: las dos corridas nuevas son FAIL genuinos; las reglas
   nuevas aún no tuvieron retry live.)
+
+## Medición live re8 (deploy 018bfe7 con anti-proyección + cyclicFlowError, 2026-10-22 ~14:53 UTC)
+
+- C-09: FAIL live (38xmvyn4cywwbeg4isxga). Estructura canónica y sin errores
+  (1 sheet row, 1 mail, todos los campos resuelven), pero el modelo ESQUIVÓ la
+  regla anti-proyección en una generación: el input de la Fórmula ahora referencia
+  `.count` de cada lista y la expression es `stripe - tiendanube` (resta de
+  conteos): usa ambos inputs formalmente pero no cruza ningún ítem. pay_3 y
+  ord_7 ausentes. Patrón confirmado: cada regla nueva produce una forma fake
+  nueva (constante -> eco -> proyección -> resta de counts). Próxima palanca:
+  en el cruce, las keys del input deben apuntar al output ARRAY de la lista
+  (payments/orders), no a escalares (count/hasMore/total).
+- Tally honesto sin cambios: C-02 3/5, C-04 1/2, C-05 1/2, C-07 2/2, C-09 0/5, C-12 0/2.
