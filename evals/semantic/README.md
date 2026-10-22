@@ -78,3 +78,24 @@ Medición live re7 (workflow mqu47m0c379zzsu1960c1):
   Abierto: definir si la reconciliación debe ser determinística (Fórmula/
   Loop) y guiar al modelo hacia eso, o aceptar IA-compara y extender el
   harness para evaluarla.
+
+
+## Medición live re7-b (deploy a4dd4f6, 2026-10-22 ~12:10 UTC)
+
+- C-02: 0/2 live (re6 con sim corregido: 2/2). Run1: trigger Manual +
+  orderId "123456789" hardcodeado + list-shipments inventado + status en
+  español ('demorado') que nunca matchea 'delayed'. Run2: Slack dispara
+  correcto, pero WhatsApp con texto estático sin tracking. AMBAS runs
+  inventan `.raw[0].id` sobre zipnova/list-shipments cuyo output real es
+  {shipments: [...]} — gap de metadata de outputFields del step.
+- C-09: 0/1 live. La regla de reconciliación determinística cambió la
+  estructura (Fórmula, sin AI step), pero el modelo escribió una Fórmula
+  ceremonial: expression = "Reconciliación procesada correctamente"
+  (constante) e input con `fetch-stripe.count` inexistente. Próxima palanca
+  propuesta: regla anti-expresión-constante en Fórmula + metadata de
+  outputs (count) en list-payments.
+- Sin retries espurios: conditionExpressionError no disparó en ninguna
+  generación live (las condiciones del modelo eran sintácticamente válidas).
+- Nota de honestidad: el PASS de C-09/re7 (snapshot mqu47m0c) era solo por
+  presencia: los ids aparecían via volcado crudo del listado en el cuerpo
+  del mail, no por reconciliación computada.
