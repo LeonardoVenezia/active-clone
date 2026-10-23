@@ -166,7 +166,7 @@ IMPORTANT RULES:
 - Call set_name first, then add nodes one at a time, then connect them
 - CRITICAL: Every node (except the last) MUST be connected to at least one other node
 - Each tool call is validated immediately: if a call returns an error, fix exactly THAT call and retry it - do NOT rebuild everything from scratch
-- If a value the flow needs is missing and no earlier step can produce it (a destination, an account, an id, the exact message text), call ask_user BEFORE adding nodes; never invent those values
+- If a value the flow needs is missing and no earlier step can produce it (a destination, an account, an id, the exact message text), call ask_user BEFORE adding nodes; never invent those values - EXCEPT when the user explicitly asked for a draft or mock (maqueta, ejemplo, prueba): then use clearly-marked placeholder values and name each assumption in your closing message instead of asking
 - Always close with a short conversational message in Spanish: what you built, anything you assumed, and any open question. Never stay silent and never say you could not - if something is missing, say what and ask`;
 
 const TOOL_EXAMPLES = `Example build sequence (linear workflow): set_name("Contact Form Workflow") -> add_node({"id":"trigger-1","nodeType":"trigger","label":"Contact Form","actionType":"Manual"}) -> add_node({"id":"draft-message","nodeType":"action","label":"Draft Message","actionType":"ai-gateway/generate-text","config":{"prompt":"Write a short welcome message for the new contact form submission"}}) -> add_node({"id":"notify-channel","nodeType":"action","label":"Notify Channel","actionType":"slack/send-message","config":{"channel":"#general","text":"{{@draft-message:Draft Message.text}}"}}) -> connect("trigger-1","draft-message") -> connect("draft-message","notify-channel")`;
@@ -547,6 +547,13 @@ export async function POST(request: Request) {
       let localName = "";
       let lastModelText = "";
       let askedQuestion = "";
+      // Wall-clock cap for the whole build (Leo 2026-10-22): a model that
+      // cannot settle the validator errors must not spin forever - on expiry
+      // we materialize what exists and the closing note says what is pending.
+      const buildStart = Date.now();
+      const buildAbort = new AbortController();
+      const buildTimer = setTimeout(() => buildAbort.abort(), 4 * 60 * 1000);
+      let timedOut = false;
       const mkTools = () => ({
         set_name: tool({
           description: "Set the workflow name and optional description. Call once, first.",
@@ -554,7 +561,7 @@ export async function POST(request: Request) {
           execute: async ({ name, description }) => { localName = name; shadowApply({ op: "setName", name }, shadow); if (description) shadowApply({ op: "setDescription", description }, shadow); return { ok: true }; },
         }),
         ask_user: tool({
-          description: "Ask the user for missing information BEFORE building. Use when a value the flow needs is not provided and no earlier step can produce it. Do not build until they answer.",
+          description: "Ask the user for missing information BEFORE building. Use when a value the flow needs is not provided and no earlier step can produce it. Do not build until they answer. Do NOT use when the user asked for a draft/mock (maqueta, ejemplo, prueba): use placeholders then.",
           inputSchema: z.object({ question: z.string().describe("the concrete question for the user, in Spanish, conversational") }),
           execute: async ({ question }) => { askedQuestion = question; return { ok: true }; },
         }),
@@ -594,6 +601,7 @@ export async function POST(request: Request) {
       });
       const runOnce = async (fixErrors: string[]): Promise<void> => {
         for (const route of activeRoutes) {
+          if (buildAbort.signal.aborted) { timedOut = true; break; }
           try {
             console.info("[ai-generate] tools attempt", route.name, route.model, fixErrors.length ? "(corrective)" : "");
             const provider = createOpenAICompatible({ name: route.name, apiKey: route.apiKey, baseURL: route.baseURL });
@@ -605,7 +613,7 @@ export async function POST(request: Request) {
             } else {
               messages.push({ role: "user", content: userPrompt });
             }
-            const res = await generateText({ model: provider(route.model), messages, tools: mkTools(), stopWhen: stepCountIs(25), maxOutputTokens: Math.max(8192, route.maxTokens), temperature: 0.2, maxRetries: 0 });
+            const res = await generateText({ model: provider(route.model), messages, tools: mkTools(), stopWhen: stepCountIs(25), maxOutputTokens: Math.max(8192, route.maxTokens), temperature: 0.2, maxRetries: 0, abortSignal: buildAbort.signal });
             console.info("[ai-generate] tools usage", route.name, JSON.stringify(res.usage));
             const outText = (res.text || "").trim();
             if (outText) lastModelText = outText;
@@ -642,6 +650,7 @@ export async function POST(request: Request) {
       // Leo's rule: if the model asked for missing data before building, the
       // question goes to the conversation and nothing is materialized yet.
       if (askedQuestion && !shadow.nodes.length) {
+        clearTimeout(buildTimer);
         controller.enqueue(encodeMessage(encoder, { type: "question", text: askedQuestion }));
         return 0;
       }
@@ -649,6 +658,7 @@ export async function POST(request: Request) {
       // errors are consistency-class (e.g. an app the request explicitly
       // asks for is still missing) - those are worth one more shot.
       for (let round = 0; round < 3; round++) {
+        if (buildAbort.signal.aborted || Date.now() > 4 * 60 * 1000 + buildStart) { timedOut = true; break; }
         const autoFixed = fixFormulaRefs();
         if (autoFixed) console.info("[ai-generate] tools auto-fixed Fórmula refs:", autoFixed);
         const errs = computeErrors();
@@ -657,6 +667,9 @@ export async function POST(request: Request) {
         console.warn("[ai-generate] tools corrective round", round + 1, errs);
         await runOnce(errs);
       }
+      clearTimeout(buildTimer);
+      if (buildAbort.signal.aborted) timedOut = true;
+      if (timedOut) console.warn("[ai-generate] tools build hit the wall-clock cap; materializing what exists");
       const finalNodes = shadow.nodes;
       const finalEdges = shadow.edges;
       if (!finalNodes.length) {
@@ -672,7 +685,7 @@ export async function POST(request: Request) {
       console.info("[ai-generate] tools materialized ops:", count, "nodes:", finalNodes.length, "edges:", finalEdges.length);
       // Leo's rule: the build is finished; now tell the user, in the
       // conversation, what was built, what was assumed or is missing, and ask.
-      const writeClosingNote = async (errs: string[], question: string): Promise<string> => {
+      const writeClosingNote = async (errs: string[], question: string, hitCap: boolean): Promise<string> => {
         for (const route of activeRoutes) {
           try {
             const provider = createOpenAICompatible({ name: route.name, apiKey: route.apiKey, baseURL: route.baseURL });
@@ -680,7 +693,7 @@ export async function POST(request: Request) {
               model: provider(route.model),
               messages: [
                 { role: "system", content: "Sos el asistente que acaba de armar un workflow en el lienzo del usuario. Respondé en español, breve y conversacional." },
-                { role: "user", content: `El flujo ya quedó armado en el lienzo.${errs.length ? ` Quedaron estos temas sin resolver: ${errs.join(" | ")}.` : ""}${question ? ` Antes de armar le pediste este dato al usuario: "${question}".` : ""} Escribí el mensaje para el usuario: contale qué armaste, qué asumiste o qué falta, y hacé la pregunta que necesitás para dejarlo perfecto. Nunca digas que no pudiste; nunca lo dejes sin respuesta. Pedido original: ${userPrompt}` },
+                { role: "user", content: `El flujo ya quedó armado en el lienzo.${errs.length ? ` Quedaron estos temas sin resolver: ${errs.join(" | ")}.` : ""}${question ? ` Antes de armar le pediste este dato al usuario: "${question}".` : ""}${hitCap ? " IMPORTANTE: el armado se cortó por el tope de tiempo de seguridad, así que el flujo puede estar incompleto: decilo claramente y nombrá qué quedó pendiente; nunca lo presentes como terminado." : ""} Escribí el mensaje para el usuario: contale qué armaste, qué asumiste o qué falta, y hacé la pregunta que necesitás para dejarlo perfecto. Nunca digas que no pudiste; nunca lo dejes sin respuesta. Pedido original: ${userPrompt}` },
               ],
               maxOutputTokens: 4096, temperature: 0.4, maxRetries: 0,
             });
@@ -692,8 +705,8 @@ export async function POST(request: Request) {
       };
       const remainingAfter = computeErrors();
       let closing = lastModelText;
-      if (remainingAfter.length || askedQuestion || !closing) {
-        const note = await writeClosingNote(remainingAfter, askedQuestion);
+      if (remainingAfter.length || askedQuestion || !closing || timedOut) {
+        const note = await writeClosingNote(remainingAfter, askedQuestion, timedOut);
         if (note) closing = note;
       }
       if (closing) controller.enqueue(encodeMessage(encoder, { type: "summary", text: closing }));
