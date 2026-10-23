@@ -368,3 +368,7 @@ semanticPass por muestra; entre paréntesis checks individuales.
 
 semanticPass total: tools 5/14 vs ops 2/15. Ningún caso empeora vs main; C-09 mejora de 0% a 100%.
 Nota: C-12 tools muestras ds-2/ds-3 (pre-reparo-determinístico) quedan como historia: 3/4 y 1/4.
+
+## Nota de robustez (post-merge)
+
+Una corrida local de C-07 tools (t-c07-3, 2026-10-22 ~20:45-20:58) nunca terminó: quedó >13 min en rondas correctivas (3 rondas × hasta 25 pasos de tool calls) y el proceso murió sin escribir snapshot. En prod ese peor caso deja al usuario esperando demasiado. Recomendación: cap wall-clock en runToolsGeneration (p.ej. 4 min; al agotarse, materializar lo construido + closing note explicando qué quedó pendiente, siguiendo la regla de UX de Leo).
