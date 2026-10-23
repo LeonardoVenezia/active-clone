@@ -1,0 +1,179 @@
+{
+  "name": "Control de Stock Diario (Tiendanube + Mercado Libre)",
+  "nodes": [
+    {
+      "id": "trigger-9am",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Todos los días 9:00",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 9 * * *",
+          "timezone": "America/Argentina/Buenos_Aires"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "list-tiendanube",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "Listar Productos Tiendanube",
+        "type": "action",
+        "config": {
+          "query": "",
+          "limit": "200",
+          "actionType": "tiendanube/list-products"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "list-mercadolibre",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Listar Ítems Mercado Libre",
+        "type": "action",
+        "config": {
+          "query": "",
+          "status": "active",
+          "limit": "200",
+          "actionType": "mercadolibre/list-items"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "filtro-stock-bajo",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 185
+      },
+      "data": {
+        "label": "Productos con Stock &lt; 5",
+        "type": "action",
+        "config": {
+          "input": "{\"tn\": {{@list-tiendanube:Listar Productos Tiendanube.products}}, \"ml\": {{@list-mercadolibre:Listar Ítems Mercado Libre.items}}}",
+          "expression": "( $tnItems := $map(tn, function($p){ {\"producto\": $p.name, \"sku\": $p.id, \"stock\": $p.totalStock, \"origen\": \"Tiendanube\", \"fecha\": $now()} }); $mlItems := $map(ml, function($i){ {\"producto\": $i.title, \"sku\": $i.id, \"stock\": $i.availableQuantity, \"origen\": \"Mercado Libre\", \"fecha\": $now()} }); $filter($append($tnItems, $mlItems), function($x){ $number($x.stock) < 5 }) )",
+          "actionType": "Fórmula"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-anotar-planilla",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "Anotar en Google Sheets",
+        "type": "action",
+        "config": {
+          "source": "{{@filtro-stock-bajo:Productos con Stock < 5.result.result}}",
+          "maxItems": 200,
+          "steps": [
+            {
+              "id": "anotar-planilla",
+              "actionType": "composio/run-tool",
+              "config": {
+                "toolkit": "googlesheets",
+                "tool": "GOOGLESHEETS_SPREADSHEET_VALUES_APPEND",
+                "arguments": "{\"spreadsheet_id\": \"PEGA_ACA_EL_ID_DE_TU_PLANILLA\", \"range\": \"Stock!A:E\", \"values\": [[\"{{@item:Item.fecha}}\", \"{{@item:Item.origen}}\", \"{{@item:Item.producto}}\", \"{{@item:Item.sku}}\", \"{{@item:Item.stock}}\"]]}"
+              }
+            }
+          ],
+          "actionType": "Loop"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "mas-de-3",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      },
+      "data": {
+        "label": "¿Más de 3 en falta?",
+        "type": "action",
+        "config": {
+          "condition": "{{@loop-anotar-planilla:Anotar en Google Sheets.count}} > 3",
+          "actionType": "Condition"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "avisar-compras",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 185
+      },
+      "data": {
+        "label": "Avisar a #compras - Slack",
+        "type": "action",
+        "config": {
+          "slackChannel": "#compras",
+          "slackMessage": "⚠️ Control de stock diario: hay *{{@loop-anotar-planilla:Anotar en Google Sheets.count}}* productos con stock menor a 5 unidades entre Tiendanube y Mercado Libre. El detalle ya quedó registrado en la planilla de Google Sheets.",
+          "actionType": "slack/send-message"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "trigger-9am",
+      "target": "list-tiendanube",
+      "id": "e-trigger-9am-list-tiendanube"
+    },
+    {
+      "source": "trigger-9am",
+      "target": "list-mercadolibre",
+      "id": "e-trigger-9am-list-mercadolibre"
+    },
+    {
+      "source": "list-tiendanube",
+      "target": "filtro-stock-bajo",
+      "id": "e-list-tiendanube-filtro-stock-bajo"
+    },
+    {
+      "source": "list-mercadolibre",
+      "target": "filtro-stock-bajo",
+      "id": "e-list-mercadolibre-filtro-stock-bajo"
+    },
+    {
+      "source": "filtro-stock-bajo",
+      "target": "loop-anotar-planilla",
+      "id": "e-filtro-stock-bajo-loop-anotar-planilla"
+    },
+    {
+      "source": "loop-anotar-planilla",
+      "target": "mas-de-3",
+      "id": "e-loop-anotar-planilla-mas-de-3"
+    },
+    {
+      "source": "mas-de-3",
+      "target": "avisar-compras",
+      "id": "e-mas-de-3-avisar-compras"
+    }
+  ]
+}

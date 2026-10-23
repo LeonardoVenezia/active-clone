@@ -1,0 +1,129 @@
+{
+  "name": "Recuperar Ventas: Preguntas sin Responder de Mercado Libre",
+  "nodes": [
+    {
+      "id": "cada-30-min",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 110
+      },
+      "data": {
+        "label": "Cada 30 Minutos",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "*/30 * * * *"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-preguntas",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Por Cada Pregunta",
+        "type": "action",
+        "config": {
+          "source": "{{@buscar-ordenes:Buscar Órdenes Recientes.orders}}",
+          "maxItems": 20,
+          "steps": [
+            {
+              "id": "obtener-pregunta",
+              "actionType": "mercadolibre/get-question",
+              "config": {
+                "questionId": "{{@item:Item.id}}"
+              }
+            }
+          ],
+          "actionType": "Loop"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "buscar-ordenes",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Buscar Órdenes Recientes - Mercado Libre",
+        "type": "action",
+        "config": {
+          "query": "",
+          "status": "any",
+          "limit": "20",
+          "actionType": "mercadolibre/search-orders"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-redaccion",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 110
+      },
+      "data": {
+        "label": "Redactar y Avisar por Pregunta",
+        "type": "action",
+        "config": {
+          "source": "{{@loop-preguntas:Por Cada Pregunta.items}}",
+          "maxItems": 20,
+          "steps": [
+            {
+              "id": "solo-sin-responder",
+              "actionType": "Condition",
+              "config": {
+                "condition": "{{@item:Item.steps.obtener_pregunta.status}} === 'UNANSWERED'"
+              }
+            },
+            {
+              "id": "redactar-respuesta",
+              "actionType": "ai-gateway/generate-text",
+              "config": {
+                "aiFormat": "text",
+                "aiModel": "meta/llama-4-scout",
+                "aiPrompt": "Sos el vendedor de una tienda en Mercado Libre. Redactá una respuesta breve, cordial y en español rioplatense (máximo 60 palabras) a esta pregunta de un comprador sobre la publicación {{@item:Item.steps.obtener_pregunta.itemId}}: \"{{@item:Item.steps.obtener_pregunta.text}}\". Devolvé únicamente el texto de la respuesta, sin comillas, sin saludos formales largos y sin explicaciones. Es un borrador para revisión humana: no prometas stock, precios, plazos de envío ni descuentos que no estén confirmados."
+              }
+            },
+            {
+              "id": "avisar-slack",
+              "actionType": "slack/send-message",
+              "config": {
+                "slackChannel": "#ventas",
+                "slackMessage": "🟡 *Borrador para revisar — modo maqueta* (no se respondió nada en Mercado Libre)\n\n*Pregunta del comprador:* {{@item:Item.steps.obtener_pregunta.text}}\n*Publicación:* {{@item:Item.steps.obtener_pregunta.itemId}}\n*Pregunta ID:* {{@item:Item.steps.obtener_pregunta.id}}\n\n*Respuesta sugerida:*\n{{@redactar-respuesta:Redactar Respuesta.text}}\n\n_Queda a revisión humana: si les sirve, se responde a mano desde Mercado Libre._"
+              }
+            }
+          ],
+          "actionType": "Loop"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "cada-30-min",
+      "target": "buscar-ordenes",
+      "id": "e-cada-30-min-buscar-ordenes"
+    },
+    {
+      "source": "buscar-ordenes",
+      "target": "loop-preguntas",
+      "id": "e-buscar-ordenes-loop-preguntas"
+    },
+    {
+      "source": "loop-preguntas",
+      "target": "loop-redaccion",
+      "id": "e-loop-preguntas-loop-redaccion"
+    }
+  ]
+}

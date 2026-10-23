@@ -1,0 +1,123 @@
+{
+  "name": "Recuperar Ventas Perdidas en Mercado Libre",
+  "nodes": [
+    {
+      "id": "trigger-cada-30",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 110
+      },
+      "data": {
+        "label": "Cada 30 Minutos",
+        "description": "Ejecuta el flujo cada 30 minutos",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "*/30 * * * *"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "get-seller",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Obtener Vendedor",
+        "description": "Obtiene el seller_id de la cuenta de Mercado Libre autenticada. Completar el token en la config del nodo.",
+        "type": "action",
+        "config": {
+          "actionType": "HTTP Request",
+          "httpMethod": "GET",
+          "endpoint": "https://api.mercadolibre.com/users/me",
+          "httpHeaders": "{\"Authorization\": \"Bearer <MERCADOLIBRE_ACCESS_TOKEN>\"}",
+          "httpBody": "{}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "search-questions",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Buscar Preguntas Sin Responder",
+        "description": "Lista las preguntas con estado UNANSWERED del vendedor (solo lectura, no responde nada)",
+        "type": "action",
+        "config": {
+          "actionType": "HTTP Request",
+          "httpMethod": "GET",
+          "endpoint": "https://api.mercadolibre.com/questions/search?seller_id={{@get-seller:Obtener Vendedor.data.id}}&status=UNANSWERED&sort=DATE_DESC&limit=50",
+          "httpHeaders": "{\"Authorization\": \"Bearer <MERCADOLIBRE_ACCESS_TOKEN>\"}",
+          "httpBody": "{}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-preguntas",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 110
+      },
+      "data": {
+        "label": "Por Cada Pregunta",
+        "description": "Para cada pregunta sin responder: redacta una respuesta sugerida y la envía a Slack para revisión humana",
+        "type": "action",
+        "config": {
+          "actionType": "Loop",
+          "source": "{{@search-questions:Buscar Preguntas Sin Responder.data.questions}}",
+          "maxItems": 50,
+          "steps": [
+            {
+              "id": "draft-reply",
+              "actionType": "ai-gateway/generate-text",
+              "config": {
+                "aiFormat": "text",
+                "aiModel": "meta/llama-4-scout",
+                "aiPrompt": "Sos el vendedor de una tienda de Mercado Libre. Redactá una respuesta sugerida, breve (máximo 3 oraciones), amable y en español rioplatense, para esta pregunta de comprador. No inventes stock, precios ni plazos de envío: si falta un dato, ofrecé confirmarlo. Pregunta del comprador: {{@item:Item.text}} | Publicación: {{@item:Item.item_id}}"
+              }
+            },
+            {
+              "id": "notify-slack",
+              "actionType": "slack/send-message",
+              "config": {
+                "slackChannel": "#ventas",
+                "slackMessage": "*Pregunta sin responder en Mercado Libre*\n*Pregunta:* {{@item:Item.text}}\n*Publicación:* {{@item:Item.item_id}}\n*Respuesta sugerida (maqueta, NO publicada):* {{@draft-reply:Redactar Respuesta.text}}\nRevisala y respondé manualmente si está OK."
+              }
+            }
+          ]
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger-cada-30",
+      "target": "get-seller",
+      "type": "default"
+    },
+    {
+      "id": "e2",
+      "source": "get-seller",
+      "target": "search-questions",
+      "type": "default"
+    },
+    {
+      "id": "e3",
+      "source": "search-questions",
+      "target": "loop-preguntas",
+      "type": "default"
+    }
+  ]
+}

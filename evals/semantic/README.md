@@ -347,3 +347,18 @@ Resultados tools-mode post-iteración (local, pago):
 - C-12: PASS 4/4 (primera vez tools; la muestra ds-4 quedó invalidada por un bug de escaping en el reparo, corregido en 93a1c02).
 - Estado del builder actual vs pipeline de main (mismo modelo/harness): C-09 tools 3/3 vs ops 0/1; C-12 1/1 vs 1/1; C-02 tools 0/2 vs ops 0/1; C-05 empate FAIL; C-07 empate FAIL.
 - Debilidades restantes, compartidas por ambos modos: C-02 (adivina valores enum, ej. 'fulfilled' vs 'shipped'; inventa nodos-lista fuera del contrato), C-05 (no manda Slack por pregunta), C-07 (la respuesta no refleja el Doc de políticas). Son gaps de conocimiento/prompt, no del protocolo de construcción.
+
+## Matriz n=3 (local, mismo modelo pago, mismo harness, builder actual de la rama)
+
+semanticPass por muestra; entre paréntesis checks individuales.
+
+| Caso | tools (rama) | ops (main) | Lectura |
+|------|--------------|-----------|---------|
+| C-09 | **3/3 PASS** (todas fórmula CORRECT offline) | 0/3 (0/3,1/3,0/3) | tools gana el caso históricamente peor |
+| C-12 | 2/3 (PASS,PASS,1/4) | 2/3 (PASS,PASS,1/4) | paridad |
+| C-02 | 0/3 (3/4,1/4,1/4) | 0/3 (1/4,1/4,1/4) | paridad; falla compartida (valores enum adivinados) |
+| C-05 | 0/3 (1/4,0/4,1/4) | 0/3 (1/4,1/4,0/4) | paridad; falla compartida (sin Slack) |
+| C-07 | 0/2+ (2/4,2/4,pendiente) | 0/3 (2/4,2/4,2/4) | paridad; falla compartida (políticas del Doc) |
+
+semanticPass total: tools 5/14 vs ops 2/15. Ningún caso empeora vs main; C-09 mejora de 0% a 100%.
+Nota: C-12 tools muestras ds-2/ds-3 (pre-reparo-determinístico) quedan como historia: 3/4 y 1/4.

@@ -1,0 +1,192 @@
+{
+  "name": "Control de Stock Diario (Maqueta)",
+  "nodes": [
+    {
+      "id": "trigger-stock",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Daily 9AM",
+        "description": "Dispara el control de stock todos los días a las 9:00",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 9 * * *"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "list-tn",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "List Tiendanube Products",
+        "description": "Obtiene los productos y su stock desde Tiendanube",
+        "type": "action",
+        "config": {
+          "actionType": "tiendanube/list-products",
+          "query": "",
+          "limit": "200"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "list-ml",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "List Mercado Libre Items",
+        "description": "Obtiene las publicaciones y su stock disponible en Mercado Libre",
+        "type": "action",
+        "config": {
+          "actionType": "mercadolibre/list-items",
+          "query": "",
+          "status": "active",
+          "limit": "100"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "merge-stock",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 185
+      },
+      "data": {
+        "label": "Merge Low Stock",
+        "description": "Unifica ambas listas en un solo array y deja solo los productos con stock menor a 5",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{\"tiendanube\": {{@list-tn:List Tiendanube Products.products}}, \"mercadolibre\": {{@list-ml:List Mercado Libre Items.items}}}",
+          "expression": "($tn := $map(tiendanube, function($p){ {\"source\": \"Tiendanube\", \"name\": $p.name, \"stock\": $p.totalStock} }); $ml := $map(mercadolibre, function($i){ {\"source\": \"Mercado Libre\", \"name\": $i.title, \"stock\": $i.availableQuantity} }); $filter($append($tn, $ml), function($x){ $x.stock < 5 }))"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-low-stock",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "Log Low Stock",
+        "description": "Recorre cada producto con stock bajo y lo anota en la planilla de Google Sheets",
+        "type": "action",
+        "config": {
+          "actionType": "Loop",
+          "source": "{{@merge-stock:Merge Low Stock.result}}",
+          "maxItems": 200,
+          "steps": [
+            {
+              "id": "append-row",
+              "actionType": "composio/run-tool",
+              "config": {
+                "toolkit": "googlesheets",
+                "tool": "GOOGLESHEETS_SPREADSHEET_VALUES_APPEND",
+                "arguments": "{\"spreadsheet_id\": \"TU_SPREADSHEET_ID\", \"range\": \"Stock!A:C\", \"value_input_option\": \"USER_ENTERED\", \"values\": [[\"{{@item:Item.source}}\", \"{{@item:Item.name}}\", \"{{@item:Item.stock}}\"]]}"
+              }
+            }
+          ]
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "cond-many",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      },
+      "data": {
+        "label": "More Than 3 Low",
+        "description": "Verifica si hay más de 3 productos con stock bajo",
+        "type": "action",
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@loop-low-stock:Log Low Stock.count}} > 3"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "slack-compras",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 185
+      },
+      "data": {
+        "label": "Alert Purchases - Slack",
+        "description": "Avisa al canal #compras que hay más de 3 productos en falta",
+        "type": "action",
+        "config": {
+          "actionType": "slack/send-message",
+          "slackChannel": "#compras",
+          "slackMessage": "Control de stock diario: hay {{@loop-low-stock:Log Low Stock.count}} productos con stock menor a 5 unidades. Revisá la planilla de stock para el detalle."
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger-stock",
+      "target": "list-tn",
+      "type": "default"
+    },
+    {
+      "id": "e2",
+      "source": "trigger-stock",
+      "target": "list-ml",
+      "type": "default"
+    },
+    {
+      "id": "e3",
+      "source": "list-tn",
+      "target": "merge-stock",
+      "type": "default"
+    },
+    {
+      "id": "e4",
+      "source": "list-ml",
+      "target": "merge-stock",
+      "type": "default"
+    },
+    {
+      "id": "e5",
+      "source": "merge-stock",
+      "target": "loop-low-stock",
+      "type": "default"
+    },
+    {
+      "id": "e6",
+      "source": "loop-low-stock",
+      "target": "cond-many",
+      "type": "default"
+    },
+    {
+      "id": "e7",
+      "source": "cond-many",
+      "target": "slack-compras",
+      "type": "default"
+    }
+  ]
+}
