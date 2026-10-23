@@ -1,0 +1,151 @@
+{
+  "name": "Tracking Proactivo de Envíos",
+  "nodes": [
+    {
+      "id": "trigger-orders-shipped",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 110
+      },
+      "data": {
+        "label": "Órdenes Enviadas",
+        "description": "Revisa periódicamente las órdenes de Tiendanube marcadas como enviadas (modo maqueta: no se ejecuta nada real)",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "*/15 * * * *"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "search-orders",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Buscar Órdenes Enviadas - Tiendanube",
+        "description": "Lista las órdenes de Tiendanube cuyo envío figura como enviado",
+        "type": "action",
+        "config": {
+          "actionType": "tiendanube/search-orders",
+          "query": "",
+          "status": "any",
+          "paymentStatus": "any",
+          "shippingStatus": "shipped",
+          "limit": 20
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-details",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Detalle de Envío",
+        "description": "Por cada orden enviada trae los datos del cliente y el detalle del envío en Zipnova",
+        "type": "action",
+        "config": {
+          "actionType": "Loop",
+          "source": "{{@search-orders:Buscar Órdenes Enviadas.orders}}",
+          "maxItems": 50,
+          "steps": [
+            {
+              "id": "get-order",
+              "actionType": "tiendanube/get-order",
+              "config": {
+                "orderId": "{{@item:Item.id}}"
+              }
+            },
+            {
+              "id": "find-shipment",
+              "actionType": "zipnova/list-shipments",
+              "config": {
+                "externalId": "{{@item:Item.id}}"
+              }
+            },
+            {
+              "id": "get-shipment",
+              "actionType": "zipnova/get-shipment",
+              "config": {
+                "shipmentId": "{{@find-shipment:Find Shipment.shipments[0].id}}"
+              }
+            }
+          ]
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-notify",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 110
+      },
+      "data": {
+        "label": "Notificar Cliente y Slack",
+        "description": "Envía el WhatsApp con estado y tracking al cliente y alerta a #envios si el envío está demorado o con problema",
+        "type": "action",
+        "config": {
+          "actionType": "Loop",
+          "source": "{{@loop-details:Detalle de Envío.items}}",
+          "maxItems": 50,
+          "steps": [
+            {
+              "id": "whatsapp",
+              "actionType": "whatsapp/send-message",
+              "config": {
+                "to": "{{@item:Item.steps.get_order.customerPhone}}",
+                "text": "Hola {{@item:Item.steps.get_order.customerName}}! Tu pedido #{{@item:Item.steps.get_order.number}} ya está en camino. Estado del envío: {{@item:Item.steps.get_shipment.status}} ({{@item:Item.steps.get_shipment.statusDetail}}). Seguimiento: {{@item:Item.steps.get_shipment.tracking}}"
+              }
+            },
+            {
+              "id": "is-delayed",
+              "actionType": "Condition",
+              "config": {
+                "condition": "{{@item:Item.steps.get_shipment.status}} === 'delayed' || {{@item:Item.steps.get_shipment.status}} === 'exception'"
+              }
+            },
+            {
+              "id": "alert",
+              "actionType": "slack/send-message",
+              "config": {
+                "slackChannel": "#envios",
+                "slackMessage": "Envío demorado o con problema — Orden #{{@item:Item.steps.get_order.number}} ({{@item:Item.steps.get_order.customerName}}): estado {{@item:Item.steps.get_shipment.status}} — {{@item:Item.steps.get_shipment.statusDetail}}. Transportista: {{@item:Item.steps.get_shipment.carrier}}. Tracking: {{@item:Item.steps.get_shipment.tracking}}"
+              }
+            }
+          ]
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger-orders-shipped",
+      "target": "search-orders",
+      "type": "default"
+    },
+    {
+      "id": "e2",
+      "source": "search-orders",
+      "target": "loop-details",
+      "type": "default"
+    },
+    {
+      "id": "e3",
+      "source": "loop-details",
+      "target": "loop-notify",
+      "type": "default"
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "name": "Preguntas sin responder de Mercado Libre → borrador + aviso Slack",
+  "nodes": [
+    {
+      "id": "schedule-30m",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 110
+      },
+      "data": {
+        "label": "Cada 30 Minutos",
+        "description": "Dispara la revisión de preguntas sin responder cada media hora",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "*/30 * * * *"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "search-questions",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Buscar Preguntas Sin Responder",
+        "description": "Consulta la API de preguntas de Mercado Libre filtrando status=UNANSWERED. MODO MAQUETA: solo lectura, no se responde nada. Reemplazá SELLER_ID por tu ID de vendedor en la configuración del nodo.",
+        "type": "action",
+        "config": {
+          "actionType": "HTTP Request",
+          "httpMethod": "GET",
+          "endpoint": "https://api.mercadolibre.com/questions/search?seller_id=SELLER_ID&status=UNANSWERED&limit=50",
+          "httpHeaders": "{\"Accept\": \"application/json\", \"Authorization\": \"Bearer <ACCESS_TOKEN>\"}",
+          "httpBody": ""
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-questions",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Por Cada Pregunta",
+        "description": "Recorre cada pregunta sin responder: redacta una respuesta sugerida y la envía a Slack #ventas para revisión humana (maqueta, no se publica la respuesta)",
+        "type": "action",
+        "config": {
+          "actionType": "Loop",
+          "source": "{{@search-questions:Buscar Preguntas Sin Responder.data.questions}}",
+          "maxItems": 50,
+          "steps": [
+            {
+              "id": "draft-answer",
+              "actionType": "ai-gateway/generate-text",
+              "config": {
+                "aiFormat": "text",
+                "aiModel": "meta/llama-4-scout",
+                "aiPrompt": "Sos vendedor de una tienda de Mercado Libre. Redactá una respuesta sugerida, breve, cordial y en español rioplatense, para esta pregunta de comprador. No inventes stock, precios ni plazos que no estén en la pregunta. Pregunta (ID {{@item:Item.id}}): {{@item:Item.text}}. Publicación: {{@item:Item.item_id}}. Devolvé solamente el texto de la respuesta, sin comillas ni encabezados."
+              }
+            },
+            {
+              "id": "notify-slack",
+              "actionType": "slack/send-message",
+              "config": {
+                "slackChannel": "#ventas",
+                "slackMessage": ":memo: *MODO MAQUETA – revisión humana requerida*\n*Pregunta sin responder* (ID {{@item:Item.id}}): {{@item:Item.text}}\n*Publicación:* {{@item:Item.item_id}}\n*Respuesta sugerida:* {{@draft-answer:Draft Answer.text}}\n_No se envió ninguna respuesta a Mercado Libre._"
+              }
+            }
+          ]
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "schedule-30m",
+      "target": "search-questions",
+      "type": "default"
+    },
+    {
+      "id": "e2",
+      "source": "search-questions",
+      "target": "loop-questions",
+      "type": "default"
+    }
+  ]
+}

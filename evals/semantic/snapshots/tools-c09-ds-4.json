@@ -1,0 +1,149 @@
+{
+  "name": "Reconciliación diaria Stripe vs Tiendanube",
+  "nodes": [
+    {
+      "id": "trigger-diario",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Todos los días 8am",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 8 * * *",
+          "timezone": "America/Argentina/Buenos_Aires"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "cobros-stripe",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "Traer Cobros de Stripe",
+        "type": "action",
+        "config": {
+          "limit": "100",
+          "actionType": "stripe/list-payments"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "ordenes-tn",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Traer Órdenes de Tiendanube",
+        "type": "action",
+        "config": {
+          "query": "",
+          "status": "any",
+          "paymentStatus": "any",
+          "shippingStatus": "any",
+          "limit": 50,
+          "actionType": "tiendanube/search-orders"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "reconciliar",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 185
+      },
+      "data": {
+        "label": "Reconciliar diferencias",
+        "type": "action",
+        "config": {
+          "input": "{\"cobros\": {{@cobros-stripe:Traer Cobros de Stripe.payments}}, \"ordenes\": {{@ordenes-tn:Traer Órdenes de Tiendanube.orders}}}",
+          "expression": "{\"cobrosSinOrden\": $filter(cobros, function($x) { $not($number($x.amount) in $map(ordenes, function($y){ $number($y.total) })) }), \"ordenesSinCobro\": $filter(ordenes, function($y) { $not($number($y.total) in $map(cobros, function($x){ $number($x.amount) })) })}",
+          "actionType": "Fórmula"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "registrar-diferencias",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "Registrar en Google Sheets",
+        "type": "action",
+        "config": {
+          "toolkit": "googlesheets",
+          "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+          "arguments": "{\"spreadsheetId\":\"<ID_DE_LA_PLANILLA>\",\"range\":\"Reconciliación!A:B\",\"valueInputOption\":\"USER_ENTERED\",\"values\":[[\"{{@reconciliar:Reconciliar diferencias.result.cobrosSinOrden}}\",\"{{@reconciliar:Reconciliar diferencias.result.ordenesSinCobro}}\"]]}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "resumen-finanzas",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      },
+      "data": {
+        "label": "Resumen por Gmail",
+        "type": "action",
+        "config": {
+          "toolkit": "gmail",
+          "tool": "GMAIL_SEND_EMAIL",
+          "arguments": "{\"recipient_email\":\"finanzas@empresa.com\",\"subject\":\"Reconciliación diaria: Stripe vs Tiendanube\",\"body\":\"Buen día equipo de finanzas,\\n\\nResultado de la reconciliación de los cobros de Stripe y las órdenes de Tiendanube del día anterior.\\n\\nCobros de Stripe sin orden asociada:\\n{{@reconciliar:Reconciliar diferencias.result.cobrosSinOrden}}\\n\\nÓrdenes de Tiendanube sin cobro:\\n{{@reconciliar:Reconciliar diferencias.result.ordenesSinCobro}}\\n\\nEl detalle quedó registrado en la planilla de Google Sheets.\\n\\nSaludos,\\nAutomatización de finanzas\",\"is_html\":false}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "trigger-diario",
+      "target": "cobros-stripe",
+      "id": "e-trigger-diario-cobros-stripe"
+    },
+    {
+      "source": "trigger-diario",
+      "target": "ordenes-tn",
+      "id": "e-trigger-diario-ordenes-tn"
+    },
+    {
+      "source": "cobros-stripe",
+      "target": "reconciliar",
+      "id": "e-cobros-stripe-reconciliar"
+    },
+    {
+      "source": "ordenes-tn",
+      "target": "reconciliar",
+      "id": "e-ordenes-tn-reconciliar"
+    },
+    {
+      "source": "reconciliar",
+      "target": "registrar-diferencias",
+      "id": "e-reconciliar-registrar-diferencias"
+    },
+    {
+      "source": "registrar-diferencias",
+      "target": "resumen-finanzas",
+      "id": "e-registrar-diferencias-resumen-finanzas"
+    }
+  ]
+}

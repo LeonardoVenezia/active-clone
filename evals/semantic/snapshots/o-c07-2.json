@@ -1,0 +1,175 @@
+{
+  "name": "Soporte Automático de Preguntas Mercado Libre",
+  "nodes": [
+    {
+      "id": "trigger-question",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 110
+      },
+      "data": {
+        "label": "Pregunta Recibida - Mercado Libre",
+        "description": "Se dispara cuando un comprador hace una pregunta en Mercado Libre",
+        "type": "trigger",
+        "config": {
+          "triggerType": "mercadolibre/question-received"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "get-question",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Obtener Pregunta - Mercado Libre",
+        "description": "Trae el texto completo de la pregunta y el ítem asociado",
+        "type": "action",
+        "config": {
+          "actionType": "mercadolibre/get-question",
+          "questionId": "{{@trigger-question:Pregunta Recibida.questionId}}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "search-orders",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Buscar Orden Asociada - Mercado Libre",
+        "description": "Busca la orden del comprador relacionada con el ítem de la pregunta",
+        "type": "action",
+        "config": {
+          "actionType": "mercadolibre/search-orders",
+          "query": "{{@get-question:Obtener Pregunta.itemId}}",
+          "status": "any",
+          "limit": "5"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "get-order",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 110
+      },
+      "data": {
+        "label": "Detalle de la Orden - Mercado Libre",
+        "description": "Trae el detalle completo de la orden encontrada",
+        "type": "action",
+        "config": {
+          "actionType": "mercadolibre/get-order",
+          "orderId": "{{@search-orders:Buscar Orden Asociada.orders[0].id}}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "read-policies",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 110
+      },
+      "data": {
+        "label": "Leer Políticas de la Tienda",
+        "description": "Lee el contenido completo del Google Doc de políticas (configurar el ID del documento en el panel del nodo)",
+        "type": "action",
+        "config": {
+          "actionType": "composio/run-tool",
+          "toolkit": "googledocs",
+          "tool": "GOOGLEDOCS_GET_DOCUMENT_BY_ID",
+          "arguments": "{\"document_id\": \"TU_GOOGLE_DOC_ID\"}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "draft-reply",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 110
+      },
+      "data": {
+        "label": "Redactar Respuesta",
+        "description": "Redacta la respuesta al comprador usando la pregunta, la orden y las políticas de la tienda",
+        "type": "action",
+        "config": {
+          "actionType": "ai-gateway/generate-text",
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Sos el equipo de atención al cliente de una tienda que vende en Mercado Libre. Redactá una respuesta breve, cordial y en español rioplatense para esta pregunta de un comprador.\n\nPregunta del comprador: {{@get-question:Obtener Pregunta.text}}\n\nDetalle de la orden asociada: {{@get-order:Detalle de la Orden}}\n\nPolíticas de la tienda (fuente de verdad): {{@read-policies:Leer Políticas de la Tienda.data}}\n\nReglas: usá únicamente información de las políticas y de la orden, no inventes plazos, precios ni stock. Si las políticas no cubren el caso, respondé ofreciendo ayuda adicional. Máximo 4 oraciones."
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "answer-question",
+      "type": "action",
+      "position": {
+        "x": 2310,
+        "y": 110
+      },
+      "data": {
+        "label": "Responder en Mercado Libre",
+        "description": "Publica la respuesta redactada en la pregunta de Mercado Libre (modo maqueta: no ejecutar aún)",
+        "type": "action",
+        "config": {
+          "actionType": "mercadolibre/answer-question",
+          "questionId": "{{@get-question:Obtener Pregunta.id}}",
+          "text": "{{@draft-reply:Redactar Respuesta.text}}"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger-question",
+      "target": "get-question",
+      "type": "default"
+    },
+    {
+      "id": "e2",
+      "source": "get-question",
+      "target": "search-orders",
+      "type": "default"
+    },
+    {
+      "id": "e3",
+      "source": "search-orders",
+      "target": "get-order",
+      "type": "default"
+    },
+    {
+      "id": "e4",
+      "source": "get-order",
+      "target": "read-policies",
+      "type": "default"
+    },
+    {
+      "id": "e5",
+      "source": "read-policies",
+      "target": "draft-reply",
+      "type": "default"
+    },
+    {
+      "id": "e6",
+      "source": "draft-reply",
+      "target": "answer-question",
+      "type": "default"
+    }
+  ]
+}

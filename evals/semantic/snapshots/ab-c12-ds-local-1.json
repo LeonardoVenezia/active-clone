@@ -1,0 +1,244 @@
+{
+  "name": "Control de Stock Diario (Maqueta)",
+  "nodes": [
+    {
+      "id": "trigger-9am",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Todos los Días 9 AM",
+        "description": "Dispara el control de stock cada día a las 9:00",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 9 * * *"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "tn-products",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "Productos Tiendanube",
+        "description": "Lista los productos de la tienda con su stock total y variantes",
+        "type": "action",
+        "config": {
+          "actionType": "tiendanube/list-products",
+          "query": "",
+          "limit": "100"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "ml-items",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Publicaciones Mercado Libre",
+        "description": "Lista las publicaciones activas de Mercado Libre con su stock disponible",
+        "type": "action",
+        "config": {
+          "actionType": "mercadolibre/list-items",
+          "query": "",
+          "status": "active",
+          "limit": "50"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "cond-mas-de-3",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      },
+      "data": {
+        "label": "¿Más de 3 en Falta?",
+        "description": "Verifica si hay más de 3 productos con stock bajo",
+        "type": "action",
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@total-bajos:Total Productos en Falta.result}} > 3"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "slack-compras",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 185
+      },
+      "data": {
+        "label": "Avisar a #compras - Slack",
+        "description": "Notifica al canal #compras que hay más de 3 productos con stock bajo",
+        "type": "action",
+        "config": {
+          "actionType": "slack/send-message",
+          "slackChannel": "#compras",
+          "slackMessage": "⚠️ Control de stock diario: {{@total-bajos:Total Productos en Falta.result}} productos quedaron con menos de 5 unidades. El detalle quedó anotado en la planilla de stock."
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-tn",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 260
+      },
+      "data": {
+        "label": "Anotar Tiendanube",
+        "description": "Recorre los productos de Tiendanube y anota los que tienen stock menor a 5",
+        "type": "action",
+        "config": {
+          "actionType": "Loop",
+          "source": "{{@tn-products:Productos Tiendanube.products}}",
+          "maxItems": 100,
+          "steps": [
+            {
+              "id": "check-stock",
+              "actionType": "Condition",
+              "config": {
+                "condition": "{{@item:Item.totalStock}} < 5"
+              }
+            },
+            {
+              "id": "anotar-planilla",
+              "actionType": "HTTP Request",
+              "config": {
+                "httpMethod": "POST",
+                "endpoint": "https://sheets.googleapis.com/v4/spreadsheets/TU_SPREADSHEET_ID/values/Stock!A:D:append?valueInputOption=USER_ENTERED",
+                "httpHeaders": "{\"Authorization\": \"Bearer TU_TOKEN_OAUTH\", \"Content-Type\": \"application/json\"}",
+                "httpBody": "{\"values\": [[\"Tiendanube\", \"{{@item:Item.name}}\", \"{{@item:Item.totalStock}}\", \"{{@item:Item.id}}\"]]}"
+              }
+            }
+          ]
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-ml",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Anotar Mercado Libre",
+        "description": "Recorre las publicaciones de Mercado Libre y anota las que tienen stock menor a 5",
+        "type": "action",
+        "config": {
+          "actionType": "Loop",
+          "source": "{{@ml-items:Publicaciones Mercado Libre.items}}",
+          "maxItems": 100,
+          "steps": [
+            {
+              "id": "check-stock",
+              "actionType": "Condition",
+              "config": {
+                "condition": "{{@item:Item.availableQuantity}} < 5"
+              }
+            },
+            {
+              "id": "anotar-planilla",
+              "actionType": "HTTP Request",
+              "config": {
+                "httpMethod": "POST",
+                "endpoint": "https://sheets.googleapis.com/v4/spreadsheets/TU_SPREADSHEET_ID/values/Stock!A:D:append?valueInputOption=USER_ENTERED",
+                "httpHeaders": "{\"Authorization\": \"Bearer TU_TOKEN_OAUTH\", \"Content-Type\": \"application/json\"}",
+                "httpBody": "{\"values\": [[\"Mercado Libre\", \"{{@item:Item.title}}\", \"{{@item:Item.availableQuantity}}\", \"{{@item:Item.id}}\"]]}"
+              }
+            }
+          ]
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "total-bajos",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "Total Productos en Falta",
+        "description": "Cuenta cuántos productos quedaron con stock bajo en total",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{\"tn\": {{@loop-tn:Anotar Tiendanube.items}}, \"ml\": {{@loop-ml:Anotar Mercado Libre.items}}}",
+          "expression": "$count($append(tn, ml))"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger-9am",
+      "target": "tn-products",
+      "type": "default"
+    },
+    {
+      "id": "e2",
+      "source": "trigger-9am",
+      "target": "ml-items",
+      "type": "default"
+    },
+    {
+      "id": "e7",
+      "source": "cond-mas-de-3",
+      "target": "slack-compras",
+      "type": "default"
+    },
+    {
+      "id": "e-tn-loop",
+      "source": "tn-products",
+      "target": "loop-tn",
+      "type": "default"
+    },
+    {
+      "id": "e-ml-loop",
+      "source": "ml-items",
+      "target": "loop-ml",
+      "type": "default"
+    },
+    {
+      "id": "e-loop-tn-total",
+      "source": "loop-tn",
+      "target": "total-bajos",
+      "type": "default"
+    },
+    {
+      "id": "e-loop-ml-total",
+      "source": "loop-ml",
+      "target": "total-bajos",
+      "type": "default"
+    },
+    {
+      "id": "e-total-cond",
+      "source": "total-bajos",
+      "target": "cond-mas-de-3",
+      "type": "default"
+    }
+  ]
+}

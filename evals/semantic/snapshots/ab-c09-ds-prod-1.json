@@ -1,0 +1,235 @@
+{
+  "name": "Reconciliación Diaria Stripe vs Tiendanube (Modo Maqueta)",
+  "nodes": [
+    {
+      "id": "trigger-schedule",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Todos los Días 8:00",
+        "description": "Disparador diario a las 08:00 (modo maqueta, sin ejecución real)",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 8 * * *"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "stripe-payments",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "Cobros Stripe",
+        "description": "Trae los cobros de Stripe (maqueta: no impacta cuentas reales)",
+        "type": "action",
+        "config": {
+          "actionType": "stripe/list-payments",
+          "limit": "100"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "compute-date",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Calcular Fecha",
+        "description": "Calcula la fecha del día anterior en formato ISO con offset -03:00",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{\"base\": \"ayer\"}",
+          "expression": "$fromMillis($millis() - 86400000, '[Y0001]-[M01]-[D01]') & 'T00:00:00-03:00'"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "tn-orders",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Ordenes Tiendanube",
+        "description": "Trae las órdenes de Tiendanube creadas desde el inicio del día anterior",
+        "type": "action",
+        "config": {
+          "actionType": "tiendanube/search-orders",
+          "createdAtMin": "{{@compute-date:Calcular Fecha.result}}",
+          "status": "any",
+          "paymentStatus": "any",
+          "shippingStatus": "any",
+          "limit": "50"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "normalize",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 260
+      },
+      "data": {
+        "label": "Normalizar Cobros",
+        "description": "Normaliza los montos de Stripe (centavos a unidades) para poder compararlos con los totales de Tiendanube",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{\"pagos\": {{@stripe-payments:Cobros Stripe.payments}}}",
+          "expression": "$map(pagos, function($p){ {\"id\": $p.id, \"monto\": $p.amount / 100, \"moneda\": $p.currency, \"estado\": $p.status} })"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "reconcile",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "Reconciliar Listados",
+        "description": "Cruza ambos listados y obtiene cobros sin orden y órdenes sin cobro",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{\"cobros\": {{@normalize:Normalizar Cobros.result}}, \"ordenes\": {{@tn-orders:Ordenes Tiendanube.orders}}}",
+          "expression": "{\"cobrosSinOrden\": $filter(cobros, function($x) { $not($number($x.monto) in $map(ordenes, function($y){ $number($y.total) })) }), \"ordenesSinCobro\": $filter(ordenes, function($y) { $not($number($y.total) in $map(cobros, function($x){ $number($x.monto) })) })}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "build-rows",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      },
+      "data": {
+        "label": "Armar Filas",
+        "description": "Arma las filas de la planilla con ambas diferencias",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{\"cobrosSinOrden\": {{@reconcile:Reconciliar Listados.cobrosSinOrden}}, \"ordenesSinCobro\": {{@reconcile:Reconciliar Listados.ordenesSinCobro}}}",
+          "expression": "{\"filas\": $append($map(cobrosSinOrden, function($c){ [\"Cobro sin orden\", $c.id, $c.monto, $c.moneda] }), $map(ordenesSinCobro, function($o){ [\"Orden sin cobro\", $o.number, $o.total, $o.currency] }))}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "append-sheet",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 185
+      },
+      "data": {
+        "label": "Anotar en Sheets",
+        "description": "Agrega las diferencias en la hoja 'Diferencias' (completar el spreadsheet_id en la configuración del nodo)",
+        "type": "action",
+        "config": {
+          "actionType": "composio/run-tool",
+          "toolkit": "googlesheets",
+          "tool": "GOOGLESHEETS_BATCH_UPDATE",
+          "arguments": "{\"spreadsheet_id\":\"TU_SPREADSHEET_ID\",\"sheet_name\":\"Diferencias\",\"values\":{{@build-rows:Armar Filas.result.filas}},\"value_input_option\":\"USER_ENTERED\"}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "send-email",
+      "type": "action",
+      "position": {
+        "x": 2310,
+        "y": 185
+      },
+      "data": {
+        "label": "Resumen por Gmail",
+        "description": "Envía el resumen de la reconciliación al equipo de finanzas",
+        "type": "action",
+        "config": {
+          "actionType": "composio/run-tool",
+          "toolkit": "gmail",
+          "tool": "GMAIL_SEND_EMAIL",
+          "arguments": "{\"recipient_email\":\"finanzas@empresa.com\",\"subject\":\"Reconciliación diaria - {{@compute-date:Calcular Fecha.result}}\",\"body\":\"Resumen de la reconciliación (modo maqueta, sin movimientos reales).\\n\\nCobros de Stripe sin orden: {{@reconcile:Reconciliar Listados.cobrosSinOrden}}\\n\\nÓrdenes de Tiendanube sin cobro: {{@reconcile:Reconciliar Listados.ordenesSinCobro}}\\n\\nEl detalle completo quedó registrado en la planilla de Google Sheets, hoja 'Diferencias'.\"}"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger-schedule",
+      "target": "stripe-payments",
+      "type": "default"
+    },
+    {
+      "id": "e2",
+      "source": "trigger-schedule",
+      "target": "compute-date",
+      "type": "default"
+    },
+    {
+      "id": "e3",
+      "source": "compute-date",
+      "target": "tn-orders",
+      "type": "default"
+    },
+    {
+      "id": "e4",
+      "source": "stripe-payments",
+      "target": "normalize",
+      "type": "default"
+    },
+    {
+      "id": "e5",
+      "source": "normalize",
+      "target": "reconcile",
+      "type": "default"
+    },
+    {
+      "id": "e6",
+      "source": "tn-orders",
+      "target": "reconcile",
+      "type": "default"
+    },
+    {
+      "id": "e7",
+      "source": "reconcile",
+      "target": "build-rows",
+      "type": "default"
+    },
+    {
+      "id": "e8",
+      "source": "build-rows",
+      "target": "append-sheet",
+      "type": "default"
+    },
+    {
+      "id": "e9",
+      "source": "append-sheet",
+      "target": "send-email",
+      "type": "default"
+    }
+  ]
+}

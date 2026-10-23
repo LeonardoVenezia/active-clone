@@ -1,0 +1,22 @@
+{
+  "name": "Soporte Automático de Preguntas Mercado Libre",
+  "nodes": [
+    {
+      "id": "question-received",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 110
+      },
+      "data": {
+        "label": "Pregunta Recibida - Mercado Libre",
+        "type": "trigger",
+        "config": {
+          "triggerType": "mercadolibre/question-received"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": []
+}

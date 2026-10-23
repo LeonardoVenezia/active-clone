@@ -1,0 +1,166 @@
+{
+  "name": "Reconciliación Diaria Stripe y Tiendanube",
+  "nodes": [
+    {
+      "id": "trigger-schedule",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Todos los días a las 8 AM",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 8 * * *"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "stripe-payments",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "Traer Cobros Stripe",
+        "type": "action",
+        "config": {
+          "actionType": "stripe/list-payments",
+          "limit": "100"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "tiendanube-orders",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Traer Órdenes Tiendanube",
+        "type": "action",
+        "config": {
+          "actionType": "tiendanube/search-orders",
+          "limit": 100
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-reconciliation",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 185
+      },
+      "data": {
+        "label": "Procesar Cobros",
+        "type": "action",
+        "config": {
+          "actionType": "Loop",
+          "source": "{{@stripe-payments:Traer Cobros Stripe.payments}}",
+          "maxItems": 50,
+          "steps": [
+            {
+              "id": "check-order",
+              "actionType": "tiendanube/search-orders",
+              "config": {
+                "query": "{{@item:Item.id}}"
+              }
+            },
+            {
+              "id": "filter-missing",
+              "actionType": "Condition",
+              "config": {
+                "condition": "{{@check-order:Traer Órdenes Tiendanube.count}} === 0"
+              }
+            }
+          ]
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "sheets-append",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "Anotar en Google Sheets",
+        "type": "action",
+        "config": {
+          "actionType": "composio/run-tool",
+          "toolkit": "googlesheets",
+          "tool": "GOOGLESHEETS_CREATE_SPREADSHEET_ROW",
+          "arguments": "{\"spreadsheet_id\": \"Reconciliacion\", \"sheet_name\": \"Diferencias\", \"insert_index\": 1}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "gmail-send",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      },
+      "data": {
+        "label": "Enviar Resumen por Gmail",
+        "type": "action",
+        "config": {
+          "actionType": "composio/run-tool",
+          "toolkit": "gmail",
+          "tool": "GMAIL_SEND_EMAIL",
+          "arguments": "{\"recipient_email\": \"finanzas@example.com\", \"subject\": \"Resumen de Reconciliacion Diaria\", \"body\": \"Hola equipo de finanzas,\\n\\nSe han detectado las siguientes diferencias:\\n\\nTotal diferencias: {{@loop-reconciliation:Procesar Cobros.count}}\\n\\nSaludos.\"}"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger-schedule",
+      "target": "stripe-payments",
+      "type": "default"
+    },
+    {
+      "id": "e2",
+      "source": "trigger-schedule",
+      "target": "tiendanube-orders",
+      "type": "default"
+    },
+    {
+      "id": "e-stripe-loop",
+      "source": "stripe-payments",
+      "target": "loop-reconciliation",
+      "type": "default"
+    },
+    {
+      "id": "e-tienda-loop",
+      "source": "tiendanube-orders",
+      "target": "loop-reconciliation",
+      "type": "default"
+    },
+    {
+      "id": "e-loop-sheets",
+      "source": "loop-reconciliation",
+      "target": "sheets-append",
+      "type": "default"
+    },
+    {
+      "id": "e-sheets-gmail",
+      "source": "sheets-append",
+      "target": "gmail-send",
+      "type": "default"
+    }
+  ]
+}

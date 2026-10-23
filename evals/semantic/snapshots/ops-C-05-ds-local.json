@@ -1,0 +1,110 @@
+{
+  "name": "Recuperar Ventas Perdidas - Preguntas sin Responder en Mercado Libre",
+  "nodes": [
+    {
+      "id": "trigger-schedule",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 110
+      },
+      "data": {
+        "label": "Cada 30 Minutos",
+        "description": "Dispara el flujo cada 30 minutos",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "*/30 * * * *"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "list-questions",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "List Unanswered Questions",
+        "description": "Busca en Mercado Libre las preguntas con estado UNANSWERED del vendedor",
+        "type": "action",
+        "config": {
+          "actionType": "HTTP Request",
+          "httpMethod": "GET",
+          "endpoint": "https://api.mercadolibre.com/questions/search?seller_id=SELLER_ID&status=UNANSWERED&sort_fields=date_created&sort_types=DESC&limit=50",
+          "httpHeaders": "{\"Authorization\": \"Bearer <MERCADOLIBRE_ACCESS_TOKEN>\"}",
+          "httpBody": "{}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-questions",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Por Cada Pregunta",
+        "description": "Recorre las preguntas sin responder, trae el detalle de cada una con Mercado Libre, filtra las que siguen sin responder, redacta una respuesta sugerida y avisa por Slack para revisión humana (modo maqueta).",
+        "type": "action",
+        "config": {
+          "actionType": "Loop",
+          "source": "{{@list-questions:List Unanswered Questions.data.questions}}",
+          "maxItems": 50,
+          "steps": [
+            {
+              "id": "get-question",
+              "actionType": "mercadolibre/get-question",
+              "config": {
+                "questionId": "{{@item:Item.id}}"
+              }
+            },
+            {
+              "id": "check-unanswered",
+              "actionType": "Condition",
+              "config": {
+                "condition": "{{@get-question:Get Question.status}} === 'UNANSWERED'"
+              }
+            },
+            {
+              "id": "draft-answer",
+              "actionType": "ai-gateway/generate-text",
+              "config": {
+                "aiFormat": "text",
+                "aiModel": "meta/llama-4-scout",
+                "aiPrompt": "Sos un asistente de ventas de Mercado Libre. Redactá en español, en tono cordial y breve (máximo 4 líneas), una respuesta sugerida para esta pregunta de un comprador:\n\"{{@get-question:Get Question.text}}\"\nPublicación: {{@get-question:Get Question.itemId}}\nNo inventes stock, precios ni plazos de envío: si falta ese dato, pedí la información necesaria o indicá que se confirmará a la brevedad. No prometas descuentos."
+              }
+            },
+            {
+              "id": "notify-slack",
+              "actionType": "slack/send-message",
+              "config": {
+                "slackChannel": "#ventas",
+                "slackMessage": ":rotating_light: *Pregunta sin responder en Mercado Libre*\n*Pregunta:* {{@get-question:Get Question.text}}\n*Publicación:* {{@get-question:Get Question.itemId}}\n*Respuesta sugerida:* {{@draft-answer:Draft Answer.text}}\n_ID pregunta:_ {{@get-question:Get Question.id}}\n_Modo maqueta: no se respondió al comprador, requiere revisión humana._"
+              }
+            }
+          ]
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger-schedule",
+      "target": "list-questions",
+      "type": "default"
+    },
+    {
+      "id": "e2",
+      "source": "list-questions",
+      "target": "loop-questions",
+      "type": "default"
+    }
+  ]
+}

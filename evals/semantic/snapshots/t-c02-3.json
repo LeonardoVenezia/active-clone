@@ -1,0 +1,39 @@
+{
+  "name": "Tracking Proactivo de Envíos (Tiendanube + Zipnova)",
+  "nodes": [
+    {
+      "id": "tn-order-trigger",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 110
+      },
+      "data": {
+        "label": "Orden Tiendanube Creada",
+        "type": "trigger",
+        "config": {
+          "triggerType": "tiendanube/order-created"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "get-order",
+      "type": "action",
+      "position": {
+        "x": 90,
+        "y": 260
+      },
+      "data": {
+        "label": "Get Order - Tiendanube",
+        "type": "action",
+        "config": {
+          "orderId": "{{@tn-order-trigger:Orden Tiendanube Creada.orderId}}",
+          "actionType": "tiendanube/get-order"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": []
+}

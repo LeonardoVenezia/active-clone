@@ -1,0 +1,214 @@
+{
+  "name": "Reconciliación Diaria Stripe vs Tiendanube",
+  "nodes": [
+    {
+      "id": "trigger-8am",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Todos los días 8am",
+        "description": "Dispara la reconciliación cada día a las 08:00",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 8 * * *"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "rango-ayer",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Rango Ayer",
+        "description": "Calcula el inicio y fin del día anterior para filtrar las órdenes",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{}",
+          "expression": "{\"desde\": $fromMillis($toMillis($now()) - 86400000, '[Y0001]-[M01]-[D01]T00:00:00-03:00'), \"hasta\": $fromMillis($toMillis($now()), '[Y0001]-[M01]-[D01]T00:00:00-03:00')}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "stripe-payments",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 260
+      },
+      "data": {
+        "label": "Cobros Stripe",
+        "description": "Trae los cobros de Stripe del día anterior",
+        "type": "action",
+        "config": {
+          "actionType": "stripe/list-payments",
+          "customerId": "",
+          "limit": "100"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "tn-orders",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Ordenes Tiendanube",
+        "description": "Trae las órdenes de Tiendanube creadas el día anterior",
+        "type": "action",
+        "config": {
+          "actionType": "tiendanube/search-orders",
+          "query": "",
+          "status": "any",
+          "paymentStatus": "any",
+          "shippingStatus": "any",
+          "createdAtMin": "{{@rango-ayer:Rango Ayer.desde}}",
+          "limit": 50
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "reconciliar",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "Reconciliar",
+        "description": "Compara ambos listados y separa cobros sin orden y órdenes sin cobro",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{\"pagos\": {{@stripe-payments:Cobros Stripe.payments}}, \"ordenes\": {{@tn-orders:Ordenes Tiendanube.orders}}}",
+          "expression": "{\"cobrosSinOrden\": $filter(pagos, function($x) { $not($x.externalReference in ordenes.number) }), \"ordenesSinCobro\": $filter(ordenes, function($y) { $not($y.number in pagos.externalReference) })}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "sheets-log",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      },
+      "data": {
+        "label": "Anotar en Sheets",
+        "description": "Agrega las diferencias a la planilla de Google Sheets (completar SPREADSHEET_ID y credencial OAuth en el panel del nodo)",
+        "type": "action",
+        "config": {
+          "actionType": "HTTP Request",
+          "httpMethod": "POST",
+          "endpoint": "https://sheets.googleapis.com/v4/spreadsheets/<SPREADSHEET_ID>/values/Reconciliacion!A1:append?valueInputOption=RAW",
+          "httpHeaders": "{\"Authorization\": \"Bearer <GOOGLE_ACCESS_TOKEN>\", \"Content-Type\": \"application/json\"}",
+          "httpBody": "{\"values\": [[\"{{@rango-ayer:Rango Ayer.desde}}\", \"Cobros sin orden\", \"{{@reconciliar:Reconciliar.cobrosSinOrden}}\"], [\"{{@rango-ayer:Rango Ayer.desde}}\", \"Ordenes sin cobro\", \"{{@reconciliar:Reconciliar.ordenesSinCobro}}\"]]}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "armar-resumen",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 185
+      },
+      "data": {
+        "label": "Armar Resumen",
+        "description": "Redacta el asunto y el cuerpo del correo con las diferencias encontradas",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{\"cobrosSinOrden\": {{@reconciliar:Reconciliar.cobrosSinOrden}}, \"ordenesSinCobro\": {{@reconciliar:Reconciliar.ordenesSinCobro}}, \"fecha\": \"{{@rango-ayer:Rango Ayer.desde}}\"}",
+          "expression": "{\"subject\": \"Reconciliacion diaria del \" & fecha, \"resumen\": \"Cobros sin orden: \" & $count(cobrosSinOrden) & \"\\nOrdenes sin cobro: \" & $count(ordenesSinCobro) & \"\\n\\nDetalle cobros sin orden:\\n\" & $join(cobrosSinOrden.(id & \" | ref: \" & externalReference & \" | \" & amount & \" \" & currency), \"\\n\") & \"\\n\\nDetalle ordenes sin cobro:\\n\" & $join(ordenesSinCobro.(number & \" | \" & customerName & \" | \" & total & \" \" & currency), \"\\n\")}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "gmail-send",
+      "type": "action",
+      "position": {
+        "x": 2310,
+        "y": 185
+      },
+      "data": {
+        "label": "Enviar por Gmail",
+        "description": "Envía el resumen al equipo de finanzas por Gmail (completar credencial OAuth y codificar el mensaje en base64url en el panel del nodo)",
+        "type": "action",
+        "config": {
+          "actionType": "HTTP Request",
+          "httpMethod": "POST",
+          "endpoint": "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+          "httpHeaders": "{\"Authorization\": \"Bearer <GMAIL_ACCESS_TOKEN>\", \"Content-Type\": \"application/json\"}",
+          "httpBody": "{\"raw\": \"To: finanzas@empresa.com\\r\\nSubject: {{@armar-resumen:Armar Resumen.subject}}\\r\\nContent-Type: text/plain; charset=UTF-8\\r\\n\\r\\n{{@armar-resumen:Armar Resumen.resumen}}\"}"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger-8am",
+      "target": "stripe-payments",
+      "type": "default"
+    },
+    {
+      "id": "e2",
+      "source": "trigger-8am",
+      "target": "rango-ayer",
+      "type": "default"
+    },
+    {
+      "id": "e3",
+      "source": "rango-ayer",
+      "target": "tn-orders",
+      "type": "default"
+    },
+    {
+      "id": "e4",
+      "source": "stripe-payments",
+      "target": "reconciliar",
+      "type": "default"
+    },
+    {
+      "id": "e5",
+      "source": "tn-orders",
+      "target": "reconciliar",
+      "type": "default"
+    },
+    {
+      "id": "e6",
+      "source": "reconciliar",
+      "target": "sheets-log",
+      "type": "default"
+    },
+    {
+      "id": "e7",
+      "source": "sheets-log",
+      "target": "armar-resumen",
+      "type": "default"
+    },
+    {
+      "id": "e8",
+      "source": "armar-resumen",
+      "target": "gmail-send",
+      "type": "default"
+    }
+  ]
+}

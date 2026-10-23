@@ -1,0 +1,219 @@
+{
+  "name": "Reconciliación diaria Stripe vs Tiendanube",
+  "nodes": [
+    {
+      "id": "trigger-diario",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Cada día a las 8:00",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 8 * * *",
+          "timezone": "America/Argentina/Buenos_Aires"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "fecha-ayer",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "Fecha de Ayer",
+        "type": "action",
+        "config": {
+          "input": "{}",
+          "expression": "$fromMillis($toMillis($now()) - 86400000, '[Y]-[M]-[D]T00:00:00-03:00')",
+          "actionType": "Fórmula"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "listar-cobros",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Traer Cobros Stripe",
+        "type": "action",
+        "config": {
+          "limit": "100",
+          "actionType": "stripe/list-payments"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "buscar-ordenes",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 260
+      },
+      "data": {
+        "label": "Traer Órdenes Tiendanube",
+        "type": "action",
+        "config": {
+          "query": "",
+          "status": "any",
+          "paymentStatus": "any",
+          "shippingStatus": "any",
+          "createdAtMin": "{{@fecha-ayer:Fecha de Ayer.result}}",
+          "limit": 50,
+          "actionType": "tiendanube/search-orders"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "reconciliar",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 185
+      },
+      "data": {
+        "label": "Comparar Cobros vs Órdenes",
+        "type": "action",
+        "config": {
+          "input": "{\"cobros\": {{@listar-cobros:Traer Cobros Stripe.payments}}, \"ordenes\": {{@buscar-ordenes:Traer Órdenes Tiendanube.orders}}}",
+          "expression": "{\"cobrosSinOrden\": $filter(cobros, function($x) { $not($number($x.amount) in $map(ordenes, function($y){ $number($y.total) })) }), \"ordenesSinCobro\": $filter(ordenes, function($y) { $not($number($y.total) in $map(cobros, function($x){ $number($x.amount) })) })}",
+          "actionType": "Fórmula"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "armar-filas",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 260
+      },
+      "data": {
+        "label": "Armar Filas de la Planilla",
+        "type": "action",
+        "config": {
+          "input": "{\"cobrosSinOrden\": {{@reconciliar:Comparar Cobros vs Órdenes.result.cobrosSinOrden}}, \"ordenesSinCobro\": {{@reconciliar:Comparar Cobros vs Órdenes.result.ordenesSinCobro}}}",
+          "expression": "$append($map(cobrosSinOrden, function($x){ [\"Cobro sin orden\", $x.id, $x.amount, $x.currency, $x.status, $x.created] }), $map(ordenesSinCobro, function($y){ [\"Orden sin cobro\", $y.number, $y.total, $y.currency, $y.customerEmail, $y.createdAt] }))",
+          "actionType": "Fórmula"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "armar-email",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 110
+      },
+      "data": {
+        "label": "Armar Resumen para Gmail",
+        "type": "action",
+        "config": {
+          "input": "{\"cobrosSinOrden\": {{@reconciliar:Comparar Cobros vs Órdenes.result.cobrosSinOrden}}, \"ordenesSinCobro\": {{@reconciliar:Comparar Cobros vs Órdenes.result.ordenesSinCobro}}}",
+          "expression": "\"Reconciliacion diaria Stripe vs Tiendanube (\" & $string($now('[D]/[M]/[Y]')) & \")\\n\\nCobros sin orden: \" & $string($count(cobrosSinOrden)) & \"\\nOrdenes sin cobro: \" & $string($count(ordenesSinCobro)) & \"\\n\\nDetalle cobros sin orden: \" & $string(cobrosSinOrden) & \"\\n\\nDetalle ordenes sin cobro: \" & $string(ordenesSinCobro)",
+          "actionType": "Fórmula"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "anotar-sheets",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 260
+      },
+      "data": {
+        "label": "Anotar Diferencias en Google Sheets",
+        "type": "action",
+        "config": {
+          "actionType": "composio/run-tool",
+          "toolkit": "googlesheets",
+          "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+          "arguments": "{\"spreadsheet_id\": \"SPREADSHEET_ID_AQUI\", \"range\": \"Reconciliacion!A:F\", \"value_input_option\": \"USER_ENTERED\", \"values\": {{@armar-filas:Armar Filas de la Planilla.result}}}"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "enviar-gmail",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 110
+      },
+      "data": {
+        "label": "Enviar Resumen por Gmail",
+        "type": "action",
+        "config": {
+          "actionType": "composio/run-tool",
+          "toolkit": "gmail",
+          "tool": "GMAIL_SEND_EMAIL",
+          "arguments": "{\"recipient_email\": \"finanzas@empresa.com\", \"subject\": \"Reconciliacion diaria Stripe vs Tiendanube\", \"body\": \"{{@armar-email:Armar Resumen para Gmail.result}}\"}"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "trigger-diario",
+      "target": "fecha-ayer",
+      "id": "e-trigger-diario-fecha-ayer"
+    },
+    {
+      "source": "trigger-diario",
+      "target": "listar-cobros",
+      "id": "e-trigger-diario-listar-cobros"
+    },
+    {
+      "source": "fecha-ayer",
+      "target": "buscar-ordenes",
+      "id": "e-fecha-ayer-buscar-ordenes"
+    },
+    {
+      "source": "listar-cobros",
+      "target": "reconciliar",
+      "id": "e-listar-cobros-reconciliar"
+    },
+    {
+      "source": "buscar-ordenes",
+      "target": "reconciliar",
+      "id": "e-buscar-ordenes-reconciliar"
+    },
+    {
+      "source": "reconciliar",
+      "target": "armar-filas",
+      "id": "e-reconciliar-armar-filas"
+    },
+    {
+      "source": "reconciliar",
+      "target": "armar-email",
+      "id": "e-reconciliar-armar-email"
+    },
+    {
+      "source": "armar-filas",
+      "target": "anotar-sheets",
+      "id": "e-armar-filas-anotar-sheets"
+    },
+    {
+      "source": "armar-email",
+      "target": "enviar-gmail",
+      "id": "e-armar-email-enviar-gmail"
+    }
+  ]
+}

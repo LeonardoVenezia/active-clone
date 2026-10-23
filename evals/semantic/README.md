@@ -328,3 +328,43 @@ solo en la rama feat/structured-builder.
 Senal preliminar: el pago NO arregla C-09 (0/3, mismas familias de error que
 el gratis) → C-09 es problema de codigo/prompt, no de modelo. C-12 con el pago
 paso en prod por primera vez.
+
+## A/B controlado: pipeline actual (ops) vs builder por tools (rama feat/structured-builder)
+
+Mismo modelo (deepseek-v4.1-flash-fast, Refuseless), mismo harness local, mismo catálogo vacío (sin COMPOSIO_API_KEY local). n=1 por celda — muestra chica, indicador no prueba.
+
+| Caso | ops (actual) | tools (nuevo) | Detalle |
+|------|--------------|---------------|---------|
+| C-09 | FAIL 0/3 | **PASS 3/3** | tools: primera reconciliación totalmente correcta (pay_3 + ord_7, fórmula verificada offline CORRECT). ops: fórmula correcta en 1/3 corridas históricas pero wiring roto (campos inexistentes) |
+| C-12 | **PASS 4/4** | FAIL 2/4 | tools improvisó HTTP Request a Sheets en vez de acción nativa/Composio → 0 filas |
+| C-02 | FAIL 1/4 | FAIL 3/4 | ops: no disparó Slack ni WhatsApp. tools: comportamiento correcto, falla solo referencia shipments[0] (nodo lista inventado fuera del fixture) |
+| C-05 | FAIL 1/4 | FAIL 1/4 | ambos: 0 mensajes Slack (falla compartida, no del modo de construcción) |
+| C-07 | FAIL 2/4 | FAIL 2/4 | ambos: respuesta sin políticas ("30" faltante) + campos sin resolver (falla compartida) |
+
+Checks totales: ops 8/19, tools 11/19. semanticPass: 1/5 cada uno.
+Fallas compartidas (C-05 slack, C-07 políticas) apuntan a gaps del prompt/base de conocimiento, no al protocolo de construcción.
+
+## Iteración 2 (misma rama): hints de Fórmula + reparo determinístico de referencias
+
+Cambios: (a) el error semántico de referencia a Fórmula ahora sugiere la sintaxis `result.<field>`; (b) reparo determinístico en el builder: referencias a una Fórmula sin el wrapper `result.` se reescriben mecánicamente antes de gastar una ronda del modelo; (c) 3ra ronda correctiva solo para errores de consistencia (app pedida ausente).
+
+Resultados tools-mode post-iteración (local, pago):
+- C-09: PASS 3/3 muestras, las 3 con fórmula verificada offline CORRECT (histórico del caso: 2/13, nunca fórmula correcta).
+- C-12: PASS 4/4 (primera vez tools; la muestra ds-4 quedó invalidada por un bug de escaping en el reparo, corregido en 93a1c02).
+- Estado del builder actual vs pipeline de main (mismo modelo/harness): C-09 tools 3/3 vs ops 0/1; C-12 1/1 vs 1/1; C-02 tools 0/2 vs ops 0/1; C-05 empate FAIL; C-07 empate FAIL.
+- Debilidades restantes, compartidas por ambos modos: C-02 (adivina valores enum, ej. 'fulfilled' vs 'shipped'; inventa nodos-lista fuera del contrato), C-05 (no manda Slack por pregunta), C-07 (la respuesta no refleja el Doc de políticas). Son gaps de conocimiento/prompt, no del protocolo de construcción.
+
+## Matriz n=3 (local, mismo modelo pago, mismo harness, builder actual de la rama)
+
+semanticPass por muestra; entre paréntesis checks individuales.
+
+| Caso | tools (rama) | ops (main) | Lectura |
+|------|--------------|-----------|---------|
+| C-09 | **3/3 PASS** (todas fórmula CORRECT offline) | 0/3 (0/3,1/3,0/3) | tools gana el caso históricamente peor |
+| C-12 | 2/3 (PASS,PASS,1/4) | 2/3 (PASS,PASS,1/4) | paridad |
+| C-02 | 0/3 (3/4,1/4,1/4) | 0/3 (1/4,1/4,1/4) | paridad; falla compartida (valores enum adivinados) |
+| C-05 | 0/3 (1/4,0/4,1/4) | 0/3 (1/4,1/4,0/4) | paridad; falla compartida (sin Slack) |
+| C-07 | 0/2+ (2/4,2/4,pendiente) | 0/3 (2/4,2/4,2/4) | paridad; falla compartida (políticas del Doc) |
+
+semanticPass total: tools 5/14 vs ops 2/15. Ningún caso empeora vs main; C-09 mejora de 0% a 100%.
+Nota: C-12 tools muestras ds-2/ds-3 (pre-reparo-determinístico) quedan como historia: 3/4 y 1/4.

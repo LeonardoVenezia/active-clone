@@ -1,0 +1,167 @@
+{
+  "name": "Soporte Automático de Preguntas Mercado Libre",
+  "nodes": [
+    {
+      "id": "pregunta-recibida",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 185
+      },
+      "data": {
+        "label": "Pregunta Recibida - Mercado Libre",
+        "type": "trigger",
+        "config": {
+          "triggerType": "mercadolibre/question-received"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "obtener-pregunta",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 260
+      },
+      "data": {
+        "label": "Obtener Pregunta - Mercado Libre",
+        "type": "action",
+        "config": {
+          "questionId": "{{@pregunta-recibida:Pregunta Recibida.questionId}}",
+          "actionType": "mercadolibre/get-question"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "buscar-orden",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 260
+      },
+      "data": {
+        "label": "Buscar Orden - Mercado Libre",
+        "type": "action",
+        "config": {
+          "query": "{{@obtener-pregunta:Obtener Pregunta.itemId}}",
+          "status": "any",
+          "limit": "1",
+          "actionType": "mercadolibre/search-orders"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "detalle-orden",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 260
+      },
+      "data": {
+        "label": "Detalle de la Orden - Mercado Libre",
+        "type": "action",
+        "config": {
+          "orderId": "{{@buscar-orden:Buscar Orden.orders[0].id}}",
+          "actionType": "mercadolibre/get-order"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "redactar-respuesta",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 185
+      },
+      "data": {
+        "label": "Redactar Respuesta",
+        "type": "action",
+        "config": {
+          "aiFormat": "text",
+          "aiModel": "meta/llama-4-scout",
+          "aiPrompt": "Sos el equipo de atención al cliente de una tienda de Mercado Libre. Redactá una respuesta breve, cordial y en español (máximo 5 oraciones) para la siguiente pregunta de un comprador.\n\nPregunta del comprador: {{@obtener-pregunta:Obtener Pregunta.text}}\n\nDetalle de la orden asociada (estado, total, moneda, comprador, ítems): {{@detalle-orden:Detalle de la Orden}}\n\nPolíticas de la tienda (texto completo del Google Doc): {{@leer-politicas:Leer Políticas (Google Doc).data}}\n\nReglas: usá únicamente la información de las políticas y de la orden; no inventes plazos, precios ni condiciones. Si la política no cubre el caso, respondé con amabilidad e indicá que un asesor lo contactará. Devolvé solo el texto final de la respuesta, sin comillas ni encabezados.",
+          "actionType": "ai-gateway/generate-text"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "responder-pregunta",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 185
+      },
+      "data": {
+        "label": "Responder Pregunta - Mercado Libre",
+        "type": "action",
+        "config": {
+          "questionId": "{{@obtener-pregunta:Obtener Pregunta.id}}",
+          "text": "{{@redactar-respuesta:Redactar Respuesta.text}}",
+          "actionType": "mercadolibre/answer-question"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "leer-politicas",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 110
+      },
+      "data": {
+        "label": "Leer Políticas (Google Doc)",
+        "type": "action",
+        "config": {
+          "toolkit": "googledocs",
+          "tool": "GOOGLEDOCS_GET_DOCUMENT_BY_ID",
+          "arguments": "{\"document_id\": \"GOOGLE_DOC_ID\"}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "pregunta-recibida",
+      "target": "obtener-pregunta",
+      "id": "e-pregunta-recibida-obtener-pregunta"
+    },
+    {
+      "source": "obtener-pregunta",
+      "target": "buscar-orden",
+      "id": "e-obtener-pregunta-buscar-orden"
+    },
+    {
+      "source": "buscar-orden",
+      "target": "detalle-orden",
+      "id": "e-buscar-orden-detalle-orden"
+    },
+    {
+      "source": "detalle-orden",
+      "target": "redactar-respuesta",
+      "id": "e-detalle-orden-redactar-respuesta"
+    },
+    {
+      "source": "redactar-respuesta",
+      "target": "responder-pregunta",
+      "id": "e-redactar-respuesta-responder-pregunta"
+    },
+    {
+      "source": "pregunta-recibida",
+      "target": "leer-politicas",
+      "id": "e-pregunta-recibida-leer-politicas"
+    },
+    {
+      "source": "leer-politicas",
+      "target": "redactar-respuesta",
+      "id": "e-leer-politicas-redactar-respuesta"
+    }
+  ]
+}

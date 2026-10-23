@@ -1,0 +1,120 @@
+{
+  "name": "Recuperar ventas perdidas en Mercado Libre (modo maqueta)",
+  "nodes": [
+    {
+      "id": "cada-30-min",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 110
+      },
+      "data": {
+        "label": "Cada 30 Minutos",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "*/30 * * * *"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "buscar-preguntas",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 110
+      },
+      "data": {
+        "label": "Buscar Preguntas Sin Responder",
+        "type": "action",
+        "config": {
+          "actionType": "HTTP Request",
+          "httpMethod": "GET",
+          "endpoint": "https://api.mercadolibre.com/questions/search?status=UNANSWERED&limit=50&sort=date_desc",
+          "httpHeaders": "{\"Authorization\": \"Bearer TU_ACCESS_TOKEN_DE_MERCADO_LIBRE\"}",
+          "httpBody": ""
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "detalle-pregunta",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Traer Detalle de Pregunta - Mercado Libre",
+        "type": "action",
+        "config": {
+          "questionId": "{{@buscar-preguntas:Buscar Preguntas Sin Responder.data.questions[0].id}}",
+          "actionType": "mercadolibre/get-question"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "revisar-preguntas",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 110
+      },
+      "data": {
+        "label": "Revisar Cada Pregunta",
+        "type": "action",
+        "config": {
+          "source": "{{@buscar-preguntas:Buscar Preguntas Sin Responder.data.questions}}",
+          "maxItems": 50,
+          "steps": [
+            {
+              "id": "traer-pregunta",
+              "actionType": "mercadolibre/get-question",
+              "config": {
+                "questionId": "{{@item:Item.id}}"
+              }
+            },
+            {
+              "id": "redactar-respuesta",
+              "actionType": "ai-gateway/generate-text",
+              "config": {
+                "aiFormat": "text",
+                "aiModel": "meta/llama-4-scout",
+                "aiPrompt": "Sos el vendedor de una tienda de Mercado Libre. Redactá en español, en tono cordial y breve (máximo 3 oraciones), una respuesta sugerida para esta pregunta de un comprador.\n\nPregunta del comprador: {{@traer-pregunta:Traer Pregunta.text}}\nPublicación: {{@traer-pregunta:Traer Pregunta.itemId}}\n\nReglas: saludá, respondé concretamente lo que se pregunta y cerrá invitando a comprar. No inventes stock, precios, plazos de envío ni promociones que no estén en la pregunta; si falta ese dato, indicá que se confirma a la brevedad. Devolvé únicamente el texto de la respuesta, sin encabezados."
+              }
+            },
+            {
+              "id": "avisar-slack",
+              "actionType": "slack/send-message",
+              "config": {
+                "slackChannel": "#ventas",
+                "slackMessage": ":question: *Pregunta sin responder en Mercado Libre*\n*Pregunta:* {{@traer-pregunta:Traer Pregunta.text}}\n*Publicación:* {{@traer-pregunta:Traer Pregunta.itemId}}\n*Respuesta sugerida:* {{@redactar-respuesta:Redactar Respuesta.text}}\n\n:warning: Modo maqueta: nadie respondió todavía. Revisá, ajustá y publicá la respuesta manualmente."
+              }
+            }
+          ],
+          "actionType": "Loop"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "cada-30-min",
+      "target": "buscar-preguntas",
+      "id": "e-cada-30-min-buscar-preguntas"
+    },
+    {
+      "source": "buscar-preguntas",
+      "target": "detalle-pregunta",
+      "id": "e-buscar-preguntas-detalle-pregunta"
+    },
+    {
+      "source": "detalle-pregunta",
+      "target": "revisar-preguntas",
+      "id": "e-detalle-pregunta-revisar-preguntas"
+    }
+  ]
+}

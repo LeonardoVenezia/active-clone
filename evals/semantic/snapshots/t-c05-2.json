@@ -1,0 +1,126 @@
+{
+  "name": "Recuperar Ventas: Preguntas sin Responder de Mercado Libre",
+  "nodes": [
+    {
+      "id": "trigger-30min",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 153
+      },
+      "data": {
+        "label": "Cada 30 Minutos",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "*/30 * * * *",
+          "timezone": "America/Argentina/Buenos_Aires"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "search-questions",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 153
+      },
+      "data": {
+        "label": "Buscar Preguntas Sin Responder",
+        "type": "action",
+        "config": {
+          "httpMethod": "GET",
+          "endpoint": "https://api.mercadolibre.com/my/received_questions/search?api_version=4&status=UNANSWERED&limit=50",
+          "httpHeaders": "{\"Authorization\": \"Bearer <MERCADOLIBRE_ACCESS_TOKEN>\", \"Content-Type\": \"application/json\"}",
+          "httpBody": "",
+          "actionType": "HTTP Request"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-questions",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 153
+      },
+      "data": {
+        "label": "Por Cada Pregunta",
+        "type": "action",
+        "config": {
+          "actionType": "Loop",
+          "maxItems": 50,
+          "source": "{{@search-questions:Buscar Preguntas Sin Responder.data.questions}}",
+          "steps": [
+            {
+              "id": "get-question",
+              "actionType": "mercadolibre/get-question",
+              "config": {
+                "questionId": "{{@item:Item.id}}"
+              }
+            },
+            {
+              "id": "draft-answer",
+              "actionType": "ai-gateway/generate-text",
+              "config": {
+                "aiFormat": "text",
+                "aiModel": "meta/llama-4-scout",
+                "aiPrompt": "Sos el asistente de ventas de un vendedor de Mercado Libre. Redactá una respuesta breve, cordial y en español rioplatense para esta pregunta de comprador:\n\nPregunta: {{@get-question:Obtener Pregunta.text}}\nPublicación: {{@get-question:Obtener Pregunta.itemId}}\n\nReglas: no inventes stock, precios, plazos ni promociones; si falta información, pedile amablemente al comprador el dato que falta. Devolvé únicamente el texto de la respuesta, sin comillas ni explicaciones."
+              }
+            },
+            {
+              "id": "notify-slack",
+              "actionType": "slack/send-message",
+              "config": {
+                "slackChannel": "#ventas",
+                "slackMessage": ":email: *Pregunta sin responder en Mercado Libre*\n*Publicación:* {{@get-question:Obtener Pregunta.itemId}}\n*Pregunta del comprador:* {{@get-question:Obtener Pregunta.text}}\n*Respuesta sugerida:* {{@draft-answer:Redactar Respuesta.text}}\n_Modo maqueta: nadie respondió en Mercado Libre. Revisá y publicá la respuesta a mano._"
+              }
+            }
+          ]
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "fetch-question",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 110
+      },
+      "data": {
+        "label": "Obtener Pregunta - Mercado Libre",
+        "type": "action",
+        "config": {
+          "questionId": "{{@search-questions:Buscar Preguntas Sin Responder.data.questions[0].id}}",
+          "actionType": "mercadolibre/get-question"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "trigger-30min",
+      "target": "search-questions",
+      "id": "e-trigger-30min-search-questions"
+    },
+    {
+      "source": "search-questions",
+      "target": "loop-questions",
+      "id": "e-search-questions-loop-questions"
+    },
+    {
+      "source": "search-questions",
+      "target": "fetch-question",
+      "id": "e-search-questions-fetch-question"
+    },
+    {
+      "source": "fetch-question",
+      "target": "loop-questions",
+      "id": "e-fetch-question-loop-questions"
+    }
+  ]
+}
