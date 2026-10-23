@@ -287,7 +287,7 @@ export const aiApi = {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ prompt, existingWorkflow, ...(toolkits?.length ? { toolkits } : {}), ...(model ? { model } : {}), ...(evalMode ? { evalMode } : {}) }),
+      body: JSON.stringify({ prompt, existingWorkflow, builder: "tools", ...(toolkits?.length ? { toolkits } : {}), ...(model ? { model } : {}), ...(evalMode ? { evalMode } : {}) }),
     });
 
     if (!response.ok) {
