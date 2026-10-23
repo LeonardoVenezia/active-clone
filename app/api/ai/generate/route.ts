@@ -551,8 +551,9 @@ export async function POST(request: Request) {
       // cannot settle the validator errors must not spin forever - on expiry
       // we materialize what exists and the closing note says what is pending.
       const buildStart = Date.now();
+      const buildCapMs = Number(process.env.AI_BUILD_CAP_MS) > 0 ? Number(process.env.AI_BUILD_CAP_MS) : 4 * 60 * 1000;
       const buildAbort = new AbortController();
-      const buildTimer = setTimeout(() => buildAbort.abort(), 4 * 60 * 1000);
+      const buildTimer = setTimeout(() => buildAbort.abort(), buildCapMs);
       let timedOut = false;
       const mkTools = () => ({
         set_name: tool({
@@ -646,43 +647,6 @@ export async function POST(request: Request) {
         }
         return fixed;
       };
-      await runOnce([]);
-      // Leo's rule: if the model asked for missing data before building, the
-      // question goes to the conversation and nothing is materialized yet.
-      if (askedQuestion && !shadow.nodes.length) {
-        clearTimeout(buildTimer);
-        controller.enqueue(encodeMessage(encoder, { type: "question", text: askedQuestion }));
-        return 0;
-      }
-      // Up to 2 corrective rounds, plus one extra when the only remaining
-      // errors are consistency-class (e.g. an app the request explicitly
-      // asks for is still missing) - those are worth one more shot.
-      for (let round = 0; round < 3; round++) {
-        if (buildAbort.signal.aborted || Date.now() > 4 * 60 * 1000 + buildStart) { timedOut = true; break; }
-        const autoFixed = fixFormulaRefs();
-        if (autoFixed) console.info("[ai-generate] tools auto-fixed Fórmula refs:", autoFixed);
-        const errs = computeErrors();
-        if (!errs.length) break;
-        if (round >= 2 && !errs.some(e => e.startsWith("consistencia:"))) break;
-        console.warn("[ai-generate] tools corrective round", round + 1, errs);
-        await runOnce(errs);
-      }
-      clearTimeout(buildTimer);
-      if (buildAbort.signal.aborted) timedOut = true;
-      if (timedOut) console.warn("[ai-generate] tools build hit the wall-clock cap; materializing what exists");
-      const finalNodes = shadow.nodes;
-      const finalEdges = shadow.edges;
-      if (!finalNodes.length) {
-        controller.enqueue(encodeMessage(encoder, { type: "validation", errors: ["tools: the model did not build any nodes"] }));
-        return 0;
-      }
-      shadow.nodes = [];
-      shadow.edges = [];
-      let count = 0;
-      if (localName) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "setName", name: localName }), encoder, controller, count, shadow);
-      for (const n of finalNodes) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "addNode", node: n }), encoder, controller, count, shadow);
-      for (const e of finalEdges) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "addEdge", edge: e }), encoder, controller, count, shadow);
-      console.info("[ai-generate] tools materialized ops:", count, "nodes:", finalNodes.length, "edges:", finalEdges.length);
       // Leo's rule: the build is finished; now tell the user, in the
       // conversation, what was built, what was assumed or is missing, and ask.
       const writeClosingNote = async (errs: string[], question: string, hitCap: boolean): Promise<string> => {
@@ -703,6 +667,47 @@ export async function POST(request: Request) {
         }
         return "";
       };
+      await runOnce([]);
+      // Leo's rule: if the model asked for missing data before building, the
+      // question goes to the conversation and nothing is materialized yet.
+      if (askedQuestion && !shadow.nodes.length) {
+        clearTimeout(buildTimer);
+        controller.enqueue(encodeMessage(encoder, { type: "question", text: askedQuestion }));
+        return 0;
+      }
+      // Up to 2 corrective rounds, plus one extra when the only remaining
+      // errors are consistency-class (e.g. an app the request explicitly
+      // asks for is still missing) - those are worth one more shot.
+      for (let round = 0; round < 3; round++) {
+        if (buildAbort.signal.aborted || Date.now() > buildCapMs + buildStart) { timedOut = true; break; }
+        const autoFixed = fixFormulaRefs();
+        if (autoFixed) console.info("[ai-generate] tools auto-fixed Fórmula refs:", autoFixed);
+        const errs = computeErrors();
+        if (!errs.length) break;
+        if (round >= 2 && !errs.some(e => e.startsWith("consistencia:"))) break;
+        console.warn("[ai-generate] tools corrective round", round + 1, errs);
+        await runOnce(errs);
+      }
+      clearTimeout(buildTimer);
+      if (buildAbort.signal.aborted) timedOut = true;
+      if (timedOut) console.warn("[ai-generate] tools build hit the wall-clock cap; materializing what exists");
+      const finalNodes = shadow.nodes;
+      const finalEdges = shadow.edges;
+      if (!finalNodes.length) {
+        if (timedOut) {
+          const note = await writeClosingNote(computeErrors(), askedQuestion, true);
+          if (note) controller.enqueue(encodeMessage(encoder, { type: "summary", text: note }));
+        }
+        controller.enqueue(encodeMessage(encoder, { type: "validation", errors: ["tools: the model did not build any nodes"] }));
+        return 0;
+      }
+      shadow.nodes = [];
+      shadow.edges = [];
+      let count = 0;
+      if (localName) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "setName", name: localName }), encoder, controller, count, shadow);
+      for (const n of finalNodes) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "addNode", node: n }), encoder, controller, count, shadow);
+      for (const e of finalEdges) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "addEdge", edge: e }), encoder, controller, count, shadow);
+      console.info("[ai-generate] tools materialized ops:", count, "nodes:", finalNodes.length, "edges:", finalEdges.length);
       const remainingAfter = computeErrors();
       let closing = lastModelText;
       if (remainingAfter.length || askedQuestion || !closing || timedOut) {
