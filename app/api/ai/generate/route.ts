@@ -649,23 +649,31 @@ export async function POST(request: Request) {
       };
       // Leo's rule: the build is finished; now tell the user, in the
       // conversation, what was built, what was assumed or is missing, and ask.
-      const writeClosingNote = async (errs: string[], question: string, hitCap: boolean): Promise<string> => {
-        for (const route of activeRoutes) {
-          try {
-            const provider = createOpenAICompatible({ name: route.name, apiKey: route.apiKey, baseURL: route.baseURL });
-            const res = await generateText({
-              model: provider(route.model),
-              messages: [
-                { role: "system", content: "Sos el asistente que acaba de armar un workflow en el lienzo del usuario. Respondé en español, breve y conversacional." },
-                { role: "user", content: `El flujo ya quedó armado en el lienzo.${errs.length ? ` Quedaron estos temas sin resolver: ${errs.join(" | ")}.` : ""}${question ? ` Antes de armar le pediste este dato al usuario: "${question}".` : ""}${hitCap ? " IMPORTANTE: el armado se cortó por el tope de tiempo de seguridad, así que el flujo puede estar incompleto: decilo claramente y nombrá qué quedó pendiente; nunca lo presentes como terminado." : ""} Escribí el mensaje para el usuario: contale qué armaste, qué asumiste o qué falta, y hacé la pregunta que necesitás para dejarlo perfecto. Nunca digas que no pudiste; nunca lo dejes sin respuesta. Pedido original: ${userPrompt}` },
-              ],
-              maxOutputTokens: 4096, temperature: 0.4, maxRetries: 0,
-            });
-            const t = (res.text || "").trim();
-            if (t) return t;
-          } catch { /* next route */ }
-        }
-        return "";
+      // The closing note gets its own 60s cap: the build's time limit must
+      // not trade one indefinite wait for another. If every route fails, the
+      // caller falls back to a short state-aware line - never silence.
+      const writeClosingNote = async (errs: string[], question: string, hitCap: boolean, builtState: string): Promise<string> => {
+        const noteAbort = new AbortController();
+        const noteTimer = setTimeout(() => noteAbort.abort(), 60 * 1000);
+        try {
+          for (const route of activeRoutes) {
+            if (noteAbort.signal.aborted) break;
+            try {
+              const provider = createOpenAICompatible({ name: route.name, apiKey: route.apiKey, baseURL: route.baseURL });
+              const res = await generateText({
+                model: provider(route.model),
+                messages: [
+                  { role: "system", content: "Sos el asistente que trabaja sobre el lienzo del usuario. Respondé en español, breve y conversacional." },
+                  { role: "user", content: `Estado real del lienzo: ${builtState}.${errs.length ? ` Temas sin resolver: ${errs.join(" | ")}.` : ""}${question ? ` Antes de armar le pediste este dato al usuario: "${question}".` : ""}${hitCap ? " El armado se cortó por el tope de tiempo de seguridad." : ""} Escribí el mensaje para el usuario: describí el estado REAL del lienzo tal como te lo pasé (si no se construyó nada, decilo claramente; nunca afirmes que hay una base o pasos que no existen), contá qué asumiste o qué falta, y hacé la pregunta o propuesta que sigue. Nunca digas que no pudiste; nunca lo dejes sin respuesta. Pedido original: ${userPrompt}` },
+                ],
+                maxOutputTokens: 4096, temperature: 0.4, maxRetries: 0, abortSignal: noteAbort.signal,
+              });
+              const t = (res.text || "").trim();
+              if (t) return t;
+            } catch { /* next route */ }
+          }
+          return "";
+        } finally { clearTimeout(noteTimer); }
       };
       await runOnce([]);
       // Leo's rule: if the model asked for missing data before building, the
@@ -695,8 +703,9 @@ export async function POST(request: Request) {
       const finalEdges = shadow.edges;
       if (!finalNodes.length) {
         if (timedOut) {
-          const note = await writeClosingNote(computeErrors(), askedQuestion, true);
-          if (note) controller.enqueue(encodeMessage(encoder, { type: "summary", text: note }));
+          let note = await writeClosingNote(computeErrors(), askedQuestion, true, "no se construyó ningún paso (el lienzo quedó vacío)");
+          if (!note) note = "El armado se cortó por el tope de tiempo de seguridad y no llegué a construir nada en el lienzo. ¿Lo intentamos de nuevo?";
+          controller.enqueue(encodeMessage(encoder, { type: "summary", text: note }));
         }
         controller.enqueue(encodeMessage(encoder, { type: "validation", errors: ["tools: the model did not build any nodes"] }));
         return 0;
@@ -709,10 +718,12 @@ export async function POST(request: Request) {
       for (const e of finalEdges) count = tryParseAndEnqueueOperation(JSON.stringify({ op: "addEdge", edge: e }), encoder, controller, count, shadow);
       console.info("[ai-generate] tools materialized ops:", count, "nodes:", finalNodes.length, "edges:", finalEdges.length);
       const remainingAfter = computeErrors();
+      const builtState = `${finalNodes.length} paso(s) materializados: ${finalNodes.slice(0, 10).map(n => String((n.data as { label?: string })?.label ?? n.id)).join(", ")}`;
       let closing = lastModelText;
       if (remainingAfter.length || askedQuestion || !closing || timedOut) {
-        const note = await writeClosingNote(remainingAfter, askedQuestion, timedOut);
+        const note = await writeClosingNote(remainingAfter, askedQuestion, timedOut, builtState);
         if (note) closing = note;
+        else if (timedOut) closing = `El armado se cortó por el tope de tiempo de seguridad. En el lienzo quedaron ${builtState}, pero el flujo no está terminado. ¿Lo retomamos desde acá?`;
       }
       if (closing) controller.enqueue(encodeMessage(encoder, { type: "summary", text: closing }));
       return count;
