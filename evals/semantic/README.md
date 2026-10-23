@@ -372,3 +372,9 @@ Nota: C-12 tools muestras ds-2/ds-3 (pre-reparo-determinístico) quedan como his
 ## Nota de robustez (post-merge)
 
 Una corrida local de C-07 tools (t-c07-3, 2026-10-22 ~20:45-20:58) nunca terminó: quedó >13 min en rondas correctivas (3 rondas × hasta 25 pasos de tool calls) y el proceso murió sin escribir snapshot. En prod ese peor caso deja al usuario esperando demasiado. Recomendación: cap wall-clock en runToolsGeneration (p.ej. 4 min; al agotarse, materializar lo construido + closing note explicando qué quedó pendiente, siguiendo la regla de UX de Leo).
+
+## Post-merge: tope de tiempo + ajuste maqueta (main 307e5f2)
+
+- Tope wall-clock de 4 min en runToolsGeneration (abort + materializa lo construido + closing note que dice claramente qué quedó pendiente; aprobado por Leo 2026-10-22 21:46).
+- ask_user cede ante "modo maqueta/ejemplo/prueba" explícito: placeholders + supuestos declarados en el cierre (la primera corrida post-merge de C-09 preguntó por planilla/casilla en vez de armar: correcto para producción real, incorrecto para maqueta).
+- Re-medición honesta de C-09 con el builder EXACTO de prod (ask_user + tope): 1/3 PASS (cap3 PASS+fórmula CORRECT, cap1 fórmula CORRECT pero wiring roto en un Loop, cap2 familia vieja: loops + externalReference). Las 3/3 previas se midieron antes de ask_user. Sigue por encima de ops (0/3) pero la tasa real es menor a la reportada; varianza dentro de las familias conocidas.

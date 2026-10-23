@@ -1,0 +1,297 @@
+{
+  "name": "Reconciliación diaria Stripe vs Tiendanube",
+  "nodes": [
+    {
+      "id": "trigger-diario",
+      "type": "trigger",
+      "position": {
+        "x": 90,
+        "y": 228
+      },
+      "data": {
+        "label": "Todos los días 8 AM",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Schedule",
+          "scheduleCron": "0 8 * * *",
+          "timezone": "America/Argentina/Buenos_Aires"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "fecha-ayer",
+      "type": "action",
+      "position": {
+        "x": 460,
+        "y": 228
+      },
+      "data": {
+        "label": "Fecha de ayer",
+        "type": "action",
+        "config": {
+          "input": "{}",
+          "expression": "{\"desde\": $substringBefore($fromMillis($millis($now()) - 86400000), \"T\") & \"T00:00:00-03:00\", \"hasta\": $substringBefore($now(), \"T\") & \"T00:00:00-03:00\"}",
+          "actionType": "Fórmula"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "stripe-payments",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 153
+      },
+      "data": {
+        "label": "Cobros Stripe",
+        "type": "action",
+        "config": {
+          "limit": "100",
+          "actionType": "stripe/list-payments"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "tn-orders",
+      "type": "action",
+      "position": {
+        "x": 830,
+        "y": 303
+      },
+      "data": {
+        "label": "Órdenes Tiendanube",
+        "type": "action",
+        "config": {
+          "query": "",
+          "status": "any",
+          "paymentStatus": "any",
+          "shippingStatus": "any",
+          "createdAtMin": "{{@fecha-ayer:Fecha de ayer.result.desde}}",
+          "limit": 100,
+          "actionType": "tiendanube/search-orders"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "diferencias",
+      "type": "action",
+      "position": {
+        "x": 1200,
+        "y": 228
+      },
+      "data": {
+        "label": "Diferencias",
+        "type": "action",
+        "config": {
+          "input": "{\"cobros\": {{@stripe-payments:Cobros Stripe.payments}}, \"ordenes\": {{@tn-orders:Órdenes Tiendanube.orders}}}",
+          "expression": "{\"soloEnA\": $filter(cobros, function($x) { $not($number($x.amount) in $map(ordenes, function($y){ $number($y.total) })) }), \"soloEnB\": $filter(ordenes, function($y) { $not($number($y.total) in $map(cobros, function($x){ $number($x.amount) })) })}",
+          "actionType": "Fórmula"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-ordenes",
+      "type": "action",
+      "position": {
+        "x": 2310,
+        "y": 228
+      },
+      "data": {
+        "label": "Órdenes sin cobro",
+        "type": "action",
+        "config": {
+          "source": "{{@ordenes-sin-cobro:Lista órdenes sin cobro.result.result}}",
+          "maxItems": 50,
+          "steps": [
+            {
+              "id": "append-orden",
+              "actionType": "composio/run-tool",
+              "config": {
+                "toolkit": "googlesheets",
+                "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+                "arguments": "{\"spreadsheet_id\":\"1AbCdEfGhIjKlMnOpQrStUvWxYz-maqueta\",\"range\":\"Reconciliacion!A:D\",\"values\":[[\"{{@fecha-ayer:Fecha de ayer.result.desde}}\",\"Orden sin cobro\",\"{{@item:Item.number}}\",\"{{@item:Item.total}} {{@item:Item.currency}}\"]]}"
+              }
+            }
+          ],
+          "actionType": "Loop"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "gmail-resumen",
+      "type": "action",
+      "position": {
+        "x": 2680,
+        "y": 228
+      },
+      "data": {
+        "label": "Resumen Gmail",
+        "type": "action",
+        "config": {
+          "toolkit": "gmail",
+          "tool": "GMAIL_SEND_EMAIL",
+          "arguments": "{\"recipient_email\":\"finanzas@empresa.com\",\"subject\":\"Reconciliación diaria Stripe vs Tiendanube\",\"body\":\"Hola equipo de finanzas,\\n\\nResumen de la reconciliación diaria ({{@fecha-ayer:Fecha de ayer.result.desde}} a {{@fecha-ayer:Fecha de ayer.result.hasta}}):\\n\\n- Cobros de Stripe sin orden asociada: {{@diferencias:Diferencias.result.soloEnA}}\\n- Órdenes de Tiendanube sin cobro: {{@diferencias:Diferencias.result.soloEnB}}\\n\\nEl detalle quedó registrado en la planilla de Google Sheets (pestaña Reconciliacion).\\n\\nSaludos,\\nAutomatización\"}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "sheets-preparar",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 378
+      },
+      "data": {
+        "label": "Preparar planilla Google Sheets",
+        "type": "action",
+        "config": {
+          "toolkit": "googlesheets",
+          "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_CLEAR",
+          "arguments": "{\"spreadsheet_id\":\"1AbCdEfGhIjKlMnOpQrStUvWxYz-maqueta\",\"range\":\"Reconciliacion!A2:D\"}",
+          "actionType": "composio/run-tool"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "loop-cobros",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 303
+      },
+      "data": {
+        "label": "Cobros sin orden",
+        "type": "action",
+        "config": {
+          "actionType": "Loop",
+          "maxItems": 50,
+          "source": "{{@cobros-sin-orden:Lista cobros sin orden.result.result}}",
+          "steps": [
+            {
+              "actionType": "composio/run-tool",
+              "config": {
+                "arguments": "{\"spreadsheet_id\":\"1AbCdEfGhIjKlMnOpQrStUvWxYz-maqueta\",\"range\":\"Reconciliacion!A:D\",\"values\":[[\"{{@fecha-ayer:Fecha de ayer.result.desde}}\",\"Cobro sin orden\",\"{{@item:Item.id}}\",\"{{@item:Item.amount}} {{@item:Item.currency}}\"]]}",
+                "tool": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+                "toolkit": "googlesheets"
+              },
+              "id": "append-cobro"
+            }
+          ]
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "ordenes-sin-cobro",
+      "type": "action",
+      "position": {
+        "x": 1940,
+        "y": 110
+      },
+      "data": {
+        "label": "Lista órdenes sin cobro",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{\"diferencias\": {{@diferencias:Diferencias.result.result}}}",
+          "expression": "diferencias.soloEnB"
+        },
+        "status": "idle"
+      }
+    },
+    {
+      "id": "cobros-sin-orden",
+      "type": "action",
+      "position": {
+        "x": 1570,
+        "y": 228
+      },
+      "data": {
+        "label": "Lista cobros sin orden",
+        "type": "action",
+        "config": {
+          "actionType": "Fórmula",
+          "input": "{\"diferencias\": {{@diferencias:Diferencias.result.result}}}",
+          "expression": "diferencias.soloEnA"
+        },
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "trigger-diario",
+      "target": "fecha-ayer",
+      "id": "e-trigger-diario-fecha-ayer"
+    },
+    {
+      "source": "fecha-ayer",
+      "target": "stripe-payments",
+      "id": "e-fecha-ayer-stripe-payments"
+    },
+    {
+      "source": "fecha-ayer",
+      "target": "tn-orders",
+      "id": "e-fecha-ayer-tn-orders"
+    },
+    {
+      "source": "stripe-payments",
+      "target": "diferencias",
+      "id": "e-stripe-payments-diferencias"
+    },
+    {
+      "source": "tn-orders",
+      "target": "diferencias",
+      "id": "e-tn-orders-diferencias"
+    },
+    {
+      "source": "loop-ordenes",
+      "target": "gmail-resumen",
+      "id": "e-loop-ordenes-gmail-resumen"
+    },
+    {
+      "source": "diferencias",
+      "target": "sheets-preparar",
+      "id": "e-diferencias-sheets-preparar"
+    },
+    {
+      "source": "sheets-preparar",
+      "target": "loop-cobros",
+      "id": "e-sheets-preparar-loop-cobros"
+    },
+    {
+      "source": "loop-cobros",
+      "target": "loop-ordenes",
+      "id": "e-loop-cobros-loop-ordenes"
+    },
+    {
+      "source": "diferencias",
+      "target": "ordenes-sin-cobro",
+      "id": "e-diferencias-ordenes-sin-cobro"
+    },
+    {
+      "source": "diferencias",
+      "target": "cobros-sin-orden",
+      "id": "e-diferencias-cobros-sin-orden"
+    },
+    {
+      "source": "ordenes-sin-cobro",
+      "target": "loop-ordenes",
+      "id": "e-ordenes-sin-cobro-loop-ordenes"
+    },
+    {
+      "source": "cobros-sin-orden",
+      "target": "loop-cobros",
+      "id": "e-cobros-sin-orden-loop-cobros"
+    }
+  ]
+}
