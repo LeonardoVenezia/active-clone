@@ -1,0 +1,10 @@
+const m: any = await import("../../lib/agent/dropped-labels"); const { droppedLabels } = m.default ?? m;
+const r: [string, boolean][] = []; const t = (n: string, ok: boolean) => r.push([n, ok]);
+t("empty label falls back to id", droppedLabels([{ id: "a", data: { label: "" } }], new Set()).join() === "a");
+t("blank label falls back to id", droppedLabels([{ id: "a", data: { label: "  " } }], new Set()).join() === "a");
+t("no data falls back to id", droppedLabels([{ id: "a" }], new Set()).join() === "a");
+t("real label kept", droppedLabels([{ id: "a", data: { label: "Enviar" } }], new Set()).join() === "Enviar");
+t("kept nodes not listed", droppedLabels([{ id: "a", data: { label: "X" } }], new Set(["a"])).length === 0);
+t("max 5", droppedLabels(Array.from({ length: 9 }, (_, i) => ({ id: "n" + i })), new Set()).length === 5);
+t("never an empty string element", !droppedLabels([{ id: "", data: { label: "" } }], new Set()).some((x: string) => x === ""));
+let f = 0; for (const [k, ok] of r) { console.log(ok ? "PASS" : "FAIL", k); if (!ok) f++; } process.exit(f ? 1 : 0);
