@@ -1,6 +1,7 @@
 import "server-only";
 import { createUIMessageStream, createUIMessageStreamResponse, stepCountIs, streamText, tool } from "ai";
 import type { LanguageModel, ModelMessage } from "ai";
+import { toModelMessages } from "@/lib/agent/model-messages";
 import { z } from "zod";
 import type { LlmRoute } from "@/lib/free-models";
 import { type Selection, ModelTrace, languageModel } from "@/lib/model-select";
@@ -138,7 +139,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               for (const e of tpl.edges as FlowEdge[]) { shadow.edges.push(e); writer.write({ type: "data-canvas-op", data: { op: "addEdge", edge: e } satisfies Operation }); }
               touched = true; if (!flowName) flowName = tpl.name;
               const cfgOf = (n: FlowNode) => ((n.data as { config?: Record<string, unknown> })?.config ?? {}) as Record<string, unknown>;
-              return { ok: true, imported: tpl.name, structure: shadow.nodes.map(n => ({ id: n.id, label: (n.data as { label?: string })?.label, kind: (n.data as { type?: string })?.type, action: cfgOf(n).actionType, schedule: cfgOf(n).cron ?? cfgOf(n).schedule })), note: "These steps are now on the canvas. Compare trigger, data source, apps and quantities with the agreed request and fix or report every difference." };
+              return { ok: true, imported: tpl.name, structure: shadow.nodes.map(n => ({ id: n.id, label: (n.data as { label?: string })?.label, kind: (n.data as { type?: string })?.type, action: cfgOf(n).actionType ?? cfgOf(n).triggerType ?? null, schedule: cfgOf(n).cron ?? cfgOf(n).schedule ?? null })), note: "These steps are now on the canvas. Compare trigger, data source, apps and quantities with the agreed request and fix or report every difference." };
             },
           }),
         };
@@ -164,7 +165,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
           if (failed && !produced) throw failed;
           if (failed) { console.error("[workflow-chat] pass broke midway", route.name, route.model); interrupted = true; }
           const response = failed ? { messages: [] as ModelMessage[] } : await res.response;
-          return response.messages as ModelMessage[];
+          return toModelMessages(response.messages);
         };
 
         let usedRoute = false; let validationLeft: string[] = []; let interrupted = false;
