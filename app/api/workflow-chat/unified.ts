@@ -150,10 +150,12 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
         const standing = new Map<string, Standing>(); const skipKinds = new Set<string>(); let unresolvedKinds: string[] = [];
         const userMsgs = [...i.past.filter(m => m.role === "user").map(m => m.content), i.text];
         const resolveObjective = async (route: LlmRoute) => {
-          const cand = missingMediaKinds(userRequest, shadow.nodes).filter(k => !standing.has(k));
-          if (cand.length) { const j = await (i.deps?.judge ?? judgeStanding)((i.deps?.model ?? languageModel)(route), userMsgs, cand, abort.signal); for (const k of cand) standing.set(k, j[k] ?? "unclear"); }
+          // Experiment, QA selector only: a second reasoning call that can only RELAX the check for a clearly withdrawn deliverable.
           skipKinds.clear(); unresolvedKinds = [];
-          for (const [k, v] of standing) { if (v === "withdrawn") skipKinds.add(k); else if (v === "unclear") { skipKinds.add(k); unresolvedKinds.push(k); } }
+          if (i.selection.choice === "auto") return;
+          const cand = missingMediaKinds(userRequest, shadow.nodes).filter(k => !standing.has(k) || standing.get(k) === "error");
+          if (cand.length) { const j = await (i.deps?.judge ?? judgeStanding)((i.deps?.model ?? languageModel)(route), userMsgs, cand, abort.signal); for (const k of cand) standing.set(k, j[k] ?? "error"); }
+          for (const [k, v] of standing) { if (v === "withdrawn") skipKinds.add(k); else if (v === "unclear") unresolvedKinds.push(k); }
         };
         for (const route of i.selection.routes) {
           const tr = Date.now();
@@ -193,7 +195,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
                 (aiPrompts.length ? `\nAI prompts you wrote (ask the user to review them, show them):\n${aiPrompts.map(x => `- ${x.label}: "${x.p.slice(0, 600)}"`).join("\n")}` : "") +
                 `\nData flow facts (app-computed): ${lineageFacts(shadow).join(" ")} Compare them with what the user asked for (quantities, per-item work, data that must feed a step) and say plainly any gap; never call it complete if they disagree.\nApps still NOT connected (mention ALL of them; offer one card at a time): ${apps.filter(a => st[a] !== "connected").map(a => `${a}: ${st[a] ?? "unknown"}`).join(", ") || "none"}.\nSteps still holding placeholder values: ${findPlaceholders(fresh).join("; ") || "none"}.\nApps used and their connection status: ${apps.map(a => `${a}: ${st[a] ?? "unknown"}`).join(", ") || "none"}.` +
                 (validationLeft.length ? `\nUnresolved checks: ${validationLeft.join(" | ").slice(0, 900)}. Say plainly what is still missing; never claim it is complete.` : "") +
-                (timedOut ? "\nThe build hit the time limit; say what is pending." : "") + (unresolvedKinds.length ? `\nUnresolved from the user's own words (not in the flow): ${unresolvedKinds.join(", ")}. Ask ONE short question whether they still want it; do not assume either way.` : "") + (interrupted ? "\nA model call was interrupted by an error while building; the canvas may be incomplete. Say so plainly." : "") +
+                (timedOut ? "\nThe build hit the time limit; say what is pending." : "") + (unresolvedKinds.length ? `\nUnresolved from the user's own words (not in the flow): ${unresolvedKinds.join(", ")}. Still required by the check; if the user did not clearly keep or drop it, ask ONE short question.` : "") + (interrupted ? "\nA model call was interrupted by an error while building; the canvas may be incomplete. Say so plainly." : "") +
                 `\nNow tell the user in your own words: what you built (one sentence), then guide what is pending, one thing at a time (AI prompt review, request_connection for apps not connected${i.draftMode ? "; DRAFT MODE: do not request connections" : ""}). Do not rebuild anything.`;
               stageName = "guide";
               const guideAbort = new AbortController(); const gt = setTimeout(() => guideAbort.abort(), 45_000);
