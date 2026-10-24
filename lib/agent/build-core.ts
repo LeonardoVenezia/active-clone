@@ -1,4 +1,5 @@
 import { generateAIActionPrompts } from "@/plugins";
+import { mergeConfig } from "@/lib/agent/merge-config";
 import { manualInputError, candidateConfigProblem, type ToolRejectMeta } from "@/lib/manual-input";
 import { generateAITriggerPrompts, getAllActions, getAllIntegrations, getAllTriggers } from "@/plugins/registry";
 import { tool } from "ai";
@@ -59,7 +60,7 @@ export function shadowApply(operation: Operation, shadow: Shadow): boolean {
     shadow.nodes = shadow.nodes.map((n) => {
       if (n.id !== operation.nodeId) return n;
       const mergedData = upd
-        ? { ...n.data, ...upd, config: { ...((n.data?.config ?? {}) as object), ...((upd.config ?? {}) as object) } }
+        ? { ...n.data, ...upd, config: mergeConfig(n.data?.config as Record<string, unknown> | undefined, upd.config as Record<string, unknown> | undefined) }
         : n.data;
       return { ...n, ...(operation.updates?.position ? { position: operation.updates.position } : {}), ...(upd ? { data: mergedData } : {}) } as FlowNode;
     });

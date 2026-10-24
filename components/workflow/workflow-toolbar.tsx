@@ -423,7 +423,8 @@ async function executeTestWorkflow({
     });
 
     if (!response.ok) {
-      throw new Error("No se pudo ejecutar el workflow");
+      const errBody = await response.json().catch(() => null);
+      throw new Error(response.status === 400 && typeof errBody?.error === "string" ? errBody.error : "No se pudo ejecutar el workflow");
     }
 
     const result = await response.json();

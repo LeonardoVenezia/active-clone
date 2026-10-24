@@ -75,7 +75,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
       execute: async ({ writer }) => {
         const capMs = Number(process.env.AI_BUILD_CAP_MS) > 0 ? Number(process.env.AI_BUILD_CAP_MS) : 210 * 1000;
         const t0 = Date.now(); const abort = new AbortController(); const timer = setTimeout(() => abort.abort(), capMs);
-        const toolRejects: import("@/lib/manual-input").ToolRejectMeta[] = []; const textId = "t1"; let reply = ""; let started = false; let timedOut = false;
+        const toolRejects: import("@/lib/manual-input").ToolRejectMeta[] = []; const tplIds = new Set<string>(); const judgeLog: string[] = []; let guideChangedGraph: boolean | null = null; const textId = "t1"; let reply = ""; let started = false; let timedOut = false;
         const emit = (delta: string) => { if (!delta) return; if (!started) { writer.write({ type: "text-start", id: textId }); started = true; } reply += delta; writer.write({ type: "text-delta", id: textId, delta }); };
         const buildTools = createBuildTools(shadow, { noAsk: true, onReject: m => { if (toolRejects.length < 20) toolRejects.push(m); }, onName: n => { flowName = n; touched = true; }, onOp: (op: Operation) => { touched = true; writer.write({ type: "data-canvas-op", data: op }); } });
         const tools = {
@@ -135,7 +135,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               if (!tpl) return { ok: false, reason: "could not load that template; build the flow with your tools" };
               // Same ids as the template (its {{@id:Label.field}} references stay valid); no connections carried over.
               shadow.nodes.length = 0; shadow.edges.length = 0;
-              for (const raw of tpl.nodes as FlowNode[]) { const n = JSON.parse(JSON.stringify(raw)) as FlowNode; const d = (n.data ?? {}) as { config?: Record<string, unknown>; status?: string }; if (d.config) { delete d.config.integrationId; d.config.fromTemplate = true; } d.status = "idle"; n.data = d as FlowNode["data"]; shadow.nodes.push(n); writer.write({ type: "data-canvas-op", data: { op: "addNode", node: n } satisfies Operation }); }
+              for (const raw of tpl.nodes as FlowNode[]) { const n = JSON.parse(JSON.stringify(raw)) as FlowNode; tplIds.add(n.id); const d = (n.data ?? {}) as { config?: Record<string, unknown>; status?: string }; if (d.config) { delete d.config.integrationId; d.config.fromTemplate = true; } d.status = "idle"; n.data = d as FlowNode["data"]; shadow.nodes.push(n); writer.write({ type: "data-canvas-op", data: { op: "addNode", node: n } satisfies Operation }); }
               for (const e of tpl.edges as FlowEdge[]) { shadow.edges.push(e); writer.write({ type: "data-canvas-op", data: { op: "addEdge", edge: e } satisfies Operation }); }
               touched = true; if (!flowName) flowName = tpl.name;
               const cfgOf = (n: FlowNode) => ((n.data as { config?: Record<string, unknown> })?.config ?? {}) as Record<string, unknown>;
@@ -145,22 +145,26 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
         };
 
         // One pass of the agent loop. Text is shown only when `visible` (corrective rounds are internal).
-        type PassLog = { stage: string; steps: number; tools: Record<string, number>; finish: string; error?: { status: unknown; note: string }; ms: number; nodesAfter: number; capHit: boolean };
-        const passLog: PassLog[] = []; const rounds: { round: number; errors: number; sample: string[] }[] = []; let closeReason = "no-build";
+        type PassLog = { stage: string; steps: number; tools: Record<string, number>; finish: string; error?: { status: unknown; note: string }; ms: number; nodesAfter: number; capHit: boolean; budgetLeftMs?: number; nodesBefore?: number; added?: number; removedTpl?: number; removedOwn?: number; ok?: Record<string, number>; fail?: Record<string, number>; tokens?: { in?: number; out?: number; cached?: number } };
+        const passLog: PassLog[] = []; const rounds: { round: number; errors: number; sample: string[]; cat?: Record<string, number>; resolved?: number; persistent?: number; fresh?: number }[] = []; let prevErrs: Set<string> | null = null; const CATS = new Set(["grafo", "semántica", "consistencia"]); let closeReason = "no-build";
         let stageName = "chat";
         const runPass = async (route: LlmRoute, messages: ModelMessage[], visible: boolean) => {
           const tp = Date.now(); const log: PassLog = { stage: stageName, steps: 0, tools: {}, finish: "unknown", ms: 0, nodesAfter: 0, capHit: false }; passLog.push(log);
+          const idsBefore = new Set(shadow.nodes.map(n => n.id)); log.budgetLeftMs = Math.max(0, capMs - (Date.now() - t0)); log.nodesBefore = shadow.nodes.length; log.ok = {}; log.fail = {};
           const res = streamText({ model: (i.deps?.model ?? languageModel)(route), system, messages, tools, stopWhen: stepCountIs(30), maxOutputTokens: Math.max(route.maxTokens, 8192), temperature: 0.3, maxRetries: 0, abortSignal: abort.signal });
           let produced = false; let failed: unknown = null; let sep = false;
           for await (const part of res.fullStream) {
             if (part.type === "error") { failed = part.error; break; }
             if (part.type === "start-step") { log.steps++; sep = visible && reply.trim().length > 0; continue; }
             if (part.type === "finish") log.finish = String((part as { finishReason?: unknown }).finishReason ?? "unknown");
+            if ((part.type === "tool-result" || part.type === "tool-error") && Object.prototype.hasOwnProperty.call(tools, part.toolName)) { const bad = part.type === "tool-error" || (part as { output?: { ok?: unknown } }).output?.ok === false; const bucket = bad ? log.fail! : log.ok!; bucket[part.toolName] = (bucket[part.toolName] ?? 0) + 1; }
+            if (part.type === "finish") { const u = (part as { totalUsage?: { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number } }).totalUsage; if (u) log.tokens = { in: typeof u.inputTokens === "number" ? u.inputTokens : undefined, out: typeof u.outputTokens === "number" ? u.outputTokens : undefined, cached: typeof u.cachedInputTokens === "number" ? u.cachedInputTokens : undefined }; }
             if (part.type === "tool-call") { produced = true; log.tools[part.toolName] = (log.tools[part.toolName] ?? 0) + 1; }
             if (part.type === "text-delta" && part.text) { produced = true; if (visible) { if (touched) heldChars += part.text.length; else { emit((sep ? "\n\n" : "") + part.text); sep = false; } } }
           }
           const fe = failed as { statusCode?: number; status?: number; message?: string } | null;
           log.ms = Date.now() - tp; log.nodesAfter = shadow.nodes.length; log.capHit = abort.signal.aborted;
+          { const idsAfter = new Set(shadow.nodes.map(n => n.id)); log.added = [...idsAfter].filter(x => !idsBefore.has(x)).length; const gone = [...idsBefore].filter(x => !idsAfter.has(x)); log.removedTpl = gone.filter(x => tplIds.has(x)).length; log.removedOwn = gone.length - log.removedTpl; }
           if (failed) { log.finish = "error"; log.error = { status: fe?.statusCode ?? fe?.status ?? "error", note: String(fe?.message ?? "").slice(0, 120) }; }
           if (failed && !produced) throw failed;
           if (failed) { console.error("[workflow-chat] pass broke midway", route.name, route.model); interrupted = true; }
@@ -174,9 +178,10 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
         const resolveObjective = async (route: LlmRoute) => {
           // Experiment, QA selector only: a second reasoning call that can only RELAX the check for a clearly withdrawn deliverable.
           skipKinds.clear(); unresolvedKinds = [];
-          if (i.selection.choice === "auto") return;
+          if (i.selection.choice === "auto") { if (judgeLog.length < 8) judgeLog.push("no-aplica"); return; }
           const cand = missingMediaKinds(userRequest, shadow.nodes).filter(k => !standing.has(k) || standing.get(k) === "error");
-          if (cand.length) { const j = await (i.deps?.judge ?? judgeStanding)((i.deps?.model ?? languageModel)(route), userMsgs, cand, abort.signal); for (const k of cand) standing.set(k, j[k] ?? "error"); }
+          if (!cand.length) { if (judgeLog.length < 8) judgeLog.push("sin-candidatos"); }
+          if (cand.length) { const wasAborted = abort.signal.aborted; const j = await (i.deps?.judge ?? judgeStanding)((i.deps?.model ?? languageModel)(route), userMsgs, cand, abort.signal); for (const k of cand) standing.set(k, j[k] ?? "error"); if (judgeLog.length < 8) { const vs = cand.map(k => j[k] ?? "error"); judgeLog.push(`${wasAborted ? "tras-cap" : "antes-cap"}:${vs.every(v => v === "error") ? "error" : "corrio"}`); } }
           for (const [k, v] of standing) { if (v === "withdrawn") skipKinds.add(k); else if (v === "unclear") unresolvedKinds.push(k); }
         };
         for (const route of i.selection.routes) {
@@ -192,7 +197,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               for (let round = 0; round < 3; round++) {
                 fixFormulaRefsIn(shadow); await resolveObjective(route);
                 errs = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest, skipDeliverables: skipKinds });
-                rounds.push({ round, errors: errs.length, sample: errs.slice(0, 3).map(e => e.slice(0, 90)) });
+                { const cur = new Set(errs); const cat: Record<string, number> = {}; for (const e of errs) { const c0 = e.split(":")[0].trim(); const c = CATS.has(c0) ? c0 : "otro"; cat[c] = (cat[c] ?? 0) + 1; } const pv = prevErrs; rounds.push({ round, errors: errs.length, sample: errs.slice(0, 3).map(e => e.slice(0, 90)), cat, ...(pv ? { resolved: [...pv].filter(e => !cur.has(e)).length, persistent: [...pv].filter(e => cur.has(e)).length, fresh: [...cur].filter(e => !pv.has(e)).length } : {}) }); prevErrs = cur; }
                 if (!errs.length) { closeReason = "clean"; break; }
                 if (abort.signal.aborted) { closeReason = "cap-reached"; break; }
                 stageName = `corrective-${round + 1}`;
@@ -224,14 +229,14 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
                 (timedOut ? "\nThe build hit the time limit; say what is pending." : "") + (unresolvedKinds.length ? `\nUnresolved from the user's own words (not in the flow): ${unresolvedKinds.join(", ")}. Still required by the check; if the user did not clearly keep or drop it, ask ONE short question.` : "") + (interrupted ? "\nA model call was interrupted by an error while building; the canvas may be incomplete. Say so plainly." : "") +
                 `\nNow tell the user in your own words: what you built (one sentence), then guide what is pending, one thing at a time (AI prompt review, request_connection for apps not connected${i.draftMode ? "; DRAFT MODE: do not request connections" : ""}). Do not rebuild anything.`;
               stageName = "guide";
-              const guideAbort = new AbortController(); const gt = setTimeout(() => guideAbort.abort(), 45_000);
+              const graphBefore = JSON.stringify([shadow.nodes, shadow.edges]); const guideAbort = new AbortController(); const gt = setTimeout(() => guideAbort.abort(), 45_000);
               try {
                 const gres = streamText({ model: (i.deps?.model ?? languageModel)(route), system, messages: [...msgs, { role: "user", content: review }], tools: { request_connection: tools.request_connection, show_form: tools.show_form }, stopWhen: stepCountIs(4), maxOutputTokens: 4096, temperature: 0.3, maxRetries: 0, abortSignal: guideAbort.signal });
                 let sep = reply.trim().length > 0;
                 const gl: PassLog = { stage: "guide", steps: 0, tools: {}, finish: "unknown", ms: 0, nodesAfter: shadow.nodes.length, capHit: false }; const tg = Date.now(); let chars = 0; passLog.push(gl);
                 for await (const part of gres.fullStream) { if (part.type === "start-step") gl.steps++; if (part.type === "finish") gl.finish = String((part as { finishReason?: unknown }).finishReason ?? "unknown"); if (part.type === "error") { const ge = part.error as { statusCode?: number; message?: string }; gl.finish = "error"; gl.error = { status: ge?.statusCode ?? "error", note: String(ge?.message ?? "").slice(0, 120) }; } if (part.type === "tool-call") gl.tools[part.toolName] = (gl.tools[part.toolName] ?? 0) + 1; if (part.type === "text-delta" && part.text) { chars += part.text.length; emit((sep ? "\n\n" : "") + part.text); sep = false; } }
                 gl.ms = Date.now() - tg; (gl as PassLog & { textChars?: number }).textChars = chars;
-              } catch (e) { trace.record("guide", route, false, Date.now(), e); } finally { clearTimeout(gt); }
+              } catch (e) { trace.record("guide", route, false, Date.now(), e); } finally { clearTimeout(gt); guideChangedGraph = JSON.stringify([shadow.nodes, shadow.edges]) !== graphBefore; }
             }
             break;
           } catch (e) {
@@ -251,7 +256,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
         await (i.deps?.append ?? append)(i.userId, i.workflowId, "assistant", reply.trim());
         if (i.selection.choice !== "auto" || s.fellBack || s.paid) {
           // Redacted, QA-only: structure and counts, never message text or keys.
-          const build = { heldPreValidationChars: heldChars, version: (process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 7), objective: Object.fromEntries(standing), closeReason: interrupted ? `${closeReason}+model-call-interrupted` : closeReason, capMs, elapsedMs: Date.now() - t0, interrupted, finalNodes: shadow.nodes.length, finalEdges: shadow.edges.length, validationLeft: validationLeft.slice(0, 5).map(e => e.slice(0, 120)), rounds, passes: passLog, toolRejects };
+          const build = { heldPreValidationChars: heldChars, version: (process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 7), objective: Object.fromEntries(standing), closeReason: interrupted ? `${closeReason}+model-call-interrupted` : closeReason, capMs, elapsedMs: Date.now() - t0, interrupted, finalNodes: shadow.nodes.length, finalEdges: shadow.edges.length, validationLeft: validationLeft.slice(0, 5).map(e => e.slice(0, 120)), rounds, passes: passLog, toolRejects, judge: judgeLog, guideChangedGraph };
           console.info("[ai-build-trace]", JSON.stringify(build));
           writer.write({ type: "data-model-trace", data: { ...s, build } });
         }

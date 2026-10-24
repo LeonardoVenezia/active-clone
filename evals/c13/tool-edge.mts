@@ -50,4 +50,17 @@ const SECRET = "sk-SECRET-VALUE-123", LABEL = "Etiqueta privada XYZ";
   ck("add_node: invalid inputFields rejected, no node added", r1.results[0]?.ok === false && sh.nodes.length === 1 && r1.rejects[0].tool === "add_node" && r1.rejects[0].received === "string");
   const sh2 = mkShadow(); const r2 = await drive([tc([call("add_node", { id: "t2", nodeType: "trigger", label: "M", actionType: "Manual", config: { inputFields: [{ key: "q", label: "Q" }] } })]), txt], sh2);
   ck("add_node: valid applies", r2.results[0]?.ok === true && sh2.nodes.length === 2); }
+// candidate == applied (same merge function), arrays replaced not merged by index, null own property judged
+{ const { mergeConfig } = await import("../../lib/agent/merge-config"); const { candidateConfigProblem, manualInputConfigProblems } = await import("../../lib/manual-input");
+  const sh = mkShadow(); sh.nodes[0].data.config.inputFields = [{ key: "a", label: "A" }, { key: "b", label: "B" }, { key: "c", label: "C" }];
+  const existing = JSON.parse(JSON.stringify(sh.nodes[0].data.config)); const patch = { inputFields: [{ key: "x", label: "X" }], note: "n2" };
+  await drive([tc([call("update_parameters", { nodeId: "t1", config: patch })]), txt], sh);
+  ck("candidate equals applied config (same function)", JSON.stringify(sh.nodes[0].data.config) === JSON.stringify(mergeConfig(existing, patch)));
+  ck("array replaced, not merged by index", sh.nodes[0].data.config.inputFields.length === 1 && sh.nodes[0].data.config.inputFields[0].key === "x");
+  ck("null own property is judged (rejected)", !!candidateConfigProblem("update_parameters", {}, { inputFields: null }));
+  ck("metadata keys are exactly the allowlist", Object.keys(candidateConfigProblem("add_node", {}, { inputFields: { item: [] } })!.meta).sort().join() === "field,received,result,structuralKeys,tool");
+  const N = (cfg: any, type = "trigger") => [{ id: "t", data: { type, config: cfg } }];
+  ck("run guard: {item:[...]} flagged", manualInputConfigProblems(N({ triggerType: "Manual", inputFields: { item: [] } })).length > 0);
+  ck("run guard: valid array / absent / non-Manual trigger not flagged", manualInputConfigProblems(N({ triggerType: "Manual", inputFields: [{ key: "a", label: "A" }] })).length === 0 && manualInputConfigProblems(N({ triggerType: "Manual" })).length === 0 && manualInputConfigProblems(N({ triggerType: "Schedule", inputFields: { item: [] } })).length === 0);
+  ck("run guard: null own property flagged", manualInputConfigProblems(N({ triggerType: "Manual", inputFields: null })).length > 0); }
 console.log(fails ? `\n${fails} FAIL` : "\nALL PASS"); process.exit(fails ? 1 : 0);

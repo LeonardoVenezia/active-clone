@@ -1,3 +1,4 @@
+import { mergeConfig } from "@/lib/agent/merge-config";
 // Data a Manual trigger asks for when the user runs the flow. Pure (no server-only), shared by the UI, the execute route, the build validator and the prompt.
 // Contract (the only shape the app supports): Manual trigger config { inputFields: [{ key, label, required? }] }.
 // The run dialog collects the values; POST /api/workflow/:id/execute sends them as `input`; the engine merges `input` into the trigger output,
@@ -107,11 +108,21 @@ export type ToolRejectMeta = { tool: string; field: "inputFields"; received: "ar
  *  Pure: never rewrites the value. Metadata is an allowlist (no values, labels, ids or prompts). */
 export function candidateConfigProblem(tool: string, existing: Record<string, unknown> | undefined, patch: Record<string, unknown> | undefined): { problems: string[]; meta: ToolRejectMeta } | null {
   if (!patch || !Object.prototype.hasOwnProperty.call(patch, "inputFields")) return null;
-  const candidate = { ...(existing ?? {}), ...patch };
+  const candidate = mergeConfig(existing, patch);
   const problems = manualInputProblems(candidate);
   if (!problems.length) return null;
   const v = (patch as Record<string, unknown>).inputFields;
   const received: ToolRejectMeta["received"] = Array.isArray(v) ? "array" : v === null ? "null" : typeof v === "object" ? "object" : typeof v === "string" ? "string" : typeof v === "number" ? "number" : typeof v === "boolean" ? "boolean" : "other";
   const structuralKeys = v && typeof v === "object" && !Array.isArray(v) ? Object.keys(v).filter(k => KNOWN_STRUCT_KEYS.has(k)) : [];
   return { problems, meta: { tool, field: "inputFields", received, structuralKeys, result: "rejected" } };
+}
+
+/** Run-time guard: problems in the Manual trigger's inputFields (empty when fine, absent, or a non-Manual trigger). Own-property read only. */
+export function manualInputConfigProblems(nodes: NodeLike[] | undefined): string[] {
+  const trig = (nodes ?? []).find((n) => n?.data?.type === "trigger");
+  const cfg = trig?.data?.config;
+  const type = cfg?.triggerType;
+  if (!trig || !(type === undefined || type === "" || type === "Manual")) return [];
+  if (!cfg || !Object.prototype.hasOwnProperty.call(cfg, "inputFields")) return [];
+  return manualInputProblems(cfg);
 }

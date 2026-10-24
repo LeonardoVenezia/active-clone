@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { validateWorkflowIntegrations } from "@/lib/db/integrations";
 import { workflowExecutions, workflowShares, workflows } from "@/lib/db/schema";
-import { MANUAL_INPUT_MAX_VALUE, manualInputFields, prepareInput } from "@/lib/manual-input";
+import { MANUAL_INPUT_MAX_VALUE, manualInputConfigProblems, manualInputFields, prepareInput } from "@/lib/manual-input";
 import { executeWorkflow } from "@/lib/workflow-executor.workflow";
 import type { WorkflowEdge, WorkflowNode } from "@/lib/workflow-store";
 
@@ -123,6 +123,12 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     let input: Record<string, unknown> = body.input || {};
     // A Manual trigger that asks for data: keep only the declared keys and refuse a run that lacks a required one.
+    if (manualInputConfigProblems(workflow.nodes as WorkflowNode[] as never).length) {
+      return NextResponse.json(
+        { error: "El disparador Manual tiene mal definidos los datos que pide (inputFields). No se ejecutó nada: corregilo desde el chat o el panel del disparador.", invalidInputFields: true },
+        { status: 400 }
+      );
+    }
     const askedFields = manualInputFields(workflow.nodes as WorkflowNode[] as never);
     if (askedFields.length) {
       const prepared = prepareInput(askedFields, input);
