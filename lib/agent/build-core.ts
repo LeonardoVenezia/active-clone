@@ -277,10 +277,10 @@ export function deliverableCoverageError(requestText: string, nodes: FlowNode[])
     const has = nodes.some(n => ids.has(String((n.data as { config?: { actionType?: string } } | undefined)?.config?.actionType ?? "")));
     if (!has) missing.push(`${label} (use one of: ${[...ids].join(", ")})`);
   }
-  return missing.length ? `consistencia: the request asks to create ${missing.join("; ")} but the canvas has no step that produces it; add that step (one per item when several are requested, inside the Loop) instead of stopping at text/scripts` : null;
+  return missing.length ? `consistencia: the request asks to create ${missing.join("; ")} but the canvas has no step that produces it; add that step (one per item when several are requested, inside the Loop) instead of stopping at text/scripts. Never drop a requested deliverable on your own: if it truly cannot be built, say so to the user` : null;
 }
 
-export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map<string, string[]>; sheetContracts: SheetColumnsContract[]; userPrompt: string }): string[] {
+export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map<string, string[]>; sheetContracts: SheetColumnsContract[]; userPrompt: string; userRequest?: string }): string[] {
   const { composioCatalogMap, sheetContracts, userPrompt } = ctx;
       const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes(), { validTriggerTypes: getValidTriggerTypes(), composioCatalog: composioCatalogMap, actionItemFields: getActionOutputItemFields(), userPrompt });
       const coverage = planCoverageError(userIntentText(userPrompt), shadow.nodes);
@@ -301,7 +301,7 @@ export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map
       if (condExpr) errs.push(condExpr);
       const formExpr = formulaExpressionError(shadow.nodes, getActionOutputItemFields());
       if (formExpr) errs.push(formExpr);
-      const deliverable = deliverableCoverageError(userIntentText(userPrompt), shadow.nodes);
+      const deliverable = deliverableCoverageError(ctx.userRequest ?? userIntentText(userPrompt), shadow.nodes);
   if (deliverable) errs.push(deliverable);
   const cyclic = cyclicFlowError(shadow.nodes, shadow.edges);
       if (cyclic) errs.push(cyclic);

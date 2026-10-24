@@ -10,6 +10,7 @@ import { findPlaceholders } from "@/lib/agent/review";
 import { layoutPositions } from "@/lib/auto-layout";
 import type { FlowEdge, FlowNode } from "@/lib/flow-validator";
 import { append } from "@/lib/workflow-chat";
+import { discoverComposio } from "@/plugins/composio/steps/catalog";
 
 // ONE agent: the conversation AND the canvas build run in the same loop, with the same messages, the same reasoning and the same
 // tools. It calls the builder tools (add_node, connect, ...) itself; the deterministic validators, the corrective rounds and the
@@ -20,7 +21,7 @@ export type UnifiedInput = {
   canvas: { nodes: unknown[]; edges: unknown[] } | null;
   selection: Extract<Selection, { ok: true }>; draftMode: boolean;
   /** Test seams only: production never passes these. */
-  deps?: { model?: (r: LlmRoute) => LanguageModel; append?: typeof append; catalogText?: typeof catalogText; connectOutcome?: typeof connectOutcome; connectionStatuses?: typeof connectionStatuses };
+  deps?: { model?: (r: LlmRoute) => LanguageModel; append?: typeof append; catalogText?: typeof catalogText; connectOutcome?: typeof connectOutcome; connectionStatuses?: typeof connectionStatuses; discover?: (input: { catalog: string; search?: string; toolkit?: string }) => Promise<{ items?: Record<string, unknown>[] }> };
 };
 type Out = { connect: Record<string, unknown> | null; form: { title: string; fields: { key: string; label: string }[]; offerCreate: boolean } | null; template: { id: string; name: string; description: string } | null; templateImport: { id: string; name: string; description: string } | null; undo: boolean | null };
 
@@ -52,15 +53,17 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
   const shadow: Shadow = { nodes: [...((i.canvas?.nodes ?? []) as FlowNode[])], edges: [...((i.canvas?.edges ?? []) as FlowEdge[])] };
   const startedEmpty = shadow.nodes.every(n => (n.data as { config?: { placeholder?: boolean } } | undefined)?.config?.placeholder === true);
   const initialIds = new Set(shadow.nodes.map(n => n.id));
-  let planText = ""; let flowName = ""; let touched = false;
+  let planText = ""; let flowName = ""; let touched = false; const composioMap = new Map<string, string[]>();
+  const userRequest = [...i.past.filter(m => m.role === "user").map(m => m.content), i.text].join("\n");
+  const discover = (i.deps?.discover ?? ((x: { catalog: string; search?: string; toolkit?: string }) => discoverComposio(x as Parameters<typeof discoverComposio>[0]))) as (x: { catalog: string; search?: string; toolkit?: string }) => Promise<{ items?: Record<string, unknown>[] }>;
   const canvasDesc = shadow.nodes.length ? `EXISTING CANVAS (edit these, keep their ids; do not recreate):\n${shadow.nodes.map(n => `- ${n.id}: ${JSON.stringify({ label: (n.data as { label?: string })?.label, config: (n.data as { config?: unknown })?.config }).slice(0, 600)}`).join("\n")}\nEdges: ${shadow.edges.map(e => `${e.source}->${e.target}`).join(", ") || "none"}` : "The canvas is empty.";
-  const system = `${PROMPT}\n\nBUILDER RULES (how nodes, ids, templates and configs must look when you build):\n${getSystemPrompt("", "tools")}\n\nNo live Composio action catalog is loaded in this chat: do not invent Composio actions; use native plugin actions and built-in steps, or say what is missing.\n\n${catalog}\n\nSaved templates: ${i.templates.length ? i.templates.map(t => `${t.id}: "${t.name}" - ${t.description || "sin descripcion"}`).join(" | ") : "none."}\n\n${canvasDesc}${i.draftMode ? "\n\nDRAFT MODE IS ON for this conversation." : ""}`;
+  const system = `${PROMPT}\n\nBUILDER RULES (how nodes, ids, templates and configs must look when you build):\n${getSystemPrompt("", "tools")}\n\nExternal apps (Composio) are discovered live: when the flow needs an app that is not native, use find_external_apps to see what exists and lookup_app_actions to get its exact action slugs and required parameters BEFORE planning with it. Use only slugs those tools returned; if they are unavailable, say what is missing.\n\n${catalog}\n\nSaved templates: ${i.templates.length ? i.templates.map(t => `${t.id}: "${t.name}" - ${t.description || "sin descripcion"}`).join(" | ") : "none."}\n\n${canvasDesc}${i.draftMode ? "\n\nDRAFT MODE IS ON for this conversation." : ""}`;
   const baseMessages: ModelMessage[] = [...i.past.map(m => ({ role: m.role, content: m.content }) as ModelMessage), { role: "user", content: i.text }];
 
   return createUIMessageStreamResponse({
     stream: createUIMessageStream({
       execute: async ({ writer }) => {
-        const capMs = Number(process.env.AI_BUILD_CAP_MS) > 0 ? Number(process.env.AI_BUILD_CAP_MS) : 4 * 60 * 1000;
+        const capMs = Number(process.env.AI_BUILD_CAP_MS) > 0 ? Number(process.env.AI_BUILD_CAP_MS) : 210 * 1000;
         const t0 = Date.now(); const abort = new AbortController(); const timer = setTimeout(() => abort.abort(), capMs);
         const textId = "t1"; let reply = ""; let started = false; let timedOut = false;
         const emit = (delta: string) => { if (!delta) return; if (!started) { writer.write({ type: "text-start", id: textId }); started = true; } reply += delta; writer.write({ type: "text-delta", id: textId, delta }); };
@@ -71,6 +74,24 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
             description: "Declare the COMPLETE agreed flow before building or editing the canvas. Call once, first, then build with the other tools in the same turn.",
             inputSchema: z.object({ plan: z.string().min(10).max(4000) }),
             execute: async ({ plan }) => { planText = plan; return { ok: true, note: "Now build it: set_name, add_node for each step, connect, update_parameters." }; },
+          }),
+          find_external_apps: tool({
+            description: "Search the live catalog of external apps (Composio toolkits) by keyword, e.g. 'notion', 'calendar', 'crm'. Returns toolkit slugs and descriptions.",
+            inputSchema: z.object({ search: z.string().min(2).max(60) }),
+            execute: async ({ search }) => { try { const r = await discover({ catalog: "toolkits", search }); return { apps: (r.items ?? []).slice(0, 12).map(t => ({ slug: String((t as { slug?: unknown }).slug ?? ""), name: String((t as { name?: unknown }).name ?? ""), description: String(((t as { meta?: { description?: unknown } }).meta?.description) ?? "").slice(0, 120) })) }; } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "catalog unavailable" }; } },
+          }),
+          lookup_app_actions: tool({
+            description: "List the real actions of one external (Composio) app: exact slugs, what each does, required parameters. Call before planning or building with that app. Native apps are already in the catalog above.",
+            inputSchema: z.object({ toolkit: z.string().min(2).max(60).describe("lowercase toolkit slug") }),
+            execute: async ({ toolkit }) => {
+              try {
+                const r = await discover({ catalog: "tools", toolkit }); const slug = toolkit.toLowerCase();
+                const actions = (r.items ?? []).map(t => { const ip = ((t as { input_parameters?: { properties?: Record<string, { type?: string }>; required?: string[] } }).input_parameters) ?? {}; return { toolkit: slug, slug: String((t as { slug?: unknown }).slug), name: (t as { name?: unknown }).name, description: String((t as { description?: unknown }).description ?? "").slice(0, 120), required: ip.required ?? [], params: Object.keys(ip.properties ?? {}).slice(0, 12).map(k => `${k}:${String(ip.properties?.[k]?.type ?? "any")}`) }; });
+                for (const a of actions) composioMap.set(`${a.toolkit}/${a.slug}`, a.required);
+                let list = actions; while (JSON.stringify(list).length > 14000 && list.length > 1) list = list.slice(0, Math.floor(list.length * 0.8));
+                return { toolkit: slug, count: actions.length, shown: list.length, actions: list };
+              } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "catalog unavailable" }; }
+            },
           }),
           show_form: tool({
             description: "Ask for several concrete details at once with a small form card (1-4 field labels). Use only when one conversational question is not enough.",
@@ -128,7 +149,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               const request = planText || i.text; let errs: string[] = [];
               for (let round = 0; round < 3; round++) {
                 fixFormulaRefsIn(shadow);
-                errs = computeFlowErrors(shadow, { composioCatalogMap: new Map(), sheetContracts: [], userPrompt: request });
+                errs = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest });
                 if (!errs.length || abort.signal.aborted) break;
                 const nodeList = shadow.nodes.map(n => `- ${n.id}: ${JSON.stringify({ label: (n.data as { label?: string })?.label, config: (n.data as { config?: unknown })?.config })}`).join("\n");
                 const edgeList = shadow.edges.map(e => `- ${e.source} -> ${e.target}`).join("\n");
@@ -136,7 +157,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
                 const tr2 = Date.now();
                 try { msgs = [...msgs, ...(await runPass(route, msgs, false))]; trace.record("corrective", route, true, tr2); } catch (e) { trace.record("corrective", route, false, tr2, e); break; }
               }
-              fixFormulaRefsIn(shadow); validationLeft = computeFlowErrors(shadow, { composioCatalogMap: new Map(), sheetContracts: [], userPrompt: request });
+              fixFormulaRefsIn(shadow); validationLeft = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest });
               timedOut = abort.signal.aborted;
               if (startedEmpty && shadow.nodes.length) { const pos = layoutPositions(shadow.nodes, shadow.edges); for (const n of shadow.nodes) { const p = pos.get(n.id); if (p) { (n as { position?: unknown }).position = p; } } }
               writer.write({ type: "data-canvas-final", data: { name: flowName, nodes: shadow.nodes, edges: shadow.edges, validation: validationLeft, timedOut, startedEmpty } });
