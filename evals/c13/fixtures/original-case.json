@@ -1,0 +1,8 @@
+{
+  "source": "Leo's screenshot sent 2026-10-24 13:09 (WhatsApp image), transcribed. The assistant turns are the OLD two-component chat's, kept only to test that approving a reduced plan is not a withdrawal of the deliverable.",
+  "turns": [
+    { "role": "user", "content": "Quiero un workflow que cree 3 videos verticales para publicidad en meta a partir de un producto de tiendanube y/o mercadolibre. Tiene que basarse en la descripcion del producto en esas plataformas, pero tambien de la informacion de ese producto que encuentre en internet" },
+    { "role": "assistant", "content": "Armar videos publicitarios requiere conectar varias piezas, y el motor de generación de video que usamos hoy no está en las integraciones directas. ¿Te sirve si armo el flujo para que busque la info del producto en Tiendanube y Mercado Libre, sume lo que encuentre en internet y te deje todo listo en un documento o mensaje para que elijas el guion, o preferís que busquemos otra alternativa?" },
+    { "role": "user", "content": "Eso está bien, es justo lo que pedí" }
+  ]
+}

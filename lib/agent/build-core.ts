@@ -267,6 +267,13 @@ export function getValidActionTypes(): Set<string> {
 // Deliverable check driven by the registry: when the request asks to create/generate videos, images or audio and the product has
 // actions whose output is that media, the canvas must contain one. Prevents silently swapping the deliverable for a script/text.
 const MEDIA: [RegExp, string, string][] = [[/\b(?:cre\w*|gener\w*|arm\w*|produc\w*|hac\w*|make|creat\w*|build)\s+(?:\w+\s+){0,4}?videos?\b/i, "video", "video"], [/\b(?:cre\w*|gener\w*|produc\w*|make|creat\w*)\s+(?:\w+\s+){0,3}?(?:im[aá]genes|imagen|images?)\b/i, "image", "image"], [/\b(?:cre\w*|gener\w*|produc\w*|make|creat\w*)\s+(?:\w+\s+){0,3}?(?:audios?|voz|voice)\b/i, "audio", "audio"]];
+/** Every action type on the canvas, including steps nested inside Loops (they run too). */
+export function allActionTypes(nodes: FlowNode[]): Set<string> {
+  const out = new Set<string>();
+  const walk = (cfg: { actionType?: unknown; steps?: unknown } | undefined) => { if (!cfg) return; if (typeof cfg.actionType === "string") out.add(cfg.actionType); if (Array.isArray(cfg.steps)) for (const st of cfg.steps as Array<{ actionType?: unknown; config?: { steps?: unknown } }>) walk({ actionType: st?.actionType, steps: st?.config?.steps ?? (st as { steps?: unknown })?.steps }); };
+  for (const n of nodes) walk((n.data as { config?: { actionType?: string; steps?: unknown } } | undefined)?.config);
+  return out;
+}
 export function deliverableCoverageError(requestText: string, nodes: FlowNode[], skip?: Set<string>): string | null {
   const types = new Map<string, Set<string>>();
   for (const p of getAllIntegrations()) for (const a of p.actions) { const t = (a as { outputConfig?: { type?: string } }).outputConfig?.type; if (t) { if (!types.has(t)) types.set(t, new Set()); types.get(t)?.add(`${p.type}/${a.slug}`); } }
@@ -274,7 +281,7 @@ export function deliverableCoverageError(requestText: string, nodes: FlowNode[],
   for (const [re, kind, label] of MEDIA) {
     if (!re.test(requestText) || skip?.has(kind)) continue;
     const ids = types.get(kind); if (!ids?.size) continue;
-    const has = nodes.some(n => ids.has(String((n.data as { config?: { actionType?: string } } | undefined)?.config?.actionType ?? "")));
+    const present = allActionTypes(nodes); const has = [...ids].some(x => present.has(x));
     if (!has) missing.push(`${label} (use one of: ${[...ids].join(", ")})`);
   }
   return missing.length ? `consistencia: the request asks to create ${missing.join("; ")} but the canvas has no step that produces it; add that step (one per item when several are requested, inside the Loop) instead of stopping at text/scripts. Never drop a requested deliverable on your own: if it truly cannot be built, say so to the user` : null;
@@ -402,7 +409,7 @@ export function lineageFacts(shadow: Shadow): string[] {
   const unused = shadow.nodes.filter(n => (n.data as { type?: string })?.type === "action" && hasOut.has(n.id) && !refs.has(n.id)).map(n => label(n.id));
   if (unused.length) out.push(`Steps whose output no later step reads: ${unused.join(", ")}.`);
   const loops = shadow.nodes.filter(n => (n.data as { config?: { actionType?: string } })?.config?.actionType === "Loop").map(n => label(n.id));
-  out.push(loops.length ? `Steps repeated per list item (Loop): ${loops.join(", ")}.` : "No Loop step: every step runs exactly once per run (one output each).");
+  out.push(loops.length ? `Steps repeated per list item (Loop): ${shadow.nodes.filter(n => (n.data as { config?: { actionType?: string } })?.config?.actionType === "Loop").map(n => { const st = ((n.data as { config?: { steps?: Array<{ actionType?: string }> } })?.config?.steps ?? []).map(x => String(x?.actionType ?? "?")).join(" -> "); return `${label(n.id)} [${st || "no inner steps"}] (one run of the inner steps per item, so each inner action produces ONE output per item)`; }).join("; ")}.` : "No Loop step: every step runs exactly once per run (one output each).");
   return out;
 }
 
@@ -414,7 +421,7 @@ export function missingMediaKinds(requestText: string, nodes: FlowNode[]): strin
   for (const [re, kind] of MEDIA) {
     if (!re.test(requestText)) continue;
     const ids = types.get(kind); if (!ids?.size) continue;
-    if (!nodes.some(n => ids.has(String((n.data as { config?: { actionType?: string } } | undefined)?.config?.actionType ?? "")))) out.push(kind);
+    { const present = allActionTypes(nodes); if (![...ids].some(x => present.has(x))) out.push(kind); }
   }
   return out;
 }
