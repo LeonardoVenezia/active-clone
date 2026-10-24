@@ -3,10 +3,11 @@ import "server-only";
 import { fetchCredentials } from "@/lib/credential-fetcher";
 import { type StepInput, withStepLogging } from "@/lib/steps/step-handler";
 import { mlFetch } from "../api";
+import { mlDescription } from "@/lib/text/description";
 import type { MercadoLibreCredentials } from "../credentials";
 
 type Result =
-  | { success: true; id: string; title: string; description: string; price: number; currency: string; availableQuantity: number; soldQuantity: number; status: string; permalink: string }
+  | { success: true; id: string; title: string; description: string; descriptionTruncated: boolean; descriptionError: string; price: number; currency: string; availableQuantity: number; soldQuantity: number; status: string; permalink: string }
   | { success: false; error: string };
 
 export type GetItemInput = StepInput & { itemId: string; integrationId?: string };
@@ -22,10 +23,6 @@ type MlItem = {
   permalink?: string;
 };
 
-export function plainDescription(v: unknown): string {
-  return typeof v === "string" ? v.replace(/\s+\n/g, "\n").trim().slice(0, 4000) : "";
-}
-
 async function stepHandler(
   input: GetItemInput,
   credentials: MercadoLibreCredentials
@@ -40,14 +37,18 @@ async function stepHandler(
       return { success: false, error: result.error };
     }
     const item = result.data as MlItem;
-    // The listing text lives in a separate endpoint; a listing without one answers 404, which is not an error for this step.
-    const desc = await mlFetch(input.integrationId, credentials, `/items/${encodeURIComponent(itemId)}/description`).catch(() => null);
-    const description = desc?.ok ? plainDescription((desc.data as { plain_text?: unknown })?.plain_text) : "";
+    // Separate endpoint. 404 = listing without description (documented behavior is not explicit: treated as empty).
+    // Any other failure is reported in descriptionError so an empty description is never ambiguous.
+    const desc = await mlFetch(input.integrationId, credentials, `/items/${encodeURIComponent(itemId)}/description`).catch((e) => ({ ok: false as const, status: -1, error: e instanceof Error ? e.message : String(e) }));
+    const d = desc.ok ? mlDescription(desc.data) : { text: "", truncated: false };
+    const descriptionError = desc.ok || desc.status === 404 ? "" : `No se pudo leer la descripción: ${desc.error}`;
     return {
       success: true,
       id: item.id,
       title: item.title,
-      description,
+      description: d.text,
+      descriptionTruncated: d.truncated,
+      descriptionError,
       price: item.price,
       currency: item.currency_id,
       availableQuantity: item.available_quantity,

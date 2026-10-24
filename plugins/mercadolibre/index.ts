@@ -258,6 +258,8 @@ const mercadolibrePlugin: IntegrationPlugin = {
         { field: "id", description: "Item ID" },
         { field: "title", description: "Title" },
         { field: "description", description: "Listing description as plain text (empty when the listing has none)" },
+        { field: "descriptionTruncated", description: "true when the description was cut; the text then ends with a notice" },
+        { field: "descriptionError", description: "Empty unless the description could not be read (then why)" },
         { field: "price", description: "Price" },
         { field: "currency", description: "Currency" },
         { field: "availableQuantity", description: "Available stock" },

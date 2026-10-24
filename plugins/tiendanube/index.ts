@@ -252,6 +252,7 @@ const tiendanubePlugin: IntegrationPlugin = {
         { field: "id", description: "Product ID" },
         { field: "name", description: "Product name" },
         { field: "description", description: "Product description as plain text (empty when the store has none)" },
+        { field: "descriptionTruncated", description: "true when the description was cut; the text then ends with a notice" },
         { field: "published", description: "Visible in the store" },
         { field: "variants", description: "Variants with SKU, price and stock" },
       ],
