@@ -9,7 +9,7 @@ const declared = (t: string) => fields.get(t);
 console.log("actions with declared outputFields:", fields.size);
 const res: [string, boolean][] = []; const t = (n: string, ok: boolean) => res.push([n, ok]);
 const show = (name: string, nodes: any[]) => { const fs = analyzeRefs(nodes, declared); const c: Record<string, number> = {}; fs.forEach((f: any) => (c[f.cls] = (c[f.cls] ?? 0) + 1)); console.log(`\n${name}:`, JSON.stringify(c)); fs.filter((f: any) => f.cls !== "ok").forEach((f: any) => console.log(" ", f.cls.padEnd(18), f.where, f.ref, f.note ?? "")); return fs; };
-const load = (p: string) => { const d = JSON.parse(readFileSync(p, "utf8")); return d.nodes.map((n: any) => ({ id: n.id, label: n.label, actionType: n.a, config: { actionType: n.a, ...(n.cfg ?? {}) } })); };
+const load = (p: string) => { const d = JSON.parse(readFileSync(p, "utf8")); return d.nodes.map((n: any) => ({ id: n.id, label: n.label, actionType: ["Manual", "Webhook", "Schedule"].includes(n.a) ? undefined : n.a, config: { ...(["Manual", "Webhook", "Schedule"].includes(n.a) ? { triggerType: n.a } : { actionType: n.a }), ...(n.cfg ?? {}) } })); };
 const home = process.env.HOME;
 for (const f of ["exact-case-609ff7c-config", "exact-case-d3d7d06-ds-config"]) if (existsSync(`${home}/evidence/${f}.json`)) show(f, load(`${home}/evidence/${f}.json`));
 // synthetic
@@ -41,4 +41,8 @@ fs = analyzeRefs([gt, { id: "u", actionType: "ai-gateway/generate-text", config:
 t("generate-text: text ok (text variant)", fs[0].cls === "ok");
 t("generate-text: object.<field> ok (object variant)", fs[1].cls === "ok");
 t("generate-text: other field undeclared (not proof)", fs[2].cls === "undeclared");
+const MT = { id: "trg", label: "T", config: { triggerType: "Manual", inputFields: [{ key: "producto" }] } };
+fs = analyzeRefs([MT, { id: "x", actionType: "tiendanube/get-product", config: { productId: "{{@trg:T.producto}}", t: "{{@trg:T.timestamp}}" } }], declared);
+t("Manual trigger custom field = unfillable", fs[0].cls === "unfillable");
+t("Manual trigger timestamp = ok", fs[1].cls === "ok");
 let f = 0; console.log(); for (const [k, ok] of res) { console.log(ok ? "PASS" : "FAIL", k); if (!ok) f++; } process.exit(f ? 1 : 0);
