@@ -44,6 +44,7 @@ ck("toolRejects metadata only allowlist keys", Array.isArray(b?.toolRejects) && 
 ck("rounds carry category counts (numbers), and resolved/persistent/new from round 2", (b?.rounds ?? []).every((r: any) => r.cat && Object.values(r.cat).every((v: any) => typeof v === "number") && Object.keys(r.cat).every((k: string) => ["grafo", "semántica", "consistencia", "otro"].includes(k))));
 ck("judge field is enums only", Array.isArray(b?.judge) && b.judge.every((j: string) => /^(no-aplica|sin-candidatos|(antes|tras)-cap:(corrio|error))$/.test(j)));
 ck("guideChangedGraph is false when guide only talks", b?.guideChangedGraph === false);
+ck("no error text persisted: rounds have no sample, build has no validationLeft text, only numeric category counts", (b?.rounds ?? []).every((r: any) => !("sample" in r)) && !("validationLeft" in b) && typeof b.validationLeftCount === "number" && Object.values(b.validationLeftCat ?? {}).every((v: any) => typeof v === "number") && !JSON.stringify(b).includes(SEC));
 const guide = P.find(p => p.stage === "guide"); ck("guide pass logged", !!guide);
 // New instrumentation fields never contain strings other than tool names / enums
 const strings = new Set<string>(); const walk = (v: any, path: string) => { if (typeof v === "string") strings.add(path + "=" + v); else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) walk(x, path + "." + k); };

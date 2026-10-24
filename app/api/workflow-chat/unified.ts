@@ -146,7 +146,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
 
         // One pass of the agent loop. Text is shown only when `visible` (corrective rounds are internal).
         type PassLog = { stage: string; steps: number; tools: Record<string, number>; finish: string; error?: { status: unknown; note: string }; ms: number; nodesAfter: number; capHit: boolean; budgetLeftMs?: number; nodesBefore?: number; added?: number; removedTpl?: number; removedOwn?: number; ok?: Record<string, number>; fail?: Record<string, number>; tokens?: { in?: number; out?: number; cached?: number } };
-        const passLog: PassLog[] = []; const rounds: { round: number; errors: number; sample: string[]; cat?: Record<string, number>; resolved?: number; persistent?: number; fresh?: number }[] = []; let prevErrs: Set<string> | null = null; const CATS = new Set(["grafo", "semántica", "consistencia"]); let closeReason = "no-build";
+        const passLog: PassLog[] = []; const rounds: { round: number; errors: number; cat?: Record<string, number>; resolved?: number; persistent?: number; fresh?: number }[] = []; let prevErrs: Set<string> | null = null; const CATS = new Set(["grafo", "semántica", "consistencia"]); const catCounts = (list: string[]) => { const cat: Record<string, number> = {}; for (const e of list) { const c0 = e.split(":")[0].trim(); const c = CATS.has(c0) ? c0 : "otro"; cat[c] = (cat[c] ?? 0) + 1; } return cat; }; let closeReason = "no-build";
         let stageName = "chat";
         const runPass = async (route: LlmRoute, messages: ModelMessage[], visible: boolean) => {
           const tp = Date.now(); const log: PassLog = { stage: stageName, steps: 0, tools: {}, finish: "unknown", ms: 0, nodesAfter: 0, capHit: false }; passLog.push(log);
@@ -197,7 +197,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               for (let round = 0; round < 3; round++) {
                 fixFormulaRefsIn(shadow); await resolveObjective(route);
                 errs = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest, skipDeliverables: skipKinds });
-                { const cur = new Set(errs); const cat: Record<string, number> = {}; for (const e of errs) { const c0 = e.split(":")[0].trim(); const c = CATS.has(c0) ? c0 : "otro"; cat[c] = (cat[c] ?? 0) + 1; } const pv = prevErrs; rounds.push({ round, errors: errs.length, sample: errs.slice(0, 3).map(e => e.slice(0, 90)), cat, ...(pv ? { resolved: [...pv].filter(e => !cur.has(e)).length, persistent: [...pv].filter(e => cur.has(e)).length, fresh: [...cur].filter(e => !pv.has(e)).length } : {}) }); prevErrs = cur; }
+                { const cur = new Set(errs); const cat = catCounts(errs); const pv = prevErrs; rounds.push({ round, errors: errs.length, cat, ...(pv ? { resolved: [...pv].filter(e => !cur.has(e)).length, persistent: [...pv].filter(e => cur.has(e)).length, fresh: [...cur].filter(e => !pv.has(e)).length } : {}) }); prevErrs = cur; }
                 if (!errs.length) { closeReason = "clean"; break; }
                 if (abort.signal.aborted) { closeReason = "cap-reached"; break; }
                 stageName = `corrective-${round + 1}`;
@@ -256,7 +256,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
         await (i.deps?.append ?? append)(i.userId, i.workflowId, "assistant", reply.trim());
         if (i.selection.choice !== "auto" || s.fellBack || s.paid) {
           // Redacted, QA-only: structure and counts, never message text or keys.
-          const build = { heldPreValidationChars: heldChars, version: (process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 7), objective: Object.fromEntries(standing), closeReason: interrupted ? `${closeReason}+model-call-interrupted` : closeReason, capMs, elapsedMs: Date.now() - t0, interrupted, finalNodes: shadow.nodes.length, finalEdges: shadow.edges.length, validationLeft: validationLeft.slice(0, 5).map(e => e.slice(0, 120)), rounds, passes: passLog, toolRejects, judge: judgeLog, guideChangedGraph };
+          const build = { heldPreValidationChars: heldChars, version: (process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 7), objective: Object.fromEntries(standing), closeReason: interrupted ? `${closeReason}+model-call-interrupted` : closeReason, capMs, elapsedMs: Date.now() - t0, interrupted, finalNodes: shadow.nodes.length, finalEdges: shadow.edges.length, validationLeftCount: validationLeft.length, validationLeftCat: catCounts(validationLeft), rounds, passes: passLog, toolRejects, judge: judgeLog, guideChangedGraph };
           console.info("[ai-build-trace]", JSON.stringify(build));
           writer.write({ type: "data-model-trace", data: { ...s, build } });
         }
