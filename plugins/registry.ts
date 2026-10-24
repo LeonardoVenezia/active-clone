@@ -53,6 +53,8 @@ export type ActionConfigFieldBase = {
   required?: boolean;
 
   // Conditional rendering: only show if another field has a specific value
+  /** Short contract note for the build model (shape/format the UI hides), emitted in the action catalog line. */
+  hint?: string;
   showWhen?: {
     field: string;
     equals: string;
@@ -620,11 +622,13 @@ export function generateAIActionPrompts(): string {
         }
       }
 
+      const hints = flatFields.filter((f) => f.hint).map((f) => `${f.key}: ${f.hint}`);
+      const hintsNote = hints.length ? ` | notes: ${hints.join(" ")}` : "";
       const outputsNote = action.outputFields?.length
         ? ` | outputs: ${action.outputFields.map((f) => (f.description ? `${f.field} (${f.description})` : f.field)).join(", ")}`
         : "";
       lines.push(
-        `- ${action.label} (${fullId}): ${JSON.stringify(exampleConfig)}${outputsNote}`
+        `- ${action.label} (${fullId}): ${JSON.stringify(exampleConfig)}${outputsNote}${hintsNote}`
       );
     }
   }

@@ -120,6 +120,7 @@ const aiGatewayPlugin: IntegrationPlugin = {
           key: "aiSchema",
           label: "Schema",
           type: "schema-builder",
+          hint: 'with aiFormat "object" set aiSchema to a JSON array of fields, e.g. [{"name":"titulo","type":"string"}] (types: string, number, boolean only; NOT a JSON Schema object). The result is then read as object.<name> (e.g. {{@id:Label.object.titulo}}) and there is no .text; without aiFormat "object" and a valid aiSchema only .text exists.',
           showWhen: { field: "aiFormat", equals: "object" },
         },
       ],

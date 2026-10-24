@@ -1,4 +1,5 @@
 import jsonata from "jsonata";
+import { AI_TEXT_ACTION, ENVELOPE_FIELDS, aiFieldPathProblem, checkAiSchema, loopSourceFormulaProblem } from "@/lib/agent/output-contract";
 
 /**
  * Deterministic post-generation validation for AI-built workflows.
@@ -80,6 +81,25 @@ export type ValidateFlowOptions = {
   // provided (e.g. a real email ending in example.com) are not placeholders.
   userPrompt?: string;
 };
+
+// Field read from an inner step output (Loop entry steps.<id>.<field>, or a sibling inner step). `how` names the reader for the message.
+// ai-gateway/generate-text has an exact conditional contract. Other actions follow the declared outputFields (same policy as top-level refs);
+// the success/data/error envelope is always allowed and composio payloads are dynamic.
+function innerStepFieldProblem(
+  actionType: string,
+  cfg: Record<string, unknown> | undefined,
+  fieldPath: string,
+  how: string,
+  outputsOf: (a: string) => string[] | undefined
+): string | null {
+  if (!fieldPath) return null;
+  const first = fieldPath.split(".")[0]?.split("[")[0] ?? "";
+  if (actionType === AI_TEXT_ACTION) return aiFieldPathProblem(cfg, fieldPath, how);
+  if (actionType === "composio/run-tool" || actionType === "Run Composio Action") return null;
+  const known = outputsOf(actionType);
+  if (known && first && !ENVELOPE_FIELDS.includes(first) && !known.includes(first)) return `${how} reads ".${first}" but ${actionType} only outputs: ${known.join(", ")}`;
+  return null;
+}
 
 export function validateFlow(
   nodes: FlowNode[],
@@ -168,8 +188,13 @@ export function validateFlow(
       if (fmt !== undefined && fmt !== "text" && fmt !== "object") {
         errors.push(`semántica: node "${n.id}" (${label}) has aiFormat "${String(fmt)}"; valid values are "text" or "object"`);
       }
+
       if (fmt === "object" && !cfg.aiSchema) {
         errors.push(`semántica: node "${n.id}" (${label}) uses aiFormat "object" but has no aiSchema`);
+      }
+      if (fmt === "object" && cfg.aiSchema) {
+        const sc = checkAiSchema(cfg.aiSchema);
+        if (!sc.ok) errors.push(`semántica: node "${n.id}" (${label}): ${sc.problem}`);
       }
     }
 
@@ -366,6 +391,29 @@ export function validateFlow(
       }
     }
 
+    // Fórmula over a Loop's items ({{@loop:..items}} in its input): `steps.<inner-id>.<field>` in the expression is checked against that inner step's contract.
+    if (actionType === "Fórmula" && typeof cfg.input === "string" && typeof cfg.expression === "string") {
+      for (const lm of cfg.input.matchAll(/\{\{@([\w-]+):[^}]*\.items\}\}/g)) {
+        const loopNode = byId.get(lm[1]);
+        if (!loopNode || actionTypeOf(loopNode) !== "Loop") continue;
+        const inners = Array.isArray((loopNode.data?.config as { steps?: unknown })?.steps) ? ((loopNode.data?.config as { steps: Array<{ id?: unknown; actionType?: unknown; config?: unknown }> }).steps) : [];
+        const sidOf = (x: { id?: unknown }, ix: number) => String(typeof x.id === "string" && x.id ? x.id : `step-${ix + 1}`).replace(/[^a-zA-Z0-9]/g, "_");
+        const seen = new Set<string>();
+        for (const em of cfg.expression.matchAll(/\bsteps\.([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)(?:\.([A-Za-z0-9_]+))?/g)) {
+          if (seen.has(em[0])) continue;
+          seen.add(em[0]);
+          const idx = inners.findIndex((x, ix) => sidOf(x, ix) === em[1]);
+          const how = `node "${n.id}" (${label}) expression reads "${em[0]}" over the items of Loop "${lm[1]}"`;
+          if (idx === -1) { errors.push(`semántica: ${how} but that Loop has no inner step "${em[1]}"; its inner steps: ${inners.map(sidOf).join(", ")}`); continue; }
+          const inner = inners[idx];
+          if (typeof inner.actionType !== "string") continue;
+          const fp = em[3] ? `${em[2]}.${em[3]}` : em[2];
+          const prob = innerStepFieldProblem(inner.actionType, (inner.config ?? {}) as Record<string, unknown>, fp, how, outputsOf);
+          if (prob) errors.push(`semántica: ${prob}`);
+        }
+      }
+    }
+
     // @item/@index are only valid inside a Loop's inner steps
     if (actionType !== "Loop") {
       const ownStrings: Array<{ path: string; value: string }> = [];
@@ -385,6 +433,7 @@ export function validateFlow(
     let loopItemFields: string[] | undefined;
     let loopSourceDesc = "";
     const innerStepActions = new Map<string, string>();
+    const innerStepCfgs = new Map<string, Record<string, unknown>>();
     if (actionType === "Loop") {
       const srcMatch = typeof cfg.source === "string" ? /^\s*\{\{@([\w-]+):([^}]+)\}\}\s*$/.exec(cfg.source) : null;
       if (srcMatch) {
@@ -393,6 +442,13 @@ export function validateFlow(
         const rest = srcMatch[2];
         const arrayField = rest.includes(".") ? rest.slice(rest.indexOf(".") + 1).split(".")[0]?.split("[")[0] : "";
         loopSourceDesc = `${srcAction}.${arrayField}`;
+        if (srcAction === "Fórmula" && srcNode) {
+          const srcLabel = srcNode.data?.label ?? "";
+          const rest0 = srcMatch[2];
+          const fp = srcLabel && rest0.startsWith(`${srcLabel}.`) ? rest0.slice(srcLabel.length + 1) : rest0.includes(".") ? rest0.slice(rest0.indexOf(".") + 1) : "";
+          const prob = loopSourceFormulaProblem(srcNode.data?.config as Record<string, unknown> | undefined, fp);
+          if (prob) errors.push(`semántica: Loop "${n.id}" (${label}) source points to "${srcMatch[1]}.${fp}" but ${prob}`);
+        }
         loopItemFields = options.actionItemFields?.[srcAction]?.[arrayField ?? ""];
       }
       const rawSteps = Array.isArray(cfg.steps) ? cfg.steps : [];
@@ -401,6 +457,15 @@ export function validateFlow(
         const stepId = typeof step.id === "string" && step.id ? step.id : `step-${i + 1}`;
         if (typeof step.actionType === "string" && step.actionType) {
           innerStepActions.set(stepId, step.actionType);
+          if (step.actionType === AI_TEXT_ACTION) {
+            const ic = (st as { config?: Record<string, unknown> }).config ?? {};
+            if (ic.aiFormat === "object") {
+              if (!ic.aiSchema) errors.push(`semántica: inner step "${stepId}" of Loop "${n.id}" uses aiFormat "object" but has no aiSchema`);
+              else { const sc = checkAiSchema(ic.aiSchema); if (!sc.ok) errors.push(`semántica: inner step "${stepId}" of Loop "${n.id}": ${sc.problem}`); }
+            }
+          }
+          const sc0 = (st as { config?: unknown }).config;
+          if (sc0 && typeof sc0 === "object") innerStepCfgs.set(stepId, sc0 as Record<string, unknown>);
         }
       }
     }
@@ -441,6 +506,25 @@ export function validateFlow(
           const rest = match[2];
           // {{@item:Item}} (the whole item) is always fine.
           if (rest === "Item" || !rest.includes(".")) continue;
+          if (actionType === "Loop" && rest.startsWith("Item.steps.")) {
+            const srcM = typeof cfg.source === "string" ? /^\s*\{\{@([\w-]+):[^}]*\.items\}\}\s*$/.exec(cfg.source) : null;
+            const srcLoop = srcM ? byId.get(srcM[1]) : undefined;
+            if (srcLoop && actionTypeOf(srcLoop) === "Loop") {
+              const parts = rest.slice("Item.steps.".length).split(".");
+              const sid = parts[0] ?? "";
+              const inners = Array.isArray((srcLoop.data?.config as { steps?: unknown })?.steps) ? ((srcLoop.data?.config as { steps: Array<{ id?: unknown; actionType?: unknown; config?: unknown }> }).steps) : [];
+              const inner = inners.find((x, ix) => String(typeof x.id === "string" && x.id ? x.id : `step-${ix + 1}`).replace(/[^a-zA-Z0-9]/g, "_") === sid);
+              const how = `Loop "${n.id}" (${label}) reads "{{@item:${rest}}}" (from "${srcM?.[1]}")`;
+              if (!inner) {
+                errors.push(`semántica: ${how} but "${srcM?.[1]}" has no inner step "${sid}"; its inner steps (non-alphanumerics become _): ${inners.map((x, ix) => String(typeof x.id === "string" && x.id ? x.id : `step-${ix + 1}`).replace(/[^a-zA-Z0-9]/g, "_")).join(", ")}`);
+              } else if (typeof inner.actionType === "string") {
+                const fp = parts.slice(1).join(".");
+                const prob = innerStepFieldProblem(inner.actionType, (inner.config ?? {}) as Record<string, unknown>, fp, how, outputsOf);
+                if (prob) errors.push(`semántica: ${prob}; use "{{@item:Item.steps.${sid}.<field>}}" with a field that step really returns`);
+              }
+            }
+            continue;
+          }
           // (@item outside a Loop is flagged by the dedicated rule below.)
           // {{@item:Item.field}} inside a Loop: check the field against the
           // source array's item shape when the action describes it.
@@ -463,6 +547,10 @@ export function validateFlow(
             const known = outputsOf(stepAction);
             if (known && firstField && !known.includes(firstField)) {
               errors.push(`semántica: node "${n.id}" (${label}) references "${refId}.${firstField}" but ${stepAction} only outputs: ${known.join(", ")}`);
+            }
+            if (stepAction === AI_TEXT_ACTION && fieldPath) {
+              const prob = aiFieldPathProblem(innerStepCfgs.get(refId), fieldPath, `node "${n.id}" (${label}) reads "${refId}.${fieldPath}"`);
+              if (prob) errors.push(`semántica: ${prob}`);
             }
             continue;
           }
@@ -493,6 +581,10 @@ export function validateFlow(
             ? ` - the expression's value is wrapped under "result"; reference nested fields as {{@${refId}:${target.data?.label ?? refId}.result.<field>}}`
             : "";
           errors.push(`semántica: node "${n.id}" (${label}) references "${refId}.${firstField}" but ${actionTypeOf(target)} only outputs: ${known.join(", ")}${formulaHint}`);
+        }
+        if (targetAction === AI_TEXT_ACTION && firstField && known?.includes(firstField)) {
+          const prob = aiFieldPathProblem(target.data?.config as Record<string, unknown> | undefined, fieldPath, `node "${n.id}" (${label}) reads "${refId}.${fieldPath}"`);
+          if (prob) errors.push(`semántica: ${prob}`);
         }
         // Path que entra a un item de un array conocido (orders[0].shipping_id
         // u orders.shipping_id): validar el campo del item contra la forma
