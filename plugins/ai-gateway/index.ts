@@ -47,6 +47,11 @@ const aiGatewayPlugin: IntegrationPlugin = {
       category: "AI Gateway",
       stepFunction: "generateTextStep",
       stepImportPath: "generate-text",
+      // Exactly one of these is returned per run: "text" for the text format (default), "object" when Output Format is Object and a schema is set.
+      outputFields: [
+        { field: "text", description: "Generated text (returned when Output Format is Text, or Object without a schema)" },
+        { field: "object", description: "Generated object with the fields of the configured schema (returned only when Output Format is Object and a schema is set; reference its fields as object.<field>)" },
+      ],
       configFields: [
         {
           key: "aiFormat",
