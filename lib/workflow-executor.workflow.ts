@@ -13,6 +13,7 @@ import {
   type StepImporter,
 } from "./step-registry";
 import { resolveFieldValue } from "./field-path";
+import { exposeStepOutput } from "./loop-output";
 import type { StepContext } from "./steps/step-handler";
 import { createHook, sleep } from "workflow";
 import { triggerStep } from "./steps/trigger";
@@ -655,7 +656,8 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
             break;
           }
           itemResult = bodyResult;
-          stepOutputs[stepId] = bodyResult;
+          // items[].steps.<id>: wrapped results also expose their data fields flat (additive; .data stays). See lib/loop-output.ts
+          stepOutputs[stepId] = exposeStepOutput(bodyResult);
           itemOutputs[stepId] = { label: stepAction, data: bodyResult };
 
           // Condition inside a Loop: a false result filters the item out —
