@@ -9,7 +9,7 @@ import { generateAIActionPrompts } from "@/plugins";
 import { generateAITriggerPrompts, getActionOutputFields, getActionOutputItemFields, getAllActions, getAllTriggers } from "@/plugins/registry";
 import { userIntentText, type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, cyclicFlowError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, requestCoverageError, sheetContractError, shipmentDetailError, unwiredReportStepError, validateFlow } from "@/lib/flow-validator";
 import { type SourceContract, contractPromptBlock, extractApiSample, inspectSheetsContracts } from "@/lib/source-inspector";
-import { type Operation, type Shadow, getSystemPrompt, getValidActionTypes, getValidTriggerTypes, shadowApply } from "@/lib/agent/build-core";
+import { computeFlowErrors, createBuildTools, type Operation, type Shadow, getSystemPrompt, getValidActionTypes, getValidTriggerTypes, shadowApply } from "@/lib/agent/build-core";
 import { layoutPositions } from "@/lib/auto-layout";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
 
@@ -128,36 +128,7 @@ export async function POST(request: Request) {
     // A brand-new workflow carries only the placeholder trigger; that counts as
     // empty. Any real (user-arranged) node disables the auto-layout.
     const startedEmpty = (existingWorkflow?.nodes ?? []).every((n: FlowNode) => ((n.data as { config?: Record<string, unknown> } | undefined)?.config?.placeholder === true));
-    const computeErrors = (): string[] => {
-      const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes(), { validTriggerTypes: getValidTriggerTypes(), composioCatalog: composioCatalogMap, actionItemFields: getActionOutputItemFields(), userPrompt });
-      const coverage = planCoverageError(userIntentText(userPrompt), shadow.nodes);
-      if (coverage) errs.push(coverage);
-      const appCoverage = requestCoverageError(userIntentText(userPrompt), shadow.nodes);
-      if (appCoverage) errs.push(appCoverage);
-      const channel = channelConsistencyError(userIntentText(userPrompt), shadow.nodes);
-      if (channel) errs.push(channel);
-      const perItem = perItemLoopError(userIntentText(userPrompt), shadow.nodes);
-      if (perItem) errs.push(perItem);
-      const shipment = shipmentDetailError(shadow.nodes, shadow.edges);
-      if (shipment) errs.push(shipment);
-      const questions = questionActionError(userPrompt, shadow.nodes);
-      if (questions) errs.push(questions);
-      const crossing = listCrossingError(userPrompt, shadow.nodes);
-      if (crossing) errs.push(crossing);
-      const condExpr = conditionExpressionError(shadow.nodes);
-      if (condExpr) errs.push(condExpr);
-      const formExpr = formulaExpressionError(shadow.nodes, getActionOutputItemFields());
-      if (formExpr) errs.push(formExpr);
-      const cyclic = cyclicFlowError(shadow.nodes, shadow.edges);
-      if (cyclic) errs.push(cyclic);
-      const sheetContract = sheetContractError(shadow.nodes, sheetContracts);
-      if (sheetContract) errs.push(sheetContract);
-      const httpSchema = httpSchemaError(shadow.nodes);
-      if (httpSchema) errs.push(httpSchema);
-      const unwired = unwiredReportStepError(shadow.nodes, shadow.edges);
-      if (unwired) errs.push(unwired);
-      return errs;
-    };
+    const computeErrors = (): string[] => computeFlowErrors(shadow, { composioCatalogMap, sheetContracts, userPrompt });
     async function runCorrectivePass(operationCount: number, encoder: TextEncoder, controller: ReadableStreamDefaultController, hint = ""): Promise<number> {
       const errors = computeErrors();
       if (!errors.length) return operationCount;
@@ -304,51 +275,7 @@ export async function POST(request: Request) {
       const buildAbort = new AbortController();
       const buildTimer = setTimeout(() => buildAbort.abort(), buildCapMs);
       let timedOut = false;
-      const mkTools = () => ({
-        set_name: tool({
-          description: "Set the workflow name and optional description. Call once, first.",
-          inputSchema: z.object({ name: z.string(), description: z.string().optional() }),
-          execute: async ({ name, description }) => { localName = name; shadowApply({ op: "setName", name }, shadow); if (description) shadowApply({ op: "setDescription", description }, shadow); return { ok: true }; },
-        }),
-        ask_user: tool({
-          description: "Ask the user for missing information BEFORE building. Use when a value the flow needs is not provided and no earlier step can produce it. Do not build until they answer. Do NOT use when the user asked for a draft/mock (maqueta, ejemplo, prueba): use placeholders then.",
-          inputSchema: z.object({ question: z.string().describe("the concrete question for the user, in Spanish, conversational") }),
-          execute: async ({ question }) => { askedQuestion = question; return { ok: true }; },
-        }),
-        add_node: tool({
-          description: "Add ONE node to the workflow. nodeType 'trigger' or 'action'; actionType is the trigger/action type; config carries the node settings.",
-          inputSchema: z.object({ id: z.string().describe("unique kebab-case id"), nodeType: z.enum(["trigger", "action"]), label: z.string(), actionType: z.string(), config: z.record(z.string(), z.unknown()).optional() }),
-          execute: async ({ id, nodeType, label, actionType, config }) => {
-            const valid = nodeType === "trigger" ? getValidTriggerTypes() : getValidActionTypes();
-            const match = [...valid].find(v => v === actionType || v.toLowerCase() === actionType.toLowerCase());
-            if (!match) return { ok: false, error: `unknown ${nodeType} type "${actionType}". Valid types include: ${[...valid].slice(0, 50).join(", ")}` };
-            const cfg = { ...(config ?? {}), ...(nodeType === "trigger" ? { triggerType: match } : { actionType: match }) };
-            const ok = shadowApply({ op: "addNode", node: { id, type: nodeType, position: { x: 120 + shadow.nodes.length * 260, y: 120 }, data: { label, type: nodeType, config: cfg, status: "idle" } } }, shadow);
-            return ok ? { ok: true } : { ok: false, error: `node id "${id}" already exists or is invalid - pick a new unique id` };
-          },
-        }),
-        connect: tool({
-          description: "Wire one node's output into another node's input. Both ids must already exist.",
-          inputSchema: z.object({ source: z.string(), target: z.string() }),
-          execute: async ({ source, target }) => {
-            const ok = shadowApply({ op: "addEdge", edge: { source, target } }, shadow);
-            return ok ? { ok: true } : { ok: false, error: `cannot connect ${source} -> ${target}: both nodes must already exist and the edge must not duplicate an existing one` };
-          },
-        }),
-        update_parameters: tool({
-          description: "Merge new config values into an existing node (fix or complete its settings).",
-          inputSchema: z.object({ nodeId: z.string(), config: z.record(z.string(), z.unknown()) }),
-          execute: async ({ nodeId, config }) => {
-            const ok = shadowApply({ op: "updateNode", nodeId, updates: { data: { config } } }, shadow);
-            return ok ? { ok: true } : { ok: false, error: `node "${nodeId}" does not exist` };
-          },
-        }),
-        remove_node: tool({
-          description: "Remove a wrong node and its wires.",
-          inputSchema: z.object({ nodeId: z.string() }),
-          execute: async ({ nodeId }) => { shadowApply({ op: "removeNode", nodeId }, shadow); return { ok: true }; },
-        }),
-      });
+      const mkTools = () => createBuildTools(shadow, { onName: n => { localName = n; }, onAsk: q => { askedQuestion = q; } });
       const runOnce = async (fixErrors: string[]): Promise<void> => {
         for (const route of activeRoutes) {
           if (buildAbort.signal.aborted) { timedOut = true; break; }
