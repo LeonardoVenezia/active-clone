@@ -4,8 +4,8 @@
  */
 import dagre from "@dagrejs/dagre";
 
-const NODE_W = 220;
-const NODE_H = 90;
+const NODE_W = 192; // rendered card is h-48 w-48 (192px)
+const NODE_H = 192;
 
 export function layoutPositions(
   nodes: Array<{ id: string }>,
