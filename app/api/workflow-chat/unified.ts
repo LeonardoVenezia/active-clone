@@ -121,22 +121,30 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
         };
 
         // One pass of the agent loop. Text is shown only when `visible` (corrective rounds are internal).
+        type PassLog = { stage: string; steps: number; tools: Record<string, number>; finish: string; error?: { status: unknown; note: string }; ms: number; nodesAfter: number; capHit: boolean };
+        const passLog: PassLog[] = []; const rounds: { round: number; errors: number; sample: string[] }[] = []; let closeReason = "no-build";
+        let stageName = "chat";
         const runPass = async (route: LlmRoute, messages: ModelMessage[], visible: boolean) => {
+          const tp = Date.now(); const log: PassLog = { stage: stageName, steps: 0, tools: {}, finish: "unknown", ms: 0, nodesAfter: 0, capHit: false }; passLog.push(log);
           const res = streamText({ model: (i.deps?.model ?? languageModel)(route), system, messages, tools, stopWhen: stepCountIs(30), maxOutputTokens: Math.max(route.maxTokens, 8192), temperature: 0.3, maxRetries: 0, abortSignal: abort.signal });
           let produced = false; let failed: unknown = null; let sep = false;
           for await (const part of res.fullStream) {
             if (part.type === "error") { failed = part.error; break; }
-            if (part.type === "start-step") { sep = visible && reply.trim().length > 0; continue; }
-            if (part.type === "tool-call") produced = true;
+            if (part.type === "start-step") { log.steps++; sep = visible && reply.trim().length > 0; continue; }
+            if (part.type === "finish") log.finish = String((part as { finishReason?: unknown }).finishReason ?? "unknown");
+            if (part.type === "tool-call") { produced = true; log.tools[part.toolName] = (log.tools[part.toolName] ?? 0) + 1; }
             if (part.type === "text-delta" && part.text) { produced = true; if (visible) { emit((sep ? "\n\n" : "") + part.text); sep = false; } }
           }
+          const fe = failed as { statusCode?: number; status?: number; message?: string } | null;
+          log.ms = Date.now() - tp; log.nodesAfter = shadow.nodes.length; log.capHit = abort.signal.aborted;
+          if (failed) { log.finish = "error"; log.error = { status: fe?.statusCode ?? fe?.status ?? "error", note: String(fe?.message ?? "").slice(0, 120) }; }
           if (failed && !produced) throw failed;
-          if (failed) console.error("[workflow-chat] pass broke midway", route.name, route.model);
+          if (failed) { console.error("[workflow-chat] pass broke midway", route.name, route.model); interrupted = true; }
           const response = failed ? { messages: [] as ModelMessage[] } : await res.response;
           return response.messages as ModelMessage[];
         };
 
-        let usedRoute = false; let validationLeft: string[] = [];
+        let usedRoute = false; let validationLeft: string[] = []; let interrupted = false;
         for (const route of i.selection.routes) {
           const tr = Date.now();
           try {
@@ -150,17 +158,21 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               for (let round = 0; round < 3; round++) {
                 fixFormulaRefsIn(shadow);
                 errs = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest });
-                if (!errs.length || abort.signal.aborted) break;
+                rounds.push({ round, errors: errs.length, sample: errs.slice(0, 3).map(e => e.slice(0, 90)) });
+                if (!errs.length) { closeReason = "clean"; break; }
+                if (abort.signal.aborted) { closeReason = "cap-reached"; break; }
+                stageName = `corrective-${round + 1}`;
                 const nodeList = shadow.nodes.map(n => `- ${n.id}: ${JSON.stringify({ label: (n.data as { label?: string })?.label, config: (n.data as { config?: unknown })?.config })}`).join("\n");
                 const edgeList = shadow.edges.map(e => `- ${e.source} -> ${e.target}`).join("\n");
                 msgs = [...msgs, { role: "user", content: `[App check, not from the user] The canvas you built has these DETERMINISTIC VALIDATION ERRORS:\n${errs.map(e => `- ${e}`).join("\n")}\n\nCurrent nodes:\n${nodeList}\nCurrent edges:\n${edgeList}\n\nFix exactly these errors with tool calls (update_parameters / connect / add_node / remove_node). Do NOT rebuild from scratch; reuse existing node ids. Do not write a message to the user in this pass.` }];
                 const tr2 = Date.now();
-                try { msgs = [...msgs, ...(await runPass(route, msgs, false))]; trace.record("corrective", route, true, tr2); } catch (e) { trace.record("corrective", route, false, tr2, e); break; }
+                try { msgs = [...msgs, ...(await runPass(route, msgs, false))]; trace.record("corrective", route, true, tr2); } catch (e) { trace.record("corrective", route, false, tr2, e); closeReason = "corrective-failed"; break; }
               }
+              if (closeReason === "no-build") closeReason = "rounds-exhausted";
               fixFormulaRefsIn(shadow); validationLeft = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest });
               timedOut = abort.signal.aborted;
               if (startedEmpty && shadow.nodes.length) { const pos = layoutPositions(shadow.nodes, shadow.edges); for (const n of shadow.nodes) { const p = pos.get(n.id); if (p) { (n as { position?: unknown }).position = p; } } }
-              writer.write({ type: "data-canvas-final", data: { name: flowName, nodes: shadow.nodes, edges: shadow.edges, validation: validationLeft, timedOut, startedEmpty } });
+              writer.write({ type: "data-canvas-final", data: { name: flowName, nodes: shadow.nodes, edges: shadow.edges, validation: validationLeft, timedOut, startedEmpty, interrupted } });
               // Same agent, same conversation: it now sees what the app verified and guides the user through what is pending.
               const fresh = shadow.nodes.filter(n => !initialIds.has(n.id));
               const apps = [...new Set(fresh.map(n => { const c = ((n.data as { config?: { actionType?: string; toolkit?: string } })?.config) ?? {}; return c.toolkit || (c.actionType && c.actionType.includes("/") ? c.actionType.split("/")[0] : ""); }).filter(a => a && a !== "composio").map(canonicalApp))];
@@ -170,8 +182,9 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
                 (aiPrompts.length ? `\nAI prompts you wrote (ask the user to review them, show them):\n${aiPrompts.map(x => `- ${x.label}: "${x.p.slice(0, 600)}"`).join("\n")}` : "") +
                 `\nSteps still holding placeholder values: ${findPlaceholders(fresh).join("; ") || "none"}.\nApps used and their connection status: ${apps.map(a => `${a}: ${st[a] ?? "unknown"}`).join(", ") || "none"}.` +
                 (validationLeft.length ? `\nUnresolved checks: ${validationLeft.join(" | ").slice(0, 900)}. Say plainly what is still missing; never claim it is complete.` : "") +
-                (timedOut ? "\nThe build hit the time limit; say what is pending." : "") +
+                (timedOut ? "\nThe build hit the time limit; say what is pending." : "") + (interrupted ? "\nA model call was interrupted by an error while building; the canvas may be incomplete. Say so plainly." : "") +
                 `\nNow tell the user in your own words: what you built (one sentence), then guide what is pending, one thing at a time (AI prompt review, request_connection for apps not connected${i.draftMode ? "; DRAFT MODE: do not request connections" : ""}). Do not rebuild anything.`;
+              stageName = "guide";
               const guideAbort = new AbortController(); const gt = setTimeout(() => guideAbort.abort(), 45_000);
               try {
                 const gres = streamText({ model: (i.deps?.model ?? languageModel)(route), system, messages: [...msgs, { role: "user", content: review }], tools: { request_connection: tools.request_connection, show_form: tools.show_form }, stopWhen: stepCountIs(4), maxOutputTokens: 4096, temperature: 0.3, maxRetries: 0, abortSignal: guideAbort.signal });
@@ -195,7 +208,12 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
         if (!reply.trim()) emit(touched ? "Armé el flujo en el lienzo." : out.connect ? "Para seguir, conectá esta cuenta con la tarjeta de abajo." : out.undo ? "Deshago el último cambio." : out.templateImport ? "Importo la plantilla." : out.form ? out.form.title : "Listo.");
         if (started) writer.write({ type: "text-end", id: textId });
         await (i.deps?.append ?? append)(i.userId, i.workflowId, "assistant", reply.trim());
-        if (i.selection.choice !== "auto" || s.fellBack || s.paid) writer.write({ type: "data-model-trace", data: s });
+        if (i.selection.choice !== "auto" || s.fellBack || s.paid) {
+          // Redacted, QA-only: structure and counts, never message text or keys.
+          const build = { closeReason: interrupted ? `${closeReason}+model-call-interrupted` : closeReason, capMs, elapsedMs: Date.now() - t0, interrupted, finalNodes: shadow.nodes.length, finalEdges: shadow.edges.length, validationLeft: validationLeft.slice(0, 5).map(e => e.slice(0, 120)), rounds, passes: passLog };
+          console.info("[ai-build-trace]", JSON.stringify(build));
+          writer.write({ type: "data-model-trace", data: { ...s, build } });
+        }
         writer.write({ type: "data-chat-result", data: { build: null, built: touched, connect: out.connect, form: out.connect || touched ? null : out.form, template: out.connect || touched ? null : out.template, templateImport: out.connect ? null : out.templateImport, undo: out.undo && !out.connect && !touched ? true : null, autoBuild: false, unified: true } });
       },
     }),
