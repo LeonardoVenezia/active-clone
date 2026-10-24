@@ -1,5 +1,5 @@
 import { generateAIActionPrompts } from "@/plugins";
-import { manualInputError } from "@/lib/manual-input";
+import { manualInputError, candidateConfigProblem, type ToolRejectMeta } from "@/lib/manual-input";
 import { generateAITriggerPrompts, getAllActions, getAllIntegrations, getAllTriggers } from "@/plugins/registry";
 import { tool } from "ai";
 import { z } from "zod";
@@ -324,7 +324,7 @@ export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map
       return errs;
     }
 
-export function createBuildTools(shadow: Shadow, hooks: { onName?: (n: string) => void; onAsk?: (q: string) => void; onOp?: (op: Operation) => void; noAsk?: boolean } = {}) {
+export function createBuildTools(shadow: Shadow, hooks: { onName?: (n: string) => void; onAsk?: (q: string) => void; onOp?: (op: Operation) => void; onReject?: (m: ToolRejectMeta) => void; noAsk?: boolean } = {}) {
   const apply = (op: Operation, sh: Shadow) => { const ok = shadowApply(op, sh); if (ok) hooks.onOp?.(op); return ok; };
   const tools = {
         set_name: tool({
@@ -344,6 +344,8 @@ export function createBuildTools(shadow: Shadow, hooks: { onName?: (n: string) =
             const valid = nodeType === "trigger" ? getValidTriggerTypes() : getValidActionTypes();
             const match = [...valid].find(v => v === actionType || v.toLowerCase() === actionType.toLowerCase());
             if (!match) return { ok: false, error: `unknown ${nodeType} type "${actionType}". Valid types include: ${[...valid].slice(0, 50).join(", ")}` };
+            const bad = candidateConfigProblem("add_node", undefined, config);
+            if (bad) { hooks.onReject?.(bad.meta); return { ok: false, error: `not applied: ${bad.problems.join("; ")}. Send inputFields as a list like [{"key":"id","label":"Product id"}] and call again; nothing was changed.` }; }
             const cfg = { ...(config ?? {}), ...(nodeType === "trigger" ? { triggerType: match } : { actionType: match }) };
             const ok = apply({ op: "addNode", node: { id, type: nodeType, position: { x: 120 + shadow.nodes.length * 260, y: 120 }, data: { label, type: nodeType, config: cfg, status: "idle" } } }, shadow);
             return ok ? { ok: true } : { ok: false, error: `node id "${id}" already exists or is invalid - pick a new unique id` };
@@ -361,6 +363,10 @@ export function createBuildTools(shadow: Shadow, hooks: { onName?: (n: string) =
           description: "Merge new config values into an existing node (fix or complete its settings).",
           inputSchema: z.object({ nodeId: z.string(), config: z.record(z.string(), z.unknown()) }),
           execute: async ({ nodeId, config }) => {
+            const cur = shadow.nodes.find(n => n.id === nodeId);
+            if (!cur) return { ok: false, error: `node "${nodeId}" does not exist` };
+            const bad = candidateConfigProblem("update_parameters", (cur.data?.config ?? {}) as Record<string, unknown>, config);
+            if (bad) { hooks.onReject?.(bad.meta); return { ok: false, error: `not applied: ${bad.problems.join("; ")}. Send inputFields as a list like [{"key":"id","label":"Product id"}] and call again; the node was not changed.` }; }
             const ok = apply({ op: "updateNode", nodeId, updates: { data: { config } } }, shadow);
             return ok ? { ok: true } : { ok: false, error: `node "${nodeId}" does not exist` };
           },

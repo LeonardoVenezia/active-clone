@@ -75,9 +75,9 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
       execute: async ({ writer }) => {
         const capMs = Number(process.env.AI_BUILD_CAP_MS) > 0 ? Number(process.env.AI_BUILD_CAP_MS) : 210 * 1000;
         const t0 = Date.now(); const abort = new AbortController(); const timer = setTimeout(() => abort.abort(), capMs);
-        const textId = "t1"; let reply = ""; let started = false; let timedOut = false;
+        const toolRejects: import("@/lib/manual-input").ToolRejectMeta[] = []; const textId = "t1"; let reply = ""; let started = false; let timedOut = false;
         const emit = (delta: string) => { if (!delta) return; if (!started) { writer.write({ type: "text-start", id: textId }); started = true; } reply += delta; writer.write({ type: "text-delta", id: textId, delta }); };
-        const buildTools = createBuildTools(shadow, { noAsk: true, onName: n => { flowName = n; touched = true; }, onOp: (op: Operation) => { touched = true; writer.write({ type: "data-canvas-op", data: op }); } });
+        const buildTools = createBuildTools(shadow, { noAsk: true, onReject: m => { if (toolRejects.length < 20) toolRejects.push(m); }, onName: n => { flowName = n; touched = true; }, onOp: (op: Operation) => { touched = true; writer.write({ type: "data-canvas-op", data: op }); } });
         const tools = {
           ...buildTools,
           start_build: tool({
@@ -251,7 +251,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
         await (i.deps?.append ?? append)(i.userId, i.workflowId, "assistant", reply.trim());
         if (i.selection.choice !== "auto" || s.fellBack || s.paid) {
           // Redacted, QA-only: structure and counts, never message text or keys.
-          const build = { heldPreValidationChars: heldChars, version: (process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 7), objective: Object.fromEntries(standing), closeReason: interrupted ? `${closeReason}+model-call-interrupted` : closeReason, capMs, elapsedMs: Date.now() - t0, interrupted, finalNodes: shadow.nodes.length, finalEdges: shadow.edges.length, validationLeft: validationLeft.slice(0, 5).map(e => e.slice(0, 120)), rounds, passes: passLog };
+          const build = { heldPreValidationChars: heldChars, version: (process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 7), objective: Object.fromEntries(standing), closeReason: interrupted ? `${closeReason}+model-call-interrupted` : closeReason, capMs, elapsedMs: Date.now() - t0, interrupted, finalNodes: shadow.nodes.length, finalEdges: shadow.edges.length, validationLeft: validationLeft.slice(0, 5).map(e => e.slice(0, 120)), rounds, passes: passLog, toolRejects };
           console.info("[ai-build-trace]", JSON.stringify(build));
           writer.write({ type: "data-model-trace", data: { ...s, build } });
         }

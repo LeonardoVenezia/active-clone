@@ -98,3 +98,20 @@ export function manualInputError(nodes: FlowLike[]): string | null {
   }
   return errs.length ? errs.join(" | ") : null;
 }
+
+const KNOWN_STRUCT_KEYS = new Set(["item", "items", "fields", "key", "label", "required"]);
+export type ToolRejectMeta = { tool: string; field: "inputFields"; received: "array" | "object" | "string" | "number" | "boolean" | "null" | "other"; structuralKeys: string[]; result: "rejected" };
+
+/** Edge validation of a tool's config patch against the CANDIDATE state (existing config + patch).
+ *  Only judges inputFields, and only when the patch itself sets it, so drafts are never blocked for fields the patch does not touch.
+ *  Pure: never rewrites the value. Metadata is an allowlist (no values, labels, ids or prompts). */
+export function candidateConfigProblem(tool: string, existing: Record<string, unknown> | undefined, patch: Record<string, unknown> | undefined): { problems: string[]; meta: ToolRejectMeta } | null {
+  if (!patch || !Object.prototype.hasOwnProperty.call(patch, "inputFields")) return null;
+  const candidate = { ...(existing ?? {}), ...patch };
+  const problems = manualInputProblems(candidate);
+  if (!problems.length) return null;
+  const v = (patch as Record<string, unknown>).inputFields;
+  const received: ToolRejectMeta["received"] = Array.isArray(v) ? "array" : v === null ? "null" : typeof v === "object" ? "object" : typeof v === "string" ? "string" : typeof v === "number" ? "number" : typeof v === "boolean" ? "boolean" : "other";
+  const structuralKeys = v && typeof v === "object" && !Array.isArray(v) ? Object.keys(v).filter(k => KNOWN_STRUCT_KEYS.has(k)) : [];
+  return { problems, meta: { tool, field: "inputFields", received, structuralKeys, result: "rejected" } };
+}
