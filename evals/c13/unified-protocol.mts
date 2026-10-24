@@ -4,6 +4,7 @@ import Module from "node:module"; import { createRequire } from "node:module";
 const r = createRequire(import.meta.url); const stub = r.resolve("../../evals/semantic/stubs/server-only.ts");
 const o = (Module as any)._resolveFilename; (Module as any)._resolveFilename = function (q: string, ...a: any[]) { return q === "server-only" ? stub : o.call(this, q, ...a); };
 process.env.DATABASE_URL ??= "postgres://x:x@localhost:5432/x"; process.env.BETTER_AUTH_SECRET ??= "x".repeat(32); process.env.BETTER_AUTH_URL ??= "http://localhost:3000";
+await import("../../plugins");
 const { unifiedResponse } = await import("../../app/api/workflow-chat/unified");
 const route = (name: string, model: string) => ({ name, model, apiKey: "k", baseURL: "u", maxTokens: 1000 }) as any;
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
@@ -12,18 +13,20 @@ const callStream = (name: string, input: object) => [{ type: "stream-start", war
 const mk = (steps: (object[] | Error)[]) => { let n = 0; return ({ specificationVersion: "v2", provider: "mock", modelId: "mock", supportedUrls: {}, doGenerate: async () => { throw new Error("n/a"); }, doStream: async () => { const s = steps[Math.min(n++, steps.length - 1)]; if (s instanceof Error) throw s; return { stream: new ReadableStream({ start(c) { for (const ch of s) c.enqueue(ch); c.close(); } }) } as any; } }) as any; };
 async function run(label: string, models: Record<string, any>, selection: any, extra: any = {}) {
   const saved: string[] = [];
-  const res = await unifiedResponse({ userId: "u", workflowId: "w", text: "hola", event: null, review: null, past: [], snapshotText: "The canvas is empty.", templates: [], selection, draftMode: false, ...extra,
+  const res = await unifiedResponse({ userId: "u", workflowId: "w", text: "hola", canvas: null, past: [], snapshotText: "The canvas is empty.", templates: [], selection, draftMode: false, ...extra,
     deps: { model: (rt: any) => models[rt.model], append: async (_u: string, _w: string, _r: string, c: string) => { saved.push(c); }, catalogText: async () => "CATALOG", connectionStatuses: async () => ({ tiendanube: "not_connected", firecrawl: "connected" }), connectOutcome: async (_u: string, a: string) => a === "tiendanube" ? { kind: "manual", name: "Tienda Nube", fields: ["Store ID", "Access token"] } : a === "gmail" ? { kind: "card", card: { toolkitId: "gmail", title: "Read Gmail" } } : { kind: "unknown_app" } } });
   const body = await res.text(); const events = body.split("\n").filter(l => l.startsWith("data: ")).map(l => { try { return JSON.parse(l.slice(6)); } catch { return null; } }).filter(Boolean);
   const text = events.filter((e: any) => e.type === "text-delta").map((e: any) => e.delta).join(""); const result = events.find((e: any) => e.type === "data-chat-result")?.data; const err = events.find((e: any) => e.type === "data-chat-error")?.data?.error; const trace = events.find((e: any) => e.type === "data-model-trace")?.data;
   console.log(`\n== ${label}\ntext: ${JSON.stringify(text)}\nresult: ${JSON.stringify(result)}\nerror: ${err ?? "-"}\ntrace: ${trace ? JSON.stringify({ used: trace.used, fellBack: trace.fellBack, strict: trace.strict }) : "-"}\nsaved: ${JSON.stringify(saved)}`);
-  return { text, result, err, trace };
+  return { text, result, err, trace, events };
 }
 const auto = (routes: any[]) => ({ ok: true, routes, strict: false, choice: "auto" });
 const strict = (routes: any[]) => ({ ok: true, routes, strict: true, choice: "g" });
 const PLAN = "Trigger Manual; Tienda Nube: list the last 3 products; Firecrawl search for info on each; AI step writes a 3-video script; fal generate-video x3 vertical 9:16; final result: three video URLs.";
-let a = await run("A build_flow carries the full plan", { m1: mk([callStream("build_flow", { plan: PLAN }), textStream("Lo armo en el lienzo.")]) }, auto([route("gemini", "m1")]));
-console.log("CHECK A:", a.result?.build === PLAN && a.result?.autoBuild === true && a.result?.unified === true ? "PASS" : "FAIL");
+const multi = (calls: [string, object][]) => [{ type: "stream-start", warnings: [] }, ...calls.map(([n, i]) => ({ type: "tool-call", toolCallId: "c" + Math.random(), toolName: n, input: JSON.stringify(i) })), { type: "finish", finishReason: "tool-calls", usage }];
+let a = await run("A same agent builds: start_build -> builder tools -> validators -> guide", { m1: mk([callStream("start_build", { plan: PLAN }), multi([["set_name", { name: "Videos" }], ["add_node", { id: "t", nodeType: "trigger", label: "Manual", actionType: "Manual" }], ["add_node", { id: "tn", nodeType: "action", label: "Productos Tiendanube", actionType: "tiendanube/list-products" }], ["connect", { source: "t", target: "tn" }]]), textStream("Armé los pasos.")]) }, auto([route("gemini", "m1")]));
+{ const ev = a.events; const fin = ev.find((e: any) => e.type === "data-canvas-final")?.data; const ops = ev.filter((e: any) => e.type === "data-canvas-op").length;
+  console.log("CHECK A:", fin && fin.nodes.length === 2 && fin.edges.length === 1 && ops >= 4 && a.result?.unified === true && a.result?.build === PLAN ? "PASS" : "FAIL", JSON.stringify({ nodes: fin?.nodes?.length, edges: fin?.edges?.length, ops, validation: fin?.validation?.length })); }
 let b = await run("B manual-app connection gives no card, model is told", { m1: mk([callStream("request_connection", { app: "tiendanube" }), textStream("Conectá Tienda Nube desde Conexiones.")]) }, auto([route("gemini", "m1")]));
 console.log("CHECK B:", b.result?.connect === null && /Conexiones/.test(b.text) ? "PASS" : "FAIL");
 let c = await run("C card for composio preset", { m1: mk([callStream("request_connection", { app: "gmail" }), textStream("Conectá Gmail.")]) }, auto([route("gemini", "m1")]));

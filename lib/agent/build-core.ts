@@ -345,3 +345,27 @@ export function createBuildTools(shadow: Shadow, hooks: { onName?: (n: string) =
   if (hooks.noAsk) delete (tools as Partial<typeof tools>).ask_user;
   return tools as Omit<typeof tools, "ask_user"> & Partial<Pick<typeof tools, "ask_user">>;
 }
+
+// Deterministic repair: references into a Formula node need the "result." wrapper the engine adds.
+export function fixFormulaRefsIn(shadow: Shadow): number {
+        let fixed = 0;
+        const formulaIds = new Set(shadow.nodes.filter(n => (n.data as { config?: { actionType?: string } })?.config?.actionType === "Fórmula").map(n => n.id));
+        if (!formulaIds.size) return 0;
+        const walk = (val: unknown): unknown => {
+          if (typeof val === "string") {
+            return val.replace(/\{\{@([A-Za-z0-9_-]+):([^}:.]+)\.(?!result[.\[])([^}]+)\}\}/g, (m, id: string, label: string, rest: string) => {
+              if (!formulaIds.has(id)) return m;
+              fixed++;
+              return `{{@${id}:${label}.result.${rest}}}`;
+            });
+          }
+          if (Array.isArray(val)) return val.map(walk);
+          if (val && typeof val === "object") { for (const [k, v] of Object.entries(val as Record<string, unknown>)) (val as Record<string, unknown>)[k] = walk(v); }
+          return val;
+        };
+        for (const n of shadow.nodes) {
+          const data = n.data as { config?: Record<string, unknown> } | undefined;
+          if (data?.config) walk(data.config);
+        }
+        return fixed;
+      }

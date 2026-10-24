@@ -9,7 +9,7 @@ const { selectRoutes } = await import("../../lib/model-select");
 process.env.QA_AI_USER_IDS = "*";
 const sel = selectRoutes("g", "u"); if (!sel.ok) { console.log("SEL", sel); process.exit(1); }
 const past = process.argv[3] ? JSON.parse(fs.readFileSync(process.argv[3], "utf8")) : [];
-const res = await unifiedResponse({ userId: "u", workflowId: "w", text: process.argv[2], event: null, review: null, past, snapshotText: "The canvas is empty.", templates: [], selection: sel, draftMode: false,
+const res = await unifiedResponse({ userId: "u", workflowId: "w", text: process.argv[2], canvas: null, past, snapshotText: "The canvas is empty.", templates: [], selection: sel, draftMode: false,
   deps: { append: async () => {}, connectOutcome: async (_u: string, a: string) => ({ kind: "manual", name: a, fields: ["credentials"] }) as any } });
 const body = await res.text(); const ev = body.split("\n").filter(l => l.startsWith("data: ")).map(l => { try { return JSON.parse(l.slice(6)); } catch { return null; } }).filter(Boolean);
 console.log("TEXT:", ev.filter((e: any) => e.type === "text-delta").map((e: any) => e.delta).join(""));

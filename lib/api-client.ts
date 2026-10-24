@@ -211,6 +211,13 @@ function applyOperation(
   }
 }
 
+/** Apply one streamed canvas operation to a snapshot (used by the unified chat agent, which streams ops inside the chat stream). */
+export function applyCanvasOperation(op: StreamMessage["operation"], data: WorkflowData): WorkflowData {
+  const state: StreamState = { buffer: "", currentData: { ...data, nodes: [...data.nodes], edges: [...data.edges] } };
+  applyOperation(op, state);
+  return { ...state.currentData };
+}
+
 function processStreamLine(
   line: string,
   onUpdate: (data: WorkflowData) => void,

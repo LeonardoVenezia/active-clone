@@ -9,7 +9,7 @@ import { generateAIActionPrompts } from "@/plugins";
 import { generateAITriggerPrompts, getActionOutputFields, getActionOutputItemFields, getAllActions, getAllTriggers } from "@/plugins/registry";
 import { userIntentText, type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, cyclicFlowError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, requestCoverageError, sheetContractError, shipmentDetailError, unwiredReportStepError, validateFlow } from "@/lib/flow-validator";
 import { type SourceContract, contractPromptBlock, extractApiSample, inspectSheetsContracts } from "@/lib/source-inspector";
-import { computeFlowErrors, createBuildTools, type Operation, type Shadow, getSystemPrompt, getValidActionTypes, getValidTriggerTypes, shadowApply } from "@/lib/agent/build-core";
+import { fixFormulaRefsIn, computeFlowErrors, createBuildTools, type Operation, type Shadow, getSystemPrompt, getValidActionTypes, getValidTriggerTypes, shadowApply } from "@/lib/agent/build-core";
 import { layoutPositions } from "@/lib/auto-layout";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
 
@@ -302,28 +302,7 @@ export async function POST(request: Request) {
       // Deterministic repair: references into a Fórmula node's value need the
       // "result." wrapper the engine adds. Rewriting that mechanically is
       // cheaper and more reliable than spending a model round on a typo.
-      const fixFormulaRefs = (): number => {
-        let fixed = 0;
-        const formulaIds = new Set(shadow.nodes.filter(n => (n.data as { config?: { actionType?: string } })?.config?.actionType === "Fórmula").map(n => n.id));
-        if (!formulaIds.size) return 0;
-        const walk = (val: unknown): unknown => {
-          if (typeof val === "string") {
-            return val.replace(/\{\{@([A-Za-z0-9_-]+):([^}:.]+)\.(?!result[.\[])([^}]+)\}\}/g, (m, id: string, label: string, rest: string) => {
-              if (!formulaIds.has(id)) return m;
-              fixed++;
-              return `{{@${id}:${label}.result.${rest}}}`;
-            });
-          }
-          if (Array.isArray(val)) return val.map(walk);
-          if (val && typeof val === "object") { for (const [k, v] of Object.entries(val as Record<string, unknown>)) (val as Record<string, unknown>)[k] = walk(v); }
-          return val;
-        };
-        for (const n of shadow.nodes) {
-          const data = n.data as { config?: Record<string, unknown> } | undefined;
-          if (data?.config) walk(data.config);
-        }
-        return fixed;
-      };
+      const fixFormulaRefs = (): number => fixFormulaRefsIn(shadow);
       // Leo's rule: the build is finished; now tell the user, in the
       // conversation, what was built, what was assumed or is missing, and ask.
       // The closing note gets its own 60s cap: the build's time limit must
