@@ -35,6 +35,7 @@ for (const sc of [
   { name: "S1 ambos, TN lento (detail-tn 200ms, detail-ml 10ms)", tn: 1, ml: 1, dTn: 200, dMl: 10 },
   { name: "S2 ambos, ML lento (detail-tn 10ms, detail-ml 200ms)", tn: 1, ml: 1, dTn: 10, dMl: 200 },
   { name: "S3 solo TN (ML count 0)", tn: 1, ml: 0, dTn: 20, dMl: 20 },
+  { name: "S5 ninguno (TN 0, ML 0)", tn: 0, ml: 0, dTn: 20, dMl: 20 },
   { name: "S4 solo ML (TN count 0)", tn: 0, ml: 1, dTn: 20, dMl: 20 },
 ]) out.push(await run(sc));
 for (const x of out) {
@@ -44,6 +45,7 @@ for (const x of out) {
   const guion = all.filter(([k]) => k.startsWith("p")).map(([, v]) => v);
   console.log("prompts total:", all.length, "| con plantilla literal:", JSON.stringify(lit), "| approval literal:", app.includes("{{@"), "| success:", x.res?.success);
   console.log("guion prompt contiene DESC-TN:", guion.some(v => v.includes("DESC-TN")), "DESC-ML:", guion.some(v => v.includes("DESC-ML")));
+  if (process.env.SHOWP) { for (const [k, v] of all) if (k.startsWith("p") || k.startsWith("vid") || k.startsWith("img")) console.log("  ", k, JSON.stringify(v.slice(0, 420))); console.log("   research topic seen? (see prompts)"); }
   console.log("image/video prompts:", JSON.stringify(all.filter(([k]) => k.startsWith("img") || k.startsWith("vid")).map(([, v]) => v.slice(0, 40))));
   console.log("approval:", JSON.stringify(app.slice(0, 200)));
 }
