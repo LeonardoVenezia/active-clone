@@ -267,12 +267,12 @@ export function getValidActionTypes(): Set<string> {
 // Deliverable check driven by the registry: when the request asks to create/generate videos, images or audio and the product has
 // actions whose output is that media, the canvas must contain one. Prevents silently swapping the deliverable for a script/text.
 const MEDIA: [RegExp, string, string][] = [[/\b(?:cre\w*|gener\w*|arm\w*|produc\w*|hac\w*|make|creat\w*|build)\s+(?:\w+\s+){0,4}?videos?\b/i, "video", "video"], [/\b(?:cre\w*|gener\w*|produc\w*|make|creat\w*)\s+(?:\w+\s+){0,3}?(?:im[aá]genes|imagen|images?)\b/i, "image", "image"], [/\b(?:cre\w*|gener\w*|produc\w*|make|creat\w*)\s+(?:\w+\s+){0,3}?(?:audios?|voz|voice)\b/i, "audio", "audio"]];
-export function deliverableCoverageError(requestText: string, nodes: FlowNode[]): string | null {
+export function deliverableCoverageError(requestText: string, nodes: FlowNode[], skip?: Set<string>): string | null {
   const types = new Map<string, Set<string>>();
   for (const p of getAllIntegrations()) for (const a of p.actions) { const t = (a as { outputConfig?: { type?: string } }).outputConfig?.type; if (t) { if (!types.has(t)) types.set(t, new Set()); types.get(t)?.add(`${p.type}/${a.slug}`); } }
   const missing: string[] = [];
   for (const [re, kind, label] of MEDIA) {
-    if (!re.test(requestText)) continue;
+    if (!re.test(requestText) || skip?.has(kind)) continue;
     const ids = types.get(kind); if (!ids?.size) continue;
     const has = nodes.some(n => ids.has(String((n.data as { config?: { actionType?: string } } | undefined)?.config?.actionType ?? "")));
     if (!has) missing.push(`${label} (use one of: ${[...ids].join(", ")})`);
@@ -280,7 +280,7 @@ export function deliverableCoverageError(requestText: string, nodes: FlowNode[])
   return missing.length ? `consistencia: the request asks to create ${missing.join("; ")} but the canvas has no step that produces it; add that step (one per item when several are requested, inside the Loop) instead of stopping at text/scripts. Never drop a requested deliverable on your own: if it truly cannot be built, say so to the user` : null;
 }
 
-export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map<string, string[]>; sheetContracts: SheetColumnsContract[]; userPrompt: string; userRequest?: string }): string[] {
+export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map<string, string[]>; sheetContracts: SheetColumnsContract[]; userPrompt: string; userRequest?: string; skipDeliverables?: Set<string> }): string[] {
   const { composioCatalogMap, sheetContracts, userPrompt } = ctx;
       const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes(), { validTriggerTypes: getValidTriggerTypes(), composioCatalog: composioCatalogMap, actionItemFields: getActionOutputItemFields(), userPrompt });
       const coverage = planCoverageError(userIntentText(userPrompt), shadow.nodes);
@@ -301,7 +301,7 @@ export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map
       if (condExpr) errs.push(condExpr);
       const formExpr = formulaExpressionError(shadow.nodes, getActionOutputItemFields());
       if (formExpr) errs.push(formExpr);
-      const deliverable = deliverableCoverageError(ctx.userRequest ?? userIntentText(userPrompt), shadow.nodes);
+      const deliverable = deliverableCoverageError(ctx.userRequest ?? userIntentText(userPrompt), shadow.nodes, ctx.skipDeliverables);
   if (deliverable) errs.push(deliverable);
   const cyclic = cyclicFlowError(shadow.nodes, shadow.edges);
       if (cyclic) errs.push(cyclic);
@@ -403,5 +403,18 @@ export function lineageFacts(shadow: Shadow): string[] {
   if (unused.length) out.push(`Steps whose output no later step reads: ${unused.join(", ")}.`);
   const loops = shadow.nodes.filter(n => (n.data as { config?: { actionType?: string } })?.config?.actionType === "Loop").map(n => label(n.id));
   out.push(loops.length ? `Steps repeated per list item (Loop): ${loops.join(", ")}.` : "No Loop step: every step runs exactly once per run (one output each).");
+  return out;
+}
+
+/** Candidate deliverables (media kinds) the user's text asks to create that the canvas does not produce. A detector only: it never decides intent. */
+export function missingMediaKinds(requestText: string, nodes: FlowNode[]): string[] {
+  const types = new Map<string, Set<string>>();
+  for (const p of getAllIntegrations()) for (const a of p.actions) { const t = (a as { outputConfig?: { type?: string } }).outputConfig?.type; if (t) { if (!types.has(t)) types.set(t, new Set()); types.get(t)?.add(`${p.type}/${a.slug}`); } }
+  const out: string[] = [];
+  for (const [re, kind] of MEDIA) {
+    if (!re.test(requestText)) continue;
+    const ids = types.get(kind); if (!ids?.size) continue;
+    if (!nodes.some(n => ids.has(String((n.data as { config?: { actionType?: string } } | undefined)?.config?.actionType ?? "")))) out.push(kind);
+  }
   return out;
 }

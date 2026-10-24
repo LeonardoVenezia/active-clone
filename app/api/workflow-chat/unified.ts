@@ -5,11 +5,12 @@ import { z } from "zod";
 import type { LlmRoute } from "@/lib/free-models";
 import { type Selection, ModelTrace, languageModel } from "@/lib/model-select";
 import { type ConnStatus, canonicalApp, catalogText, connectOutcome, connectionStatuses } from "@/lib/agent/capabilities";
-import { type Operation, type Shadow, computeFlowErrors, createBuildTools, lineageFacts, fixFormulaRefsIn, getSystemPrompt } from "@/lib/agent/build-core";
+import { type Operation, type Shadow, computeFlowErrors, createBuildTools, lineageFacts, missingMediaKinds, fixFormulaRefsIn, getSystemPrompt } from "@/lib/agent/build-core";
 import { findPlaceholders } from "@/lib/agent/review";
 import { layoutPositions } from "@/lib/auto-layout";
 import type { FlowEdge, FlowNode } from "@/lib/flow-validator";
 import { append } from "@/lib/workflow-chat";
+import { judgeStanding, type Standing } from "@/lib/agent/objective";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
 
 // ONE agent: the conversation AND the canvas build run in the same loop, with the same messages, the same reasoning and the same
@@ -21,7 +22,7 @@ export type UnifiedInput = {
   canvas: { nodes: unknown[]; edges: unknown[] } | null;
   selection: Extract<Selection, { ok: true }>; draftMode: boolean;
   /** Test seams only: production never passes these. */
-  deps?: { model?: (r: LlmRoute) => LanguageModel; append?: typeof append; catalogText?: typeof catalogText; connectOutcome?: typeof connectOutcome; connectionStatuses?: typeof connectionStatuses; discover?: (input: { catalog: string; search?: string; toolkit?: string }) => Promise<{ items?: Record<string, unknown>[] }> };
+  deps?: { model?: (r: LlmRoute) => LanguageModel; append?: typeof append; catalogText?: typeof catalogText; connectOutcome?: typeof connectOutcome; connectionStatuses?: typeof connectionStatuses; judge?: typeof judgeStanding; discover?: (input: { catalog: string; search?: string; toolkit?: string }) => Promise<{ items?: Record<string, unknown>[] }> };
 };
 type Out = { connect: Record<string, unknown> | null; form: { title: string; fields: { key: string; label: string }[]; offerCreate: boolean } | null; template: { id: string; name: string; description: string } | null; templateImport: { id: string; name: string; description: string } | null; undo: boolean | null };
 
@@ -146,6 +147,14 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
         };
 
         let usedRoute = false; let validationLeft: string[] = []; let interrupted = false;
+        const standing = new Map<string, Standing>(); const skipKinds = new Set<string>(); let unresolvedKinds: string[] = [];
+        const userMsgs = [...i.past.filter(m => m.role === "user").map(m => m.content), i.text];
+        const resolveObjective = async (route: LlmRoute) => {
+          const cand = missingMediaKinds(userRequest, shadow.nodes).filter(k => !standing.has(k));
+          if (cand.length) { const j = await (i.deps?.judge ?? judgeStanding)((i.deps?.model ?? languageModel)(route), userMsgs, cand, abort.signal); for (const k of cand) standing.set(k, j[k] ?? "unclear"); }
+          skipKinds.clear(); unresolvedKinds = [];
+          for (const [k, v] of standing) { if (v === "withdrawn") skipKinds.add(k); else if (v === "unclear") { skipKinds.add(k); unresolvedKinds.push(k); } }
+        };
         for (const route of i.selection.routes) {
           const tr = Date.now();
           try {
@@ -157,8 +166,8 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
             if (touched) {
               const request = planText || i.text; let errs: string[] = [];
               for (let round = 0; round < 3; round++) {
-                fixFormulaRefsIn(shadow);
-                errs = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest });
+                fixFormulaRefsIn(shadow); await resolveObjective(route);
+                errs = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest, skipDeliverables: skipKinds });
                 rounds.push({ round, errors: errs.length, sample: errs.slice(0, 3).map(e => e.slice(0, 90)) });
                 if (!errs.length) { closeReason = "clean"; break; }
                 if (abort.signal.aborted) { closeReason = "cap-reached"; break; }
@@ -170,7 +179,8 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
                 try { msgs = [...msgs, ...(await runPass(route, msgs, false))]; trace.record("corrective", route, true, tr2); } catch (e) { trace.record("corrective", route, false, tr2, e); closeReason = "corrective-failed"; break; }
               }
               if (closeReason === "no-build") closeReason = "rounds-exhausted";
-              fixFormulaRefsIn(shadow); validationLeft = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest });
+              await resolveObjective(route);
+              fixFormulaRefsIn(shadow); validationLeft = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest, skipDeliverables: skipKinds });
               timedOut = abort.signal.aborted;
               if (startedEmpty && shadow.nodes.length) { const pos = layoutPositions(shadow.nodes, shadow.edges); for (const n of shadow.nodes) { const p = pos.get(n.id); if (p) { (n as { position?: unknown }).position = p; } } }
               writer.write({ type: "data-canvas-final", data: { name: flowName, nodes: shadow.nodes, edges: shadow.edges, validation: validationLeft, timedOut, startedEmpty, interrupted } });
@@ -183,7 +193,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
                 (aiPrompts.length ? `\nAI prompts you wrote (ask the user to review them, show them):\n${aiPrompts.map(x => `- ${x.label}: "${x.p.slice(0, 600)}"`).join("\n")}` : "") +
                 `\nData flow facts (app-computed): ${lineageFacts(shadow).join(" ")} Compare them with what the user asked for (quantities, per-item work, data that must feed a step) and say plainly any gap; never call it complete if they disagree.\nApps still NOT connected (mention ALL of them; offer one card at a time): ${apps.filter(a => st[a] !== "connected").map(a => `${a}: ${st[a] ?? "unknown"}`).join(", ") || "none"}.\nSteps still holding placeholder values: ${findPlaceholders(fresh).join("; ") || "none"}.\nApps used and their connection status: ${apps.map(a => `${a}: ${st[a] ?? "unknown"}`).join(", ") || "none"}.` +
                 (validationLeft.length ? `\nUnresolved checks: ${validationLeft.join(" | ").slice(0, 900)}. Say plainly what is still missing; never claim it is complete.` : "") +
-                (timedOut ? "\nThe build hit the time limit; say what is pending." : "") + (interrupted ? "\nA model call was interrupted by an error while building; the canvas may be incomplete. Say so plainly." : "") +
+                (timedOut ? "\nThe build hit the time limit; say what is pending." : "") + (unresolvedKinds.length ? `\nUnresolved from the user's own words (not in the flow): ${unresolvedKinds.join(", ")}. Ask ONE short question whether they still want it; do not assume either way.` : "") + (interrupted ? "\nA model call was interrupted by an error while building; the canvas may be incomplete. Say so plainly." : "") +
                 `\nNow tell the user in your own words: what you built (one sentence), then guide what is pending, one thing at a time (AI prompt review, request_connection for apps not connected${i.draftMode ? "; DRAFT MODE: do not request connections" : ""}). Do not rebuild anything.`;
               stageName = "guide";
               const guideAbort = new AbortController(); const gt = setTimeout(() => guideAbort.abort(), 45_000);
@@ -211,7 +221,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
         await (i.deps?.append ?? append)(i.userId, i.workflowId, "assistant", reply.trim());
         if (i.selection.choice !== "auto" || s.fellBack || s.paid) {
           // Redacted, QA-only: structure and counts, never message text or keys.
-          const build = { closeReason: interrupted ? `${closeReason}+model-call-interrupted` : closeReason, capMs, elapsedMs: Date.now() - t0, interrupted, finalNodes: shadow.nodes.length, finalEdges: shadow.edges.length, validationLeft: validationLeft.slice(0, 5).map(e => e.slice(0, 120)), rounds, passes: passLog };
+          const build = { objective: Object.fromEntries(standing), closeReason: interrupted ? `${closeReason}+model-call-interrupted` : closeReason, capMs, elapsedMs: Date.now() - t0, interrupted, finalNodes: shadow.nodes.length, finalEdges: shadow.edges.length, validationLeft: validationLeft.slice(0, 5).map(e => e.slice(0, 120)), rounds, passes: passLog };
           console.info("[ai-build-trace]", JSON.stringify(build));
           writer.write({ type: "data-model-trace", data: { ...s, build } });
         }
