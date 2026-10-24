@@ -16,13 +16,21 @@ import { discoverComposio } from "@/plugins/composio/steps/catalog";
 // ONE agent: the conversation AND the canvas build run in the same loop, with the same messages, the same reasoning and the same
 // tools. It calls the builder tools (add_node, connect, ...) itself; the deterministic validators, the corrective rounds and the
 // wall-clock cap live around that loop (lib/agent/build-core.ts), and what is pending afterwards comes from the real graph.
+async function loadTemplateRow(userId: string, id: string) {
+  const [{ db }, { workflowTemplates, members }, { eq, and }] = await Promise.all([import("@/lib/db"), import("@/lib/db/schema"), import("drizzle-orm")]);
+  const t = await db.query.workflowTemplates.findFirst({ where: eq(workflowTemplates.id, id) });
+  if (!t) return null;
+  if (t.orgId) { const m = await db.query.members.findFirst({ where: and(eq(members.organizationId, t.orgId), eq(members.userId, userId)) }); if (!m) return null; } else if (t.userId !== userId) return null;
+  return { name: String(t.name), nodes: t.nodes as unknown[], edges: t.edges as unknown[] };
+}
+
 export type UnifiedInput = {
   userId: string; workflowId: string; text: string;
   past: { role: "user" | "assistant"; content: string }[]; snapshotText: string; templates: { id: string; name: string; description: string }[];
   canvas: { nodes: unknown[]; edges: unknown[] } | null;
   selection: Extract<Selection, { ok: true }>; draftMode: boolean;
   /** Test seams only: production never passes these. */
-  deps?: { model?: (r: LlmRoute) => LanguageModel; append?: typeof append; catalogText?: typeof catalogText; connectOutcome?: typeof connectOutcome; connectionStatuses?: typeof connectionStatuses; judge?: typeof judgeStanding; discover?: (input: { catalog: string; search?: string; toolkit?: string }) => Promise<{ items?: Record<string, unknown>[] }> };
+  deps?: { loadTemplate?: (userId: string, id: string) => Promise<{ name: string; nodes: unknown[]; edges: unknown[] } | null>; model?: (r: LlmRoute) => LanguageModel; append?: typeof append; catalogText?: typeof catalogText; connectOutcome?: typeof connectOutcome; connectionStatuses?: typeof connectionStatuses; judge?: typeof judgeStanding; discover?: (input: { catalog: string; search?: string; toolkit?: string }) => Promise<{ items?: Record<string, unknown>[] }> };
 };
 type Out = { connect: Record<string, unknown> | null; form: { title: string; fields: { key: string; label: string }[]; offerCreate: boolean } | null; template: { id: string; name: string; description: string } | null; templateImport: { id: string; name: string; description: string } | null; undo: boolean | null };
 
@@ -116,9 +124,22 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
           }),
           undo_last_change: tool({ description: "Undo the last canvas change when the user asks to revert.", inputSchema: z.object({}), execute: async () => { out.undo = true; return { queued: true }; } }),
           use_template: tool({
-            description: "Offer (import=false) or import (import=true) one of the saved templates listed in the context. Only ids from that list.",
+            description: "Offer (import=false) or import (import=true) one of the saved templates listed in the context. Only ids from that list. Importing puts the template's steps on the canvas (same graph the app validates); you get back its real structure to COMPARE with what the user asked for (trigger, data source, apps, quantities). Import only when it fits what was agreed; if it differs, say exactly what differs and either adapt the steps with your tools or build the agreed flow instead. Never present a template as the requested flow if it differs.",
             inputSchema: z.object({ id: z.string().max(64), import: z.boolean() }),
-            execute: async ({ id, import: doImport }) => { const hit = i.templates.find(t => t.id === id); if (!hit) return { ok: false, reason: "unknown template id" }; if (doImport) out.templateImport = hit; else out.template = hit; return { ok: true }; },
+            execute: async ({ id, import: doImport }) => {
+              const hit = i.templates.find(t => t.id === id); if (!hit) return { ok: false, reason: "unknown template id" };
+              if (!doImport) { out.template = hit; return { ok: true }; }
+              if (shadow.nodes.some(n => (n.data as { config?: { placeholder?: boolean } } | undefined)?.config?.placeholder !== true)) return { ok: false, reason: "the canvas already has steps; a template import would replace them. Edit the existing steps with your tools instead." };
+              const tpl = await (i.deps?.loadTemplate ?? loadTemplateRow)(i.userId, id).catch(() => null);
+              if (!tpl) return { ok: false, reason: "could not load that template; build the flow with your tools" };
+              // Same ids as the template (its {{@id:Label.field}} references stay valid); no connections carried over.
+              shadow.nodes.length = 0; shadow.edges.length = 0;
+              for (const raw of tpl.nodes as FlowNode[]) { const n = JSON.parse(JSON.stringify(raw)) as FlowNode; const d = (n.data ?? {}) as { config?: Record<string, unknown>; status?: string }; if (d.config) { delete d.config.integrationId; d.config.fromTemplate = true; } d.status = "idle"; n.data = d as FlowNode["data"]; shadow.nodes.push(n); writer.write({ type: "data-canvas-op", data: { op: "addNode", node: n } satisfies Operation }); }
+              for (const e of tpl.edges as FlowEdge[]) { shadow.edges.push(e); writer.write({ type: "data-canvas-op", data: { op: "addEdge", edge: e } satisfies Operation }); }
+              touched = true; if (!flowName) flowName = tpl.name;
+              const cfgOf = (n: FlowNode) => ((n.data as { config?: Record<string, unknown> })?.config ?? {}) as Record<string, unknown>;
+              return { ok: true, imported: tpl.name, structure: shadow.nodes.map(n => ({ id: n.id, label: (n.data as { label?: string })?.label, kind: (n.data as { type?: string })?.type, action: cfgOf(n).actionType, schedule: cfgOf(n).cron ?? cfgOf(n).schedule })), note: "These steps are now on the canvas. Compare trigger, data source, apps and quantities with the agreed request and fix or report every difference." };
+            },
           }),
         };
 
@@ -191,7 +212,8 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               const apps = [...new Set(fresh.map(n => { const c = ((n.data as { config?: { actionType?: string; toolkit?: string } })?.config) ?? {}; return c.toolkit || (c.actionType && c.actionType.includes("/") ? c.actionType.split("/")[0] : ""); }).filter(a => a && a !== "composio").map(canonicalApp))];
               const st: Record<string, ConnStatus> = apps.length ? await (i.deps?.connectionStatuses ?? connectionStatuses)(i.userId, apps).catch(() => ({})) : {};
               const aiPrompts = fresh.map(n => ({ label: String((n.data as { label?: string })?.label ?? "step"), p: String(((n.data as { config?: { aiPrompt?: string } })?.config?.aiPrompt) ?? "") })).filter(x => x.p);
-              const review = `[App report after your build, verified by the app, not from the user] Steps now on the canvas: ${shadow.nodes.map(n => String((n.data as { label?: string })?.label ?? n.id)).join(" -> ") || "none"}.` +
+              const trig = shadow.nodes.filter(n => (n.data as { type?: string })?.type === "trigger").map(n => { const c = ((n.data as { config?: Record<string, unknown> })?.config) ?? {}; return `${String(c.actionType ?? "?")}${c.cron ? ` (${String(c.cron)})` : ""}`; }).join(", ") || "none";
+              const review = `[App report after your build, verified by the app, not from the user] Trigger on the canvas: ${trig}. Steps now on the canvas: ${shadow.nodes.map(n => String((n.data as { label?: string })?.label ?? n.id)).join(" -> ") || "none"}.` +
                 (aiPrompts.length ? `\nAI prompts you wrote (ask the user to review them, show them):\n${aiPrompts.map(x => `- ${x.label}: "${x.p.slice(0, 600)}"`).join("\n")}` : "") +
                 `\nData flow facts (app-computed): ${lineageFacts(shadow).join(" ")} Compare them with what the user asked for (quantities, per-item work, data that must feed a step) and say plainly any gap; never call it complete if they disagree.\nApps still NOT connected (mention ALL of them; offer one card at a time): ${apps.filter(a => st[a] !== "connected").map(a => `${a}: ${st[a] ?? "unknown"}`).join(", ") || "none"}.\nSteps still holding placeholder values: ${findPlaceholders(fresh).join("; ") || "none"}.\nApps used and their connection status: ${apps.map(a => `${a}: ${st[a] ?? "unknown"}`).join(", ") || "none"}.` +
                 (validationLeft.length ? `\nUnresolved checks: ${validationLeft.join(" | ").slice(0, 900)}. Say plainly what is still missing; never claim it is complete.` : "") +
