@@ -1281,3 +1281,42 @@ export function refOrderRaceError(nodes: FlowNode[], edges: FlowEdge[]): string 
   if (!problems.length) return null;
   return `orden: ${problems.slice(0, 4).join("; ")}. Chain the steps in one line (each node's only parent is the previous step) so every reference is already produced; for an optional step use a Loop over the list with maxItems 1 instead of a parallel branch. Do not add an extra reference edge: it does not make a node wait for all its parents`;
 }
+
+
+/** Empty-result safety (mechanical, not a prompt). Optional-step pattern: a Loop with maxItems <= 1 over a SEARCH result (a node that outputs a list plus "count").
+ *  When every search comes back empty, nothing downstream has data, yet the engine keeps going (missing refs become empty text) and would reach
+ *  Approval/paid steps with nothing. Requirements, all checked on the graph:
+ *   1) a guard Condition whose text reads the count of EVERY such search node, placed before (guaranteed ancestor of) every node that reads an optional Loop or is an Approval;
+ *   2) a "none found" branch: a second Condition reading the same counts with an emptiness test (== 0, <= 0, < 1, === 0) that has at least one child step (the notice).
+ *  The engine's Condition has no else path, so the notice must be its own branch. Returns null when not applicable or satisfied. */
+export function emptyResultGuardError(nodes: FlowNode[], edges: FlowEdge[], actionOutputs: OutputsMap = {}): string | null {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const parents = new Map<string, string[]>(); const kids = new Map<string, string[]>();
+  for (const e of edges) { (parents.get(e.target) ?? parents.set(e.target, []).get(e.target)!).push(e.source); (kids.get(e.source) ?? kids.set(e.source, []).get(e.source)!).push(e.target); }
+  const act = (n: FlowNode | undefined) => (n ? actionTypeOf(n) : "");
+  const hasCount = (n: FlowNode) => (actionOutputs[act(n)] ?? SYSTEM_OUTPUTS[act(n)] ?? []).includes("count");
+  const optLoops: FlowNode[] = []; const searches = new Set<string>();
+  for (const n of nodes) {
+    if (act(n) !== "Loop") continue;
+    const cfg = (n.data?.config ?? {}) as { source?: unknown; maxItems?: unknown };
+    const max = Number(cfg.maxItems); if (!(max >= 1 && max <= 1)) continue;
+    const m = typeof cfg.source === "string" ? /^\s*\{\{@([\w-]+):/.exec(cfg.source) : null; const src = m ? byId.get(m[1]) : undefined;
+    if (src && hasCount(src) && act(src) !== "Loop") { optLoops.push(n); searches.add(src.id); }
+  }
+  if (!searches.size) return null;
+  const anc = (id: string, acc = new Set<string>()): Set<string> => { for (const p of parents.get(id) ?? []) if (!acc.has(p)) { acc.add(p); anc(p, acc); } return acc; };
+  const desc = (id: string, acc = new Set<string>()): Set<string> => { for (const k of kids.get(id) ?? []) if (!acc.has(k)) { acc.add(k); desc(k, acc); } return acc; };
+  const readsCounts = (c: FlowNode) => { const t = String(((c.data?.config ?? {}) as { condition?: unknown }).condition ?? ""); return [...searches].every((sid) => new RegExp(`\\{\\{@${sid}:[^}]*\\.count\\}\\}`).test(t)) ? t : null; };
+  const conds = nodes.filter((n) => act(n) === "Condition");
+  const emptiness = (t: string) => /(===?\s*0\b|<=\s*0\b|<\s*1\b|\$not\()/.test(t) && !/>\s*0\b/.test(t);
+  const guards = conds.filter((c) => { const t = readsCounts(c); return t !== null && !emptiness(t); });
+  const nones = conds.filter((c) => { const t = readsCounts(c); return t !== null && emptiness(t) && (kids.get(c.id) ?? []).length > 0; });
+  const searchIds = [...searches];
+  const noticeIds = new Set(nones.flatMap((c) => [...desc(c.id)]));
+  const consumers = nodes.filter((n) => !noticeIds.has(n.id) && (act(n) === "Approval" || optLoops.some((l) => l.id !== n.id && JSON.stringify(n.data?.config ?? {}).includes(`{{@${l.id}:`))));
+  const problems: string[] = [];
+  const guardOk = guards.some((g) => consumers.every((c) => c.id !== g.id && anc(c.id).has(g.id) && !searchIds.some((s) => desc(g.id).has(s))));
+  if (!guardOk) problems.push(`add ONE Condition right after the last search that reads the count of ${searchIds.map((s) => `"${s}"`).join(" and ")} (e.g. {{@${searchIds[0]}:<Label>.count}}${searchIds.slice(1).map((s) => ` + {{@${s}:<Label>.count}}`).join("")} > 0) and place it before every step that reads the optional detail Loops and before any Approval`);
+  if (!nones.length) problems.push(`add a SECOND Condition on the same counts testing emptiness (e.g. ... === 0) whose child step tells the user nothing was found (an Approval or message step with the text), as its own branch from the last search; the engine has no else path and, without it, an empty search ends silently`);
+  return problems.length ? `seguridad: the optional-step Loops over ${searchIds.map((s) => `"${s}"`).join(", ")} can run with 0 results; ${problems.join("; ")}` : null;
+}
