@@ -379,7 +379,7 @@ export function fixFormulaRefsIn(shadow: Shadow): number {
         if (!formulaIds.size) return 0;
         const walk = (val: unknown): unknown => {
           if (typeof val === "string") {
-            return val.replace(/\{\{@([A-Za-z0-9_-]+):([^}:.]+)\.(?!result[.\[])([^}]+)\}\}/g, (m, id: string, label: string, rest: string) => {
+            return val.replace(/\{\{@([A-Za-z0-9_-]+):([^}:.]+)\.(?!result[.\[}])([^}]+)\}\}/g, (m, id: string, label: string, rest: string) => {
               if (!formulaIds.has(id)) return m;
               fixed++;
               return `{{@${id}:${label}.result.${rest}}}`;
@@ -392,6 +392,12 @@ export function fixFormulaRefsIn(shadow: Shadow): number {
         for (const n of shadow.nodes) {
           const data = n.data as { config?: Record<string, unknown> } | undefined;
           if (data?.config) walk(data.config);
+          // A Loop source that points at a whole Formula value is "<formula>.result"; "<formula>.result.result" never resolves to a list.
+          const cfg = data?.config;
+          if (cfg?.actionType === "Loop" && typeof cfg.source === "string") {
+            const m = /^\s*\{\{@([A-Za-z0-9_-]+):([^}:.]+)\.result\.result\}\}\s*$/.exec(cfg.source);
+            if (m && formulaIds.has(m[1])) { cfg.source = `{{@${m[1]}:${m[2]}.result}}`; fixed++; }
+          }
         }
         return fixed;
       }
