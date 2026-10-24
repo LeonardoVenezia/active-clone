@@ -11,6 +11,7 @@ import { findPlaceholders } from "@/lib/agent/review";
 import { layoutPositions } from "@/lib/auto-layout";
 import type { FlowEdge, FlowNode } from "@/lib/flow-validator";
 import { append } from "@/lib/workflow-chat";
+import { errCode } from "@/lib/agent/err-code";
 import { judgeStanding, type Standing } from "@/lib/agent/objective";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
 
@@ -165,7 +166,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
           const fe = failed as { statusCode?: number; status?: number; message?: string } | null;
           log.ms = Date.now() - tp; log.nodesAfter = shadow.nodes.length; log.capHit = abort.signal.aborted;
           { const idsAfter = new Set(shadow.nodes.map(n => n.id)); log.added = [...idsAfter].filter(x => !idsBefore.has(x)).length; const gone = [...idsBefore].filter(x => !idsAfter.has(x)); log.removedTpl = gone.filter(x => tplIds.has(x)).length; log.removedOwn = gone.length - log.removedTpl; }
-          if (failed) { log.finish = "error"; log.error = { status: fe?.statusCode ?? fe?.status ?? "error", note: String(fe?.message ?? "").slice(0, 120) }; }
+          if (failed) { log.finish = "error"; log.error = { status: fe?.statusCode ?? fe?.status ?? "error", note: errCode(fe?.message, fe?.statusCode ?? fe?.status) }; }
           if (failed && !produced) throw failed;
           if (failed) { console.error("[workflow-chat] pass broke midway", route.name, route.model); interrupted = true; }
           const response = failed ? { messages: [] as ModelMessage[] } : await res.response;
@@ -234,7 +235,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
                 const gres = streamText({ model: (i.deps?.model ?? languageModel)(route), system, messages: [...msgs, { role: "user", content: review }], tools: { request_connection: tools.request_connection, show_form: tools.show_form }, stopWhen: stepCountIs(4), maxOutputTokens: 4096, temperature: 0.3, maxRetries: 0, abortSignal: guideAbort.signal });
                 let sep = reply.trim().length > 0;
                 const gl: PassLog = { stage: "guide", steps: 0, tools: {}, finish: "unknown", ms: 0, nodesAfter: shadow.nodes.length, capHit: false }; const tg = Date.now(); let chars = 0; passLog.push(gl);
-                for await (const part of gres.fullStream) { if (part.type === "start-step") gl.steps++; if (part.type === "finish") gl.finish = String((part as { finishReason?: unknown }).finishReason ?? "unknown"); if (part.type === "error") { const ge = part.error as { statusCode?: number; message?: string }; gl.finish = "error"; gl.error = { status: ge?.statusCode ?? "error", note: String(ge?.message ?? "").slice(0, 120) }; } if (part.type === "tool-call") gl.tools[part.toolName] = (gl.tools[part.toolName] ?? 0) + 1; if (part.type === "text-delta" && part.text) { chars += part.text.length; emit((sep ? "\n\n" : "") + part.text); sep = false; } }
+                for await (const part of gres.fullStream) { if (part.type === "start-step") gl.steps++; if (part.type === "finish") gl.finish = String((part as { finishReason?: unknown }).finishReason ?? "unknown"); if (part.type === "error") { const ge = part.error as { statusCode?: number; message?: string }; gl.finish = "error"; gl.error = { status: ge?.statusCode ?? "error", note: errCode(ge?.message, ge?.statusCode) }; } if (part.type === "tool-call") gl.tools[part.toolName] = (gl.tools[part.toolName] ?? 0) + 1; if (part.type === "text-delta" && part.text) { chars += part.text.length; emit((sep ? "\n\n" : "") + part.text); sep = false; } }
                 gl.ms = Date.now() - tg; (gl as PassLog & { textChars?: number }).textChars = chars;
               } catch (e) { trace.record("guide", route, false, Date.now(), e); } finally { clearTimeout(gt); guideChangedGraph = JSON.stringify([shadow.nodes, shadow.edges]) !== graphBefore; }
             }

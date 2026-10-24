@@ -50,4 +50,6 @@ const guide = P.find(p => p.stage === "guide"); ck("guide pass logged", !!guide)
 const strings = new Set<string>(); const walk = (v: any, path: string) => { if (typeof v === "string") strings.add(path + "=" + v); else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) walk(x, path + "." + k); };
 for (const p of P) { walk(p.ok, "ok"); walk(p.fail, "fail"); walk(p.tokens, "tokens"); } walk(b?.judge, "judge"); for (const r of b?.rounds ?? []) walk(r.cat, "cat");
 ck("no secret label or value in new fields", ![...strings].some(s => s.includes(SEC) || s.includes("\"k\"")));
+{ const { errCode } = await import("../../lib/agent/err-code");
+  ck("errCode: allowlist codes only, never message text", errCode("You exceeded your current quota SECRET", 429) === "rate-or-quota-429" && errCode("high demand", 503) === "unavailable-503" && errCode("Invalid prompt: The messages must be a ModelMessage[]", undefined) === "invalid-prompt" && errCode("weird secret text", undefined) === "other" && !/secret/i.test(errCode("weird secret text", 418))); }
 console.log(fails ? `\n${fails} FAIL` : "\nALL PASS"); process.exit(fails ? 1 : 0);

@@ -1,3 +1,4 @@
+import { errCode } from "@/lib/agent/err-code";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { type LlmRoute, llmRoutes } from "@/lib/free-models";
@@ -38,7 +39,7 @@ export class ModelTrace {
   constructor(readonly choice: string, readonly strict: boolean) {}
   record(stage: string, route: LlmRoute, ok: boolean, started: number, error?: unknown) {
     const e = error as { statusCode?: number; status?: number; message?: string } | undefined;
-    const entry: TraceEntry = { stage, route: route.name, model: route.model, ok, ms: Date.now() - started, ...(error ? { status: e?.statusCode ?? e?.status ?? "error", note: String(e?.message ?? "").slice(0, 160) } : {}) };
+    const entry: TraceEntry = { stage, route: route.name, model: route.model, ok, ms: Date.now() - started, ...(error ? { status: e?.statusCode ?? e?.status ?? "error", note: errCode(e?.message, e?.statusCode ?? e?.status) } : {}) };
     this.entries.push(entry);
     console.info("[ai-trace]", JSON.stringify({ choice: this.choice, strict: this.strict, ...entry }));
   }
