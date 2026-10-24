@@ -388,3 +388,20 @@ export function fixFormulaRefsIn(shadow: Shadow): number {
         }
         return fixed;
       }
+
+/** Deterministic facts about how data flows, for the agent to reconcile with what was agreed. Facts only: no verdicts, no per-example rules. */
+export function lineageFacts(shadow: Shadow): string[] {
+  const refs = new Map<string, Set<string>>();
+  for (const n of shadow.nodes) {
+    const txt = JSON.stringify((n.data as { config?: unknown })?.config ?? {});
+    for (const m of txt.matchAll(/\{\{@([^:}]+):/g)) { const set = refs.get(m[1]) ?? new Set<string>(); set.add(n.id); refs.set(m[1], set); }
+  }
+  const label = (id: string) => String((shadow.nodes.find(n => n.id === id)?.data as { label?: string })?.label ?? id);
+  const out: string[] = [];
+  const hasOut = new Set(shadow.edges.map(e => e.source));
+  const unused = shadow.nodes.filter(n => (n.data as { type?: string })?.type === "action" && hasOut.has(n.id) && !refs.has(n.id)).map(n => label(n.id));
+  if (unused.length) out.push(`Steps whose output no later step reads: ${unused.join(", ")}.`);
+  const loops = shadow.nodes.filter(n => (n.data as { config?: { actionType?: string } })?.config?.actionType === "Loop").map(n => label(n.id));
+  out.push(loops.length ? `Steps repeated per list item (Loop): ${loops.join(", ")}.` : "No Loop step: every step runs exactly once per run (one output each).");
+  return out;
+}

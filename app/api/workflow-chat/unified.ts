@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { LlmRoute } from "@/lib/free-models";
 import { type Selection, ModelTrace, languageModel } from "@/lib/model-select";
 import { type ConnStatus, canonicalApp, catalogText, connectOutcome, connectionStatuses } from "@/lib/agent/capabilities";
-import { type Operation, type Shadow, computeFlowErrors, createBuildTools, fixFormulaRefsIn, getSystemPrompt } from "@/lib/agent/build-core";
+import { type Operation, type Shadow, computeFlowErrors, createBuildTools, lineageFacts, fixFormulaRefsIn, getSystemPrompt } from "@/lib/agent/build-core";
 import { findPlaceholders } from "@/lib/agent/review";
 import { layoutPositions } from "@/lib/auto-layout";
 import type { FlowEdge, FlowNode } from "@/lib/flow-validator";
@@ -181,7 +181,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               const aiPrompts = fresh.map(n => ({ label: String((n.data as { label?: string })?.label ?? "step"), p: String(((n.data as { config?: { aiPrompt?: string } })?.config?.aiPrompt) ?? "") })).filter(x => x.p);
               const review = `[App report after your build, verified by the app, not from the user] Steps now on the canvas: ${shadow.nodes.map(n => String((n.data as { label?: string })?.label ?? n.id)).join(" -> ") || "none"}.` +
                 (aiPrompts.length ? `\nAI prompts you wrote (ask the user to review them, show them):\n${aiPrompts.map(x => `- ${x.label}: "${x.p.slice(0, 600)}"`).join("\n")}` : "") +
-                `\nSteps still holding placeholder values: ${findPlaceholders(fresh).join("; ") || "none"}.\nApps used and their connection status: ${apps.map(a => `${a}: ${st[a] ?? "unknown"}`).join(", ") || "none"}.` +
+                `\nData flow facts (app-computed): ${lineageFacts(shadow).join(" ")} Compare them with what the user asked for (quantities, per-item work, data that must feed a step) and say plainly any gap; never call it complete if they disagree.\nApps still NOT connected (mention ALL of them; offer one card at a time): ${apps.filter(a => st[a] !== "connected").map(a => `${a}: ${st[a] ?? "unknown"}`).join(", ") || "none"}.\nSteps still holding placeholder values: ${findPlaceholders(fresh).join("; ") || "none"}.\nApps used and their connection status: ${apps.map(a => `${a}: ${st[a] ?? "unknown"}`).join(", ") || "none"}.` +
                 (validationLeft.length ? `\nUnresolved checks: ${validationLeft.join(" | ").slice(0, 900)}. Say plainly what is still missing; never claim it is complete.` : "") +
                 (timedOut ? "\nThe build hit the time limit; say what is pending." : "") + (interrupted ? "\nA model call was interrupted by an error while building; the canvas may be incomplete. Say so plainly." : "") +
                 `\nNow tell the user in your own words: what you built (one sentence), then guide what is pending, one thing at a time (AI prompt review, request_connection for apps not connected${i.draftMode ? "; DRAFT MODE: do not request connections" : ""}). Do not rebuild anything.`;
