@@ -103,6 +103,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
             inputSchema: z.object({ app: z.string().min(2).max(40) }),
             execute: async ({ app }) => {
               if (i.draftMode) return { shown: false, reason: "draft mode: do not ask to connect now" };
+              if (out.connect) return { shown: false, reason: "a connection card is already shown; one at a time: mention this app in text and ask for it after the user finishes the current card" };
               const o = await (i.deps?.connectOutcome ?? connectOutcome)(i.userId, app);
               if (o.kind === "card") { out.connect = o.card; return { shown: true, note: "A card is shown below your message." }; }
               if (o.kind === "already_connected") return { shown: false, reason: "already connected, continue" };
