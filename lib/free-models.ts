@@ -2,11 +2,12 @@
 // OpenRouter models are the verified-free ones from its live catalog (price 0). Groq is used only when GROQ_API_KEY is set on the server.
 // Refuseless is a PAID fallback (Leo's key, deepseek-v4.1-flash-fast): always LAST in the list, so it only runs when every free route failed - each call spends real balance, keep it as the last resort.
 export type LlmRoute = { name: "gemini" | "openrouter" | "groq" | "refuseless"; baseURL: string; apiKey: string; model: string; maxTokens: number };
-export function llmRoutes(): LlmRoute[] {
+// `paid: true` is requested ONLY by the explicit QA selector (ai=ds). Automatic chains on Vercel Preview deployments never include the paid route.
+export function llmRoutes(opts: { paid?: boolean } = {}): LlmRoute[] {
   const gemini = process.env.GEMINI_API_KEY;
   const or = process.env.OPENROUTER_API_KEY;
   const groq = process.env.GROQ_API_KEY;
-  const refuseless = process.env.REFUSELESS_API_KEY;
+  const refuseless = opts.paid || process.env.VERCEL_ENV !== "preview" ? process.env.REFUSELESS_API_KEY : undefined;
   const gm = gemini ? [{ name: "gemini" as const, baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/", apiKey: gemini, model: "gemini-3.5-flash-lite", maxTokens: 4096 }] : [];
   const o = (model: string): LlmRoute[] => (or ? [{ name: "openrouter", baseURL: "https://openrouter.ai/api/v1", apiKey: or, model, maxTokens: 500 }] : []);
   const g = (model: string): LlmRoute[] => (groq ? [{ name: "groq", baseURL: "https://api.groq.com/openai/v1", apiKey: groq, model, maxTokens: 1500 }] : []);
