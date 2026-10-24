@@ -46,7 +46,7 @@ export function RunInputHost() {
           {req?.fields.map((f, i) => (
             <div className="space-y-1" key={f.key}>
               <Label htmlFor={`run-input-${f.key}`}>{f.label}{f.required ? "" : " (opcional)"}</Label>
-              <Input autoFocus={i === 0} id={`run-input-${f.key}`} maxLength={MANUAL_INPUT_MAX_VALUE} onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))} value={vals[f.key] ?? ""} />
+              <Input autoFocus={i === 0} id={`run-input-${f.key}`} onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))} value={vals[f.key] ?? ""} />
             </div>
           ))}
           {err ? <p className="text-destructive text-sm" role="alert">{err}</p> : null}
