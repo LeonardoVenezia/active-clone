@@ -37,11 +37,11 @@ async function stepHandler(
       return { success: false, error: result.error };
     }
     const item = result.data as MlItem;
-    // Separate endpoint. 404 = listing without description (documented behavior is not explicit: treated as empty).
-    // Any other failure is reported in descriptionError so an empty description is never ambiguous.
+    // Separate endpoint. ML docs do not say what a listing without description returns, so a 404 is NOT assumed to mean "empty":
+    // every failure (404 included) goes to descriptionError so an empty description is never ambiguous.
     const desc = await mlFetch(input.integrationId, credentials, `/items/${encodeURIComponent(itemId)}/description`).catch((e) => ({ ok: false as const, status: -1, error: e instanceof Error ? e.message : String(e) }));
     const d = desc.ok ? mlDescription(desc.data) : { text: "", truncated: false };
-    const descriptionError = desc.ok || desc.status === 404 ? "" : `No se pudo leer la descripción: ${desc.error}`;
+    const descriptionError = desc.ok ? "" : `No se pudo leer la descripción (${desc.status || "sin respuesta"}): ${desc.error}`;
     return {
       success: true,
       id: item.id,

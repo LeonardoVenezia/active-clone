@@ -12,6 +12,7 @@ import {
   getStepImporter,
   type StepImporter,
 } from "./step-registry";
+import { resolveFieldValue } from "./field-path";
 import type { StepContext } from "./steps/step-handler";
 import { createHook, sleep } from "workflow";
 import { triggerStep } from "./steps/trigger";
@@ -62,41 +63,6 @@ export type WorkflowExecutionInput = {
   workflowId?: string; // Used by steps to fetch credentials
 };
 
-/**
- * Resolve a dotted field path against a step output, with array index support
- * (e.g. "orders[0].id"). Standard { success, data, error } outputs unwrap
- * automatically unless success/data/error is accessed explicitly.
- */
-// biome-ignore lint/suspicious/noExplicitAny: Dynamic output data traversal
-function resolveFieldValue(data: unknown, fieldPath: string): any {
-  const fields = fieldPath.split(".");
-  let current: any = data;
-  const firstField = fields[0];
-  if (
-    current &&
-    typeof current === "object" &&
-    "success" in current &&
-    "data" in current &&
-    firstField !== "success" &&
-    firstField !== "data" &&
-    firstField !== "error"
-  ) {
-    current = current.data;
-  }
-  for (const field of fields) {
-    if (!(current && typeof current === "object")) {
-      return undefined;
-    }
-    const indexed = /^([^[]+)\[(\d+)\]$/.exec(field);
-    if (indexed) {
-      const list = current[indexed[1]];
-      current = Array.isArray(list) ? list[Number(indexed[2])] : undefined;
-    } else {
-      current = current[field];
-    }
-  }
-  return current;
-}
 
 /**
  * Helper to replace template variables in conditions
