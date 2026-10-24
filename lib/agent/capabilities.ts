@@ -65,7 +65,7 @@ export async function connectOutcome(userId: string, rawSlug: string): Promise<C
   if (native) {
     const oauth = nativeOAuthApp(slug);
     if (oauth) return { kind: "card", card: { native: true, toolkitId: oauth.id, title: oauth.name, installPath: `${oauth.installPath}?popup=1`, grants: [], doesNotGrant: [], consentHint: "", generic: false } };
-    return { kind: "manual", name: native.name, fields: native.formFields.map(f => f.label) };
+    return { kind: "card", card: { native: true, manual: true, manualFields: native.formFields.map(f => f.label), toolkitId: native.id, title: native.name, installPath: "/connections", grants: [], doesNotGrant: [], consentHint: "", generic: false } };
   }
   if (PRESETS[slug]) return { kind: "card", card: { ...PRESETS[slug], generic: false, needsAttention: status === "needs_attention" } };
   const t = await describeToolkit(slug).catch(() => null);

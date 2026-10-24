@@ -71,7 +71,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
       execute: async ({ app }) => {
         if (i.draftMode) return { shown: false, reason: "draft mode: do not ask to connect now" };
         const o = await (i.deps?.connectOutcome ?? connectOutcome)(i.userId, app);
-        if (o.kind === "card") { out.connect = o.card; return { shown: true, note: "A card with the permissions is shown below your message." }; }
+        if (o.kind === "card") { out.connect = o.card; return { shown: true, note: "A card is shown below your message (OAuth apps: one-click sign-in; apps that need their own keys: a card that opens the Connections page, where the keys are entered securely). Never ask for keys in chat." }; }
         if (o.kind === "already_connected") return { shown: false, reason: "already connected, continue" };
         if (o.kind === "manual") return { shown: false, reason: `${o.name} connects from the Connections page with: ${o.fields.join(", ")}. No card can be shown here; tell the user that.` };
         if (o.kind === "pending") return { shown: false, reason: "connection is still finishing" };
