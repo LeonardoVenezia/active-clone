@@ -24,6 +24,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { centerInVisibleArea } from "@/lib/visible-area";
+import { manualInputFields } from "@/lib/manual-input";
+import { askRunInput } from "./run-input-dialog";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -380,6 +382,7 @@ function getMissingIntegrations(
 
 type ExecuteTestWorkflowParams = {
   workflowId: string;
+  input: Record<string, string>;
   nodes: WorkflowNode[];
   updateNodeData: (update: {
     id: string;
@@ -392,6 +395,7 @@ type ExecuteTestWorkflowParams = {
 
 async function executeTestWorkflow({
   workflowId,
+  input,
   nodes,
   updateNodeData,
   pollingIntervalRef,
@@ -415,7 +419,7 @@ async function executeTestWorkflow({
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ input: {} }),
+      body: JSON.stringify({ input }),
     });
 
     if (!response.ok) {
@@ -551,6 +555,15 @@ function useWorkflowHandlers({
       return;
     }
 
+    // A Manual trigger that asks for data (e.g. which product): collect it before saving or starting anything.
+    let runInput: Record<string, string> = {};
+    const asked = manualInputFields(nodes as never);
+    if (asked.length) {
+      const got = await askRunInput("Datos para ejecutar", asked);
+      if (!got) return;
+      runInput = got;
+    }
+
     if (startingRunRef.current || store.get(isExecutingAtom) || store.get(isSavingAtom)) return;
     startingRunRef.current = true;
     setIsSaving(true);
@@ -588,6 +601,7 @@ function useWorkflowHandlers({
     setIsExecuting(true);
     await executeTestWorkflow({
       workflowId: currentWorkflowId,
+      input: runInput,
       nodes,
       updateNodeData,
       pollingIntervalRef,

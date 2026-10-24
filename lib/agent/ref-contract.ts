@@ -30,7 +30,7 @@ function refsIn(v: unknown, out: { ref: string; id: string; rest: string; key: s
 export function analyzeRefs(nodes: RefNode[], declared: DeclaredFields): RefFinding[] {
   const findings: RefFinding[] = [];
   const byId = new Map(nodes.map((n) => [san(n.id), n]));
-  const classify = (where: string, r: { ref: string; id: string; rest: string }, target: { actionType?: string; manual?: boolean; kind: "node" | "inner" | "item" | "index" | "loop-entry" }) => {
+  const classify = (where: string, r: { ref: string; id: string; rest: string }, target: { actionType?: string; manual?: boolean; inputKeys?: string[]; kind: "node" | "inner" | "item" | "index" | "loop-entry" }) => {
     const f = (cls: RefFinding["cls"], note?: string) => findings.push({ where, ref: r.ref, cls, note });
     if (target.kind === "index") return f(r.rest === "number" ? "ok" : "shape-mismatch", "Index exposes only .number");
     if (target.kind === "loop-entry") return f(LOOP_ENTRY_FIELDS.includes(first(r.rest)) ? "ok" : "shape-mismatch", `Loop items entry fields: ${LOOP_ENTRY_FIELDS.join(",")}`);
@@ -38,7 +38,7 @@ export function analyzeRefs(nodes: RefNode[], declared: DeclaredFields): RefFind
     const at = target.actionType ?? "";
     if (target.manual) {
       if (!r.rest) return f("ok", "whole output");
-      return f(["triggered", "timestamp"].includes(first(r.rest)) ? "ok" : "unfillable", "Manual trigger output is {triggered,timestamp}; runs from the UI send an empty input, so any other field is empty at run time (the API /execute can pass one, the UI cannot)");
+      return f(["triggered", "timestamp", ...target.inputKeys ?? []].includes(first(r.rest)) ? "ok" : "unfillable", "Manual trigger output is {triggered,timestamp} plus the keys of its inputFields, which the run dialog asks for; any other field is empty at run time");
     }
     if (!r.rest) return f("ok", "whole output");
     const seg = first(r.rest);
@@ -61,7 +61,7 @@ export function analyzeRefs(nodes: RefNode[], declared: DeclaredFields): RefFind
     for (const r of own) {
       const t = byId.get(san(r.id));
       if (!t) { findings.push({ where: n.id, ref: r.ref, cls: "unresolved-target" }); continue; }
-      classify(n.id, r, { actionType: t.actionType, manual: t.config?.triggerType === "Manual", kind: "node" });
+      classify(n.id, r, { actionType: t.actionType, manual: t.config?.triggerType === "Manual", inputKeys: Array.isArray(t.config?.inputFields) ? (t.config?.inputFields as { key?: string }[]).map((x) => String(x?.key)) : [], kind: "node" });
     }
     const innerIds = new Set<string>();
     const loopSource = typeof cfg.source === "string" ? /^\s*\{\{@([^:]+):[^.}]+\.items\}\}\s*$/.exec(cfg.source) : null;
@@ -76,7 +76,7 @@ export function analyzeRefs(nodes: RefNode[], declared: DeclaredFields): RefFind
         if (inner.some((x) => san(x.id ?? "") === rid)) { findings.push({ where, ref: r.ref, cls: "unresolved-target", note: "inner step runs later or is this step" }); continue; }
         const t = byId.get(rid);
         if (!t) { findings.push({ where, ref: r.ref, cls: "unresolved-target" }); continue; }
-        classify(where, r, { actionType: t.actionType, manual: t.config?.triggerType === "Manual", kind: "node" });
+        classify(where, r, { actionType: t.actionType, manual: t.config?.triggerType === "Manual", inputKeys: Array.isArray(t.config?.inputFields) ? (t.config?.inputFields as { key?: string }[]).map((x) => String(x?.key)) : [], kind: "node" });
       }
       innerIds.add(san(s.id ?? ""));
     });
@@ -89,7 +89,7 @@ export function analyzeRefs(nodes: RefNode[], declared: DeclaredFields): RefFind
 // An unknown key is NOT proof of invalid: it only says nothing in the app reads or renders it.
 export type KeyFinding = { where: string; key: string; cls: "unknown-key"; note: string };
 export const TRIGGER_KEYS: Record<string, string[]> = {
-  Manual: [],
+  Manual: ["inputFields"],
   Webhook: ["webhookPath", "webhookSchema", "webhookMockRequest"],
   Schedule: ["scheduleCron", "scheduleTimezone"],
 };

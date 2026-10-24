@@ -13,7 +13,7 @@ const load = (p: string) => JSON.parse(readFileSync(p, "utf8")).nodes.map((n: an
 const home = process.env.HOME;
 for (const f of ["exact-case-609ff7c-config", "exact-case-d3d7d06-ds-config"]) { const p = `${home}/evidence/${f}.json`; if (!existsSync(p)) continue; const fs = analyzeConfigKeys(load(p), declaredKeys); console.log(f, "unknown keys:", fs.length ? fs.map((x: any) => `${x.where}.${x.key}`).join(", ") : "none"); }
 const ds = existsSync(`${home}/evidence/exact-case-d3d7d06-ds-config.json`) ? analyzeConfigKeys(load(`${home}/evidence/exact-case-d3d7d06-ds-config.json`), declaredKeys) : [];
-t("saved DS config: Manual inputFields flagged", ds.some((x: any) => x.key === "inputFields"));
+t("saved DS config: Manual inputFields no longer an unknown key (supported since the Manual-input change; historical config was invented then)", !ds.some((x: any) => x.key === "inputFields"));
 let fs: any[] = analyzeConfigKeys([{ id: "m", config: { triggerType: "Manual" } }], declaredKeys); t("Manual with no extras: clean", fs.length === 0);
 fs = analyzeConfigKeys([{ id: "s", config: { triggerType: "Schedule", scheduleCron: "0 9 * * *", scheduleTimezone: "x" } }], declaredKeys); t("Schedule known keys: clean", fs.length === 0);
 fs = analyzeConfigKeys([{ id: "g", config: { actionType: "tiendanube/get-product", productId: "1", bogus: 1 } }], declaredKeys); t("plugin action: declared key ok, bogus flagged", fs.length === 1 && fs[0].key === "bogus");

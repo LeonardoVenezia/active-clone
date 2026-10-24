@@ -43,6 +43,6 @@ t("generate-text: object.<field> ok (object variant)", fs[1].cls === "ok");
 t("generate-text: other field undeclared (not proof)", fs[2].cls === "undeclared");
 const MT = { id: "trg", label: "T", config: { triggerType: "Manual", inputFields: [{ key: "producto" }] } };
 fs = analyzeRefs([MT, { id: "x", actionType: "tiendanube/get-product", config: { productId: "{{@trg:T.producto}}", t: "{{@trg:T.timestamp}}" } }], declared);
-t("Manual trigger custom field = unfillable", fs[0].cls === "unfillable");
+t("Manual trigger field declared in inputFields = ok (supported since the Manual-input change; historically unfillable)", fs[0].cls === "ok");
 t("Manual trigger timestamp = ok", fs[1].cls === "ok");
 let f = 0; console.log(); for (const [k, ok] of res) { console.log(ok ? "PASS" : "FAIL", k); if (!ok) f++; } process.exit(f ? 1 : 0);

@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { validateWorkflowIntegrations } from "@/lib/db/integrations";
 import { workflowExecutions, workflowShares, workflows } from "@/lib/db/schema";
+import { manualInputFields, prepareInput } from "@/lib/manual-input";
 import { executeWorkflow } from "@/lib/workflow-executor.workflow";
 import type { WorkflowEdge, WorkflowNode } from "@/lib/workflow-store";
 
@@ -120,7 +121,19 @@ export async function POST(
 
     // Parse request body
     const body = await request.json().catch(() => ({}));
-    const input = body.input || {};
+    let input: Record<string, unknown> = body.input || {};
+    // A Manual trigger that asks for data: keep only the declared keys and refuse a run that lacks a required one.
+    const askedFields = manualInputFields(workflow.nodes as WorkflowNode[] as never);
+    if (askedFields.length) {
+      const prepared = prepareInput(askedFields, input);
+      if (prepared.missing.length) {
+        return NextResponse.json(
+          { error: `Falta completar: ${prepared.missing.join(", ")}`, missingInput: prepared.missing },
+          { status: 400 }
+        );
+      }
+      input = prepared.input;
+    }
 
     // Create execution record
     const [execution] = await db

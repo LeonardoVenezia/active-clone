@@ -1,4 +1,5 @@
 import { generateAIActionPrompts } from "@/plugins";
+import { manualInputError } from "@/lib/manual-input";
 import { generateAITriggerPrompts, getAllActions, getAllIntegrations, getAllTriggers } from "@/plugins/registry";
 import { tool } from "ai";
 import { z } from "zod";
@@ -168,7 +169,7 @@ NODE POSITIONING RULES:
 
 Trigger types:
 - Choose the trigger from the user's words: anything repeating ("todos los días", "cada mañana", "every day", "a las 8", "diario", "semanal", "cada hora") is ALWAYS Schedule with the right scheduleCron, NEVER Manual. Manual only when the user asks to run it by hand.
-- Manual: {"triggerType": "Manual"}
+- Manual: {"triggerType": "Manual"}. Optional "inputFields": [{"key": "producto", "label": "Producto (ID o SKU)"}] (up to 8, key = short identifier): when the user presses Run, the app asks for those values and later steps read each one as {{@trigger-id:Trigger Label.producto}}. Use it only for a value the user must choose at run time (which product, which order); a value known now goes straight into the step. Nothing else can be read from a Manual trigger.
 - Webhook: {"triggerType": "Webhook", "webhookPath": "/webhooks/name", ...}
 - Schedule: {"triggerType": "Schedule", "scheduleCron": "0 9 * * *", ...}
 ${pluginTriggerPrompts ? `Plugin event triggers (use these triggerType values when the flow starts from an app event; wire later steps with the listed outputs):
@@ -318,6 +319,8 @@ export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map
       if (httpSchema) errs.push(httpSchema);
       const unwired = unwiredReportStepError(shadow.nodes, shadow.edges);
       if (unwired) errs.push(unwired);
+      const manualIn = manualInputError(shadow.nodes as never);
+      if (manualIn) errs.push(manualIn);
       return errs;
     }
 

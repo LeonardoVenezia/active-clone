@@ -10,6 +10,7 @@ import { GlobalModals } from "@/components/global-modals";
 import { OverlayProvider } from "@/components/overlays/overlay-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { RunInputHost } from "@/components/workflow/run-input-dialog";
 import { PersistentCanvas } from "@/components/workflow/persistent-canvas";
 import { mono, sans } from "@/lib/fonts";
 import { cn } from "@/lib/utils";
@@ -56,6 +57,7 @@ const RootLayout = ({ children }: RootLayoutProps) => (
             <OverlayProvider>
               <LayoutContent>{children}</LayoutContent>
               <Toaster />
+              <RunInputHost />
               <GlobalModals />
             </OverlayProvider>
           </AuthProvider>
