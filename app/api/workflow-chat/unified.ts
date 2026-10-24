@@ -202,7 +202,9 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               try {
                 const gres = streamText({ model: (i.deps?.model ?? languageModel)(route), system, messages: [...msgs, { role: "user", content: review }], tools: { request_connection: tools.request_connection, show_form: tools.show_form }, stopWhen: stepCountIs(4), maxOutputTokens: 4096, temperature: 0.3, maxRetries: 0, abortSignal: guideAbort.signal });
                 let sep = reply.trim().length > 0;
-                for await (const part of gres.fullStream) { if (part.type === "text-delta" && part.text) { emit((sep ? "\n\n" : "") + part.text); sep = false; } }
+                const gl: PassLog = { stage: "guide", steps: 0, tools: {}, finish: "unknown", ms: 0, nodesAfter: shadow.nodes.length, capHit: false }; const tg = Date.now(); let chars = 0; passLog.push(gl);
+                for await (const part of gres.fullStream) { if (part.type === "start-step") gl.steps++; if (part.type === "finish") gl.finish = String((part as { finishReason?: unknown }).finishReason ?? "unknown"); if (part.type === "error") { const ge = part.error as { statusCode?: number; message?: string }; gl.finish = "error"; gl.error = { status: ge?.statusCode ?? "error", note: String(ge?.message ?? "").slice(0, 120) }; } if (part.type === "tool-call") gl.tools[part.toolName] = (gl.tools[part.toolName] ?? 0) + 1; if (part.type === "text-delta" && part.text) { chars += part.text.length; emit((sep ? "\n\n" : "") + part.text); sep = false; } }
+                gl.ms = Date.now() - tg; (gl as PassLog & { textChars?: number }).textChars = chars;
               } catch (e) { trace.record("guide", route, false, Date.now(), e); } finally { clearTimeout(gt); }
             }
             break;
@@ -218,7 +220,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
           const msg = i.selection.strict ? `El modelo elegido (${f?.route}/${f?.model}) no respondió${f?.status ? ` (${f.status})` : ""}. No se usó ningún otro modelo. Tu mensaje quedó guardado; probá de nuevo.` : "The free AI model didn't answer (it may be busy). Your message was kept; send it again in a moment.";
           writer.write({ type: "data-chat-error", data: { error: msg } }); return;
         }
-        if (!reply.trim()) emit(touched ? "Armé el flujo en el lienzo." : out.connect ? "Para seguir, conectá esta cuenta con la tarjeta de abajo." : out.undo ? "Deshago el último cambio." : out.templateImport ? "Importo la plantilla." : out.form ? out.form.title : "Listo.");
+        if (!reply.trim()) emit(touched ? (interrupted || validationLeft.length || timedOut ? "Dejé una parte del flujo en el lienzo pero quedó incompleta: no pude terminar de armarlo ni de revisarlo. Podés deshacerlo desde el chat o decime cómo seguimos." : "Armé el flujo en el lienzo.") : out.connect ? "Para seguir, conectá esta cuenta con la tarjeta de abajo." : out.undo ? "Deshago el último cambio." : out.templateImport ? "Importo la plantilla." : out.form ? out.form.title : "Listo.");
         if (started) writer.write({ type: "text-end", id: textId });
         await (i.deps?.append ?? append)(i.userId, i.workflowId, "assistant", reply.trim());
         if (i.selection.choice !== "auto" || s.fellBack || s.paid) {
