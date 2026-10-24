@@ -53,18 +53,20 @@ export function manualInputFields(nodes: NodeLike[] | undefined): ManualInputFie
   return parseInputFields(cfg);
 }
 
-/** Keeps only declared keys, as trimmed strings. Returns the cleaned input and the labels of required fields still empty. */
-export function prepareInput(fields: ManualInputField[], raw: unknown): { input: Record<string, string>; missing: string[] } {
+/** Keeps only declared keys, as trimmed strings. Returns the cleaned input, the labels of required fields still empty, and the labels of values over the length limit (never truncated: the caller must reject). */
+export function prepareInput(fields: ManualInputField[], raw: unknown): { input: Record<string, string>; missing: string[]; tooLong: string[] } {
   const src = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const input: Record<string, string> = {};
   const missing: string[] = [];
+  const tooLong: string[] = [];
   for (const f of fields) {
     const v = Object.prototype.hasOwnProperty.call(src, f.key) ? src[f.key] : undefined;
     const s = typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : "";
-    if (s) input[f.key] = s.slice(0, MANUAL_INPUT_MAX_VALUE);
+    if (s.length > MANUAL_INPUT_MAX_VALUE) tooLong.push(f.label);
+    else if (s) input[f.key] = s;
     else if (f.required) missing.push(f.label);
   }
-  return { input, missing };
+  return { input, missing, tooLong };
 }
 
 type FlowLike = { id: string; data?: { type?: string; config?: Record<string, unknown> } };

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type ManualInputField, prepareInput } from "@/lib/manual-input";
+import { MANUAL_INPUT_MAX_VALUE, type ManualInputField, prepareInput } from "@/lib/manual-input";
 
 type Req = { title: string; fields: ManualInputField[]; resolve: (v: Record<string, string> | null) => void };
 const EVENT = "ac:ask-run-input";
@@ -30,8 +30,9 @@ export function RunInputHost() {
   const close = (v: Record<string, string> | null) => { req?.resolve(v); setReq(null); };
   const submit = () => {
     if (!req) return;
-    const { input, missing } = prepareInput(req.fields, vals);
+    const { input, missing, tooLong } = prepareInput(req.fields, vals);
     if (missing.length) { setErr(`Falta completar: ${missing.join(", ")}`); return; }
+    if (tooLong.length) { setErr(`Demasiado largo (máximo ${MANUAL_INPUT_MAX_VALUE} caracteres): ${tooLong.join(", ")}`); return; }
     close(input);
   };
   return (
@@ -45,7 +46,7 @@ export function RunInputHost() {
           {req?.fields.map((f, i) => (
             <div className="space-y-1" key={f.key}>
               <Label htmlFor={`run-input-${f.key}`}>{f.label}{f.required ? "" : " (opcional)"}</Label>
-              <Input autoFocus={i === 0} id={`run-input-${f.key}`} maxLength={500} onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))} value={vals[f.key] ?? ""} />
+              <Input autoFocus={i === 0} id={`run-input-${f.key}`} maxLength={MANUAL_INPUT_MAX_VALUE} onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))} value={vals[f.key] ?? ""} />
             </div>
           ))}
           {err ? <p className="text-destructive text-sm" role="alert">{err}</p> : null}

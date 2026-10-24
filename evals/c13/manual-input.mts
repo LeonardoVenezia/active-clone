@@ -16,7 +16,9 @@ const f = m.parseInputFields(cfg);
 t("array/object values rejected", m.prepareInput(f, { producto: ["x"] }).missing.length === 1 && m.prepareInput(f, { producto: { a: 1 } }).missing.length === 1);
 let p = m.prepareInput(f, { producto: " 123 ", extra: "x" }); t("trims, drops undeclared", p.input.producto === "123" && !("extra" in p.input) && p.missing.length === 0);
 p = m.prepareInput(f, {}); t("required missing reported", p.missing.length === 1);
-p = m.prepareInput(f, { producto: "x".repeat(900) }); t("value capped", p.input.producto.length === 500);
+p = m.prepareInput(f, { producto: "x".repeat(900) }); t("over-limit value is flagged, not truncated", p.tooLong.length === 1 && !("producto" in p.input));
+p = m.prepareInput(f, { producto: "x".repeat(500) }); t("exactly 500 accepted intact", p.tooLong.length === 0 && p.input.producto.length === 500);
+t("route rejects over-limit with 400", /tooLongInput/.test(readFileSync("app/api/workflow/[workflowId]/execute/route.ts", "utf8")));
 // engine merge (same expression as workflow-executor) + ref resolution
 const triggerData = { ...{ triggered: true, timestamp: 1 }, ...m.prepareInput(f, { producto: "ABC" }).input };
 t("engine data resolves ref", fp.resolveFieldValue(triggerData, "producto") === "ABC");
