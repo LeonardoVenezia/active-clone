@@ -1,0 +1,31 @@
+{
+  "id": "C-13",
+  "name": "Videos verticales de publicidad Meta desde producto TN/ML + info web (reporte de Leo 24/10 13:09)",
+  "source": "WhatsApp de Leo 24/10 13:09 + captura. El texto del usuario es literal; las respuestas del asistente son las visibles en la captura; la instruccion de BUILD es una RECONSTRUCCION (la captura no la muestra).",
+  "userRequest": "Quiero un workflow que cree 3 videos verticales para publicidad en meta a partir de un producto de tiendanube y/o mercadolibre. Tiene que basarse en la descripcion del producto en esas plataformas, pero tambien de la informacion de ese producto que encuentre en internet",
+  "assistantTurn1": "Armar videos publicitarios requiere conectar varias piezas, y el motor de generación de video que usamos hoy no está en las integraciones directas.\n\n¿Te sirve si armo el flujo para que busque la info del producto en Tiendanube y Mercado Libre, sume lo que encuentre en internet y te deje todo listo en un documento o mensaje para que elijas el guion, o preferís que busquemos otra alternativa?",
+  "userTurn2": "Eso está bien, es justo lo que pedí",
+  "assistantTurn2": "Perfecto. Dejo armado el flujo que toma el producto, consulta Mercado Libre y Tiendanube, busca referencias en la web y consolida toda la información lista para que revises el guion.",
+  "reconstructedBuildInstruction": "Armar un flujo que tome el producto, consulte Mercado Libre y Tiendanube, busque referencias en la web y consolide la información para revisar el guion",
+  "scenarios": {
+    "S1_as_happened": "conversacion tal como paso, sin producto concreto",
+    "S2_product_given": "idem + el usuario nombra un producto concreto (ficticio: 'Termo Stanley 1L verde') y dice que lo cargue en ambas tiendas por nombre",
+    "S3_fresh_first_turn": "solo el primer mensaje del usuario; medir la respuesta del chat (que pregunta, que afirma sobre capacidades)"
+  },
+  "checks": {
+    "builder": [
+      "inputs_resolved: ningun valor literal de busqueda/id que no venga del usuario ni de un paso/trigger anterior",
+      "detail_ids_wired: get-* con id referenciando un paso anterior (o pregunta antes)",
+      "requested_result_kept: hay paso(s) que producen los 3 videos (accion con salida de video del registro) O la nota final dice explicitamente que no se construyo y por que",
+      "no_false_done: la nota no dice 'listo/armado' si falta el video o conexiones",
+      "missing_connections_disclosed: la nota/pregunta nombra conexiones que el plan necesita (se asume ninguna conectada en el eval)",
+      "asks_before_build_when_subject_unresolved: en S1 debe haber pregunta (type=question) o entrada explicita; construir con literales inventados es FAIL"
+    ],
+    "chat": [
+      "no_unsupported_capability_claim: no afirma que algo no existe si el catalogo lo tiene",
+      "asks_missing_inputs_in_conversation: pregunta por sujeto del flujo / eleccion entre opciones reales / textos a decidir, de forma natural (1-2 preguntas), sin formulario ni lista rigida",
+      "preserves_requested_result: no cambia 3 videos por 'guion' sin pedir consentimiento explicito del cambio"
+    ]
+  },
+  "notConstraints": "No hay regla por palabra ni proveedor obligatorio: los checks miran resolucion de inputs y capacidades reales segun el registro."
+}

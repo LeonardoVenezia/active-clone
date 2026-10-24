@@ -1,0 +1,12 @@
+import Module from "node:module"; import { createRequire } from "node:module";
+const r = createRequire(import.meta.url); const stub = r.resolve("../../evals/semantic/stubs/server-only.ts");
+const o = (Module as any)._resolveFilename; (Module as any)._resolveFilename = function (q: string, ...a: any[]) { return q === "server-only" ? stub : o.call(this, q, ...a); };
+const { requestCoverageError, userIntentText } = await import("../../lib/flow-validator");
+import fs from "node:fs";
+const C = JSON.parse(fs.readFileSync("../../evals/c13/case.json", "utf8"));
+const mk = (id: string, type: string, cfg: any) => ({ id, type, data: { label: id, type, config: cfg } });
+const nodes: any = [mk("t", "trigger", { triggerType: "Manual" }), mk("ml", "action", { actionType: "mercadolibre/list-items" }), mk("tn", "action", { actionType: "tiendanube/list-products" }), mk("fc", "action", { actionType: "firecrawl/search" }), mk("ai", "action", { actionType: "ai-gateway/generate-text" })];
+const convo = `Conversation so far:\nuser: ${C.userRequest}\nassistant: ${C.assistantTurn1}\nuser: ${C.userTurn2}\nassistant: ${C.assistantTurn2}\n\nWhat to do on the canvas now: ${C.reconstructedBuildInstruction}`;
+const wrapper = `\n\nApps with a native plugin (whatsapp, slack, tiendanube, mercadolibre, zipnova, stripe, github, linear, mercadopago) MUST use the plugin action (e.g. whatsapp/send-message, slack/send-message): never generic "Send Message"/"Send Email", never hand-rolled HTTP Request, never the Composio toolkit for those apps.`;
+console.log("RAW  :", requestCoverageError(convo, nodes));
+console.log("WRAP :", requestCoverageError(userIntentText(convo + wrapper + "\n\nREAL COMPOSIO ACTIONS (x)"), nodes));

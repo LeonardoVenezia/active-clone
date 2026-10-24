@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
 import { generateAITriggerPrompts, getActionOutputFields, getActionOutputItemFields, getAllActions, getAllTriggers } from "@/plugins/registry";
-import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, cyclicFlowError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, requestCoverageError, sheetContractError, shipmentDetailError, unwiredReportStepError, validateFlow } from "@/lib/flow-validator";
+import { userIntentText, type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, cyclicFlowError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, requestCoverageError, sheetContractError, shipmentDetailError, unwiredReportStepError, validateFlow } from "@/lib/flow-validator";
 import { type SourceContract, contractPromptBlock, extractApiSample, inspectSheetsContracts } from "@/lib/source-inspector";
 import { layoutPositions } from "@/lib/auto-layout";
 import { discoverComposio } from "@/plugins/composio/steps/catalog";
@@ -381,13 +381,13 @@ export async function POST(request: Request) {
     const startedEmpty = (existingWorkflow?.nodes ?? []).every((n: FlowNode) => ((n.data as { config?: Record<string, unknown> } | undefined)?.config?.placeholder === true));
     const computeErrors = (): string[] => {
       const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes(), { validTriggerTypes: getValidTriggerTypes(), composioCatalog: composioCatalogMap, actionItemFields: getActionOutputItemFields(), userPrompt });
-      const coverage = planCoverageError(userPrompt, shadow.nodes);
+      const coverage = planCoverageError(userIntentText(userPrompt), shadow.nodes);
       if (coverage) errs.push(coverage);
-      const appCoverage = requestCoverageError(userPrompt, shadow.nodes);
+      const appCoverage = requestCoverageError(userIntentText(userPrompt), shadow.nodes);
       if (appCoverage) errs.push(appCoverage);
-      const channel = channelConsistencyError(userPrompt, shadow.nodes);
+      const channel = channelConsistencyError(userIntentText(userPrompt), shadow.nodes);
       if (channel) errs.push(channel);
-      const perItem = perItemLoopError(userPrompt, shadow.nodes);
+      const perItem = perItemLoopError(userIntentText(userPrompt), shadow.nodes);
       if (perItem) errs.push(perItem);
       const shipment = shipmentDetailError(shadow.nodes, shadow.edges);
       if (shipment) errs.push(shipment);

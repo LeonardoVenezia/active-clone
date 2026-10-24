@@ -627,6 +627,18 @@ function extractRequestSteps(promptText: string): string[] {
   return steps;
 }
 
+
+// The chat client wraps the user's request in fixed builder boilerplate (native-app list, wiring rules, catalog dump).
+// Coverage checks must read only what the user actually asked for, never that boilerplate.
+export function userIntentText(promptText: string): string {
+  let t = String(promptText);
+  const i = t.search(/\n\s*Apps with a native plugin \(/);
+  if (i >= 0) t = t.slice(0, i);
+  const j = t.search(/\n\s*(?:REAL COMPOSIO ACTIONS|No Composio action catalog)/);
+  if (j >= 0) t = t.slice(0, j);
+  return t;
+}
+
 export function requestCoverageError(promptText: string, nodes: FlowNode[]): string | null {
   const missing: string[] = [];
   const stepLines = extractRequestSteps(promptText);
