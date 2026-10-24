@@ -205,6 +205,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               await resolveObjective(route);
               fixFormulaRefsIn(shadow); validationLeft = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest, skipDeliverables: skipKinds });
               timedOut = abort.signal.aborted;
+              if (closeReason === "rounds-exhausted" && !validationLeft.length) closeReason = "clean-after-last-round";
               if (startedEmpty && shadow.nodes.length) { const pos = layoutPositions(shadow.nodes, shadow.edges); for (const n of shadow.nodes) { const p = pos.get(n.id); if (p) { (n as { position?: unknown }).position = p; } } }
               for (const n of shadow.nodes) { const c = (n.data as { config?: Record<string, unknown> } | undefined)?.config; if (c?.placeholder === true && (typeof c.actionType === "string" || typeof c.triggerType === "string" || typeof c.scheduleCron === "string" || typeof c.cron === "string")) delete c.placeholder; }
               if (interrupted || timedOut || validationLeft.length) emit(`${reply.trim() ? "\n\n" : ""}Estado del armado: PARCIAL${interrupted ? " (se cortó una llamada al modelo)" : timedOut ? " (llegó al tiempo límite)" : ""}${validationLeft.length ? `, ${validationLeft.length} punto${validationLeft.length === 1 ? "" : "s"} sin resolver` : ""}. Lo que sigue describe lo que quedó en el lienzo; puede no cumplir todo lo pedido.`);
@@ -249,7 +250,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
         await (i.deps?.append ?? append)(i.userId, i.workflowId, "assistant", reply.trim());
         if (i.selection.choice !== "auto" || s.fellBack || s.paid) {
           // Redacted, QA-only: structure and counts, never message text or keys.
-          const build = { objective: Object.fromEntries(standing), closeReason: interrupted ? `${closeReason}+model-call-interrupted` : closeReason, capMs, elapsedMs: Date.now() - t0, interrupted, finalNodes: shadow.nodes.length, finalEdges: shadow.edges.length, validationLeft: validationLeft.slice(0, 5).map(e => e.slice(0, 120)), rounds, passes: passLog };
+          const build = { version: (process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 7), objective: Object.fromEntries(standing), closeReason: interrupted ? `${closeReason}+model-call-interrupted` : closeReason, capMs, elapsedMs: Date.now() - t0, interrupted, finalNodes: shadow.nodes.length, finalEdges: shadow.edges.length, validationLeft: validationLeft.slice(0, 5).map(e => e.slice(0, 120)), rounds, passes: passLog };
           console.info("[ai-build-trace]", JSON.stringify(build));
           writer.write({ type: "data-model-trace", data: { ...s, build } });
         }
