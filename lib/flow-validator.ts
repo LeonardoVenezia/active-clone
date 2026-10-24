@@ -1246,3 +1246,38 @@ export function unwiredReportStepError(nodes: FlowNode[], edges: FlowEdge[]): st
   }
   return errors.length ? errors.join("\n") : null;
 }
+
+
+/** Data-order race: node Y reads the output of canvas node X, X is an ancestor of Y, but the engine does NOT guarantee X finished before Y starts
+ *  (any-parent-once join: Y starts when its FIRST parent completes, so another parent may win the race). Scope, deliberately narrow:
+ *  all-active origins only. X downstream of a Condition is NOT flagged (alternative-branch refs are valid by intent); that case is analysis only.
+ *  Returns null when every checked ref is guaranteed. */
+export function refOrderRaceError(nodes: FlowNode[], edges: FlowEdge[]): string | null {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const parents = new Map<string, string[]>();
+  for (const e of edges) { if (!parents.has(e.target)) parents.set(e.target, []); parents.get(e.target)!.push(e.source); }
+  const memo = new Map<string, boolean>();
+  const guaranteed = (x: string, y: string, seen = new Set<string>()): boolean => {
+    const k = `${x}>${y}`; if (memo.has(k)) return memo.get(k)!;
+    if (seen.has(y)) return false; seen.add(y);
+    const ps = parents.get(y) ?? [];
+    const r = ps.length > 0 && ps.every((p) => p === x || guaranteed(x, p, seen));
+    memo.set(k, r); return r;
+  };
+  const anc = (id: string, acc = new Set<string>()): Set<string> => { for (const p of parents.get(id) ?? []) if (!acc.has(p)) { acc.add(p); anc(p, acc); } return acc; };
+  const underCondition = (x: string) => [...anc(x)].some((a) => actionTypeOf(byId.get(a) as FlowNode) === "Condition") || actionTypeOf(byId.get(x) as FlowNode) === "Condition";
+  const problems: string[] = [];
+  for (const y of nodes) {
+    if ((parents.get(y.id) ?? []).length < 2) continue; // a single parent chain is always ordered
+    const text = JSON.stringify(y.data?.config ?? {});
+    const refs = new Set<string>(); for (const m of text.matchAll(/\{\{@([\w-]+):/g)) refs.add(m[1]);
+    for (const x of refs) {
+      if (x === y.id || !byId.has(x) || x === "item" || x === "index") continue;
+      const a = anc(y.id); if (!a.has(x)) continue; // unreachable refs are reported by the reachability rule
+      if (guaranteed(x, y.id) || underCondition(x)) continue;
+      problems.push(`"${y.id}" reads "${x}" but has ${(parents.get(y.id) ?? []).length} parents and the engine starts a node when its FIRST parent finishes, so "${x}" may not have run yet`);
+    }
+  }
+  if (!problems.length) return null;
+  return `orden: ${problems.slice(0, 4).join("; ")}. Chain the steps in one line (each node's only parent is the previous step) so every reference is already produced; for an optional step use a Loop over the list with maxItems 1 instead of a parallel branch. Do not add an extra reference edge: it does not make a node wait for all its parents`;
+}
