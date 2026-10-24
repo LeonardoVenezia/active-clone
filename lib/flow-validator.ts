@@ -636,6 +636,9 @@ export function userIntentText(promptText: string): string {
   if (i >= 0) t = t.slice(0, i);
   const j = t.search(/\n\s*(?:REAL COMPOSIO ACTIONS|No Composio action catalog)/);
   if (j >= 0) t = t.slice(0, j);
+  // The agreed plan is the request. Earlier chat turns may hold options the user later dropped ("de mercadolibre no hace falta").
+  const k = t.indexOf("What to do on the canvas now:");
+  if (t.startsWith("Conversation so far:") && k >= 0) t = t.slice(k + "What to do on the canvas now:".length).trim();
   return t;
 }
 
