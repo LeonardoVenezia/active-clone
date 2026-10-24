@@ -43,7 +43,8 @@ export function aiOutputOf(cfg: Record<string, unknown> | undefined): AiOutput {
 export function aiFieldPathProblem(cfg: Record<string, unknown> | undefined, fieldPath: string, how: string): string | null {
   const segs = fieldPath.split(".");
   const first = (segs[0] ?? "").replace(/\[\d+\]$/, "");
-  if (ENVELOPE_FIELDS.includes(first)) return null;
+  // The AI step returns exactly {success,text|object} or {success:false,error}: .data does NOT exist on it, nor does an invented .object.
+  if (first === "success" || first === "error") return null;
   const out = aiOutputOf(cfg);
   if (out.kind === "text") {
     if (first === "text") return null;
@@ -65,6 +66,7 @@ export function aiFieldPathProblem(cfg: Record<string, unknown> | undefined, fie
 // ---- constant Fórmula ----
 export type ConstFormula = { known: true; value: unknown } | { known: false };
 const PATH_RE = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/;
+const JSONATA_WORDS = new Set(["true", "false", "null", "and", "or", "in", "function", "$"]); // parsed as literals/operators, not field names
 const MAX_CONST_BYTES = 65536;
 /** Statically known `result` of a Fórmula, only when no code has to run: input without {{templates}} (JSON), expression a plain dotted path
  *  over that input (no array traversal) or a JSON literal. Everything else (any JSONata operator/function) is unknown. */
@@ -74,12 +76,13 @@ export function constantFormulaResult(cfg: Record<string, unknown> | undefined):
   let data: unknown;
   if (typeof input === "string") {
     if (input.length > MAX_CONST_BYTES || input.includes("{{")) return { known: false };
-    try { data = input.trim() ? JSON.parse(input) : {}; } catch { return { known: false }; }
+    if (!input.trim()) return { known: false };
+    try { data = JSON.parse(input); } catch { return { known: false }; }
   } else if (input === undefined || input === null) data = {};
   else if (typeof input === "object") { try { if (JSON.stringify(input).includes("{{")) return { known: false }; } catch { return { known: false }; } data = input; }
   else return { known: false };
   const e = expr.trim();
-  if (PATH_RE.test(e)) {
+  if (PATH_RE.test(e) && !e.split(".").some((w) => JSONATA_WORDS.has(w))) {
     let cur: unknown = data;
     for (const p of e.split(".")) {
       if (Array.isArray(cur) || !cur || typeof cur !== "object") return { known: false }; // JSONata maps over arrays; not modelled
@@ -87,7 +90,9 @@ export function constantFormulaResult(cfg: Record<string, unknown> | undefined):
     }
     return cur === undefined ? { known: false } : { known: true, value: cur };
   }
-  try { return { known: true, value: JSON.parse(e) }; } catch { return { known: false }; }
+  // JSON-literal subset: only an object or array literal with no nested-array flattening differences (JSONata array constructors keep nesting; checked in the differential test).
+  if (e.startsWith("{") || e.startsWith("[")) { try { return { known: true, value: JSON.parse(e) }; } catch { return { known: false }; } }
+  return { known: false };
 }
 
 const kindOf = (v: unknown) => (Array.isArray(v) ? "an array" : v === null ? "null" : typeof v === "object" ? `an object with the keys ${Object.keys(v as object).slice(0, 8).join(", ") || "(none)"}` : `a ${typeof v}`);

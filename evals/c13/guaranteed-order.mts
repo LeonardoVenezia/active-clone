@@ -1,4 +1,4 @@
-// D (proposal + test only, NOT wired into validateFlow). Separates three notions on a DAG under the engine's any-parent-once join
+// D (proposal + test only, NOT wired into validateFlow). SCOPE: all nodes ACTIVE (no Condition skipping). The iff below holds only for that DAG model, over the sampled durations; it is NOT a universal proof. With Conditions (a skipped parent never completes) it is analysis only: guaranteedBefore over all structural parents is then conservative, and whether a skipped branch counts is not modelled here. Separates three notions on a DAG under the engine's any-parent-once join
 // (a node starts when its FIRST completed active parent finishes; lib/workflow-executor.workflow.ts "Merge semantics"):
 //  reachable(X,Y)        X is an ancestor of Y.
 //  guaranteedBefore(X,Y) in EVERY run X has completed before Y starts: for every parent p of Y, X==p or guaranteedBefore(X,p).  (all parents of Y, because Y may start after ANY one of them)

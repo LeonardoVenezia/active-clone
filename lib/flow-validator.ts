@@ -1,5 +1,5 @@
 import jsonata from "jsonata";
-import { AI_TEXT_ACTION, ENVELOPE_FIELDS, aiFieldPathProblem, checkAiSchema, loopSourceFormulaProblem } from "@/lib/agent/output-contract";
+import { AI_TEXT_ACTION, aiFieldPathProblem, checkAiSchema, loopSourceFormulaProblem } from "@/lib/agent/output-contract";
 
 /**
  * Deterministic post-generation validation for AI-built workflows.
@@ -93,11 +93,9 @@ function innerStepFieldProblem(
   outputsOf: (a: string) => string[] | undefined
 ): string | null {
   if (!fieldPath) return null;
-  const first = fieldPath.split(".")[0]?.split("[")[0] ?? "";
   if (actionType === AI_TEXT_ACTION) return aiFieldPathProblem(cfg, fieldPath, how);
   if (actionType === "composio/run-tool" || actionType === "Run Composio Action") return null;
-  const known = outputsOf(actionType);
-  if (known && first && !ENVELOPE_FIELDS.includes(first) && !known.includes(first)) return `${how} reads ".${first}" but ${actionType} only outputs: ${known.join(", ")}`;
+  // Other actions: outputFields may be incomplete and shapes are dynamic -> unknown, never flagged here.
   return null;
 }
 

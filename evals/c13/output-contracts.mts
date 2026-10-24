@@ -27,6 +27,7 @@ t("ref .object.nope flagged", has(run([aiNode({ aiFormat: "object", aiSchema: sc
 t("ref .text on text AI ok", !has(run([aiNode({}), reader("text")], [E("t", "a"), E("a", "r")]), /Guion/));
 t("envelope .success/.error always allowed", !has(run([aiNode({}), reader("success")], [E("t", "a"), E("a", "r")]), /Guion/));
 t("dynamic field on a NON-ai step with unknown action is not flagged", !has(run([N("c", "Comp", { actionType: "composio/run-tool" }), N("r", "R", { actionType: "ai-gateway/generate-text", aiPrompt: "{{@c:Comp.anything.deep}}" })], [E("t", "c"), E("c", "r")]), /anything/));
+t("AI step has no .data: ref flagged (envelope is only success/error)", has(run([aiNode({}), reader("data.text")], [E("t", "a"), E("a", "r")]), /only outputs: text, object/));
 // ---- Fórmula list -> Loop source
 const form = (expr: string, input = '{"a":[1,2,3]}') => N("f", "Lista", { actionType: "Fórmula", input, expression: expr });
 const loop = (rest: string, steps: any[] = [{ id: "s1", actionType: "ai-gateway/generate-text", config: { aiPrompt: "{{@item:Item}}" } }]) => N("l", "Bucle", { actionType: "Loop", source: `{{@f:Lista.${rest}}}`, steps });
@@ -38,6 +39,20 @@ t("Loop source .result when Formula returns an object: flagged", has(lerr('{"ang
 t("non-constant Formula (JSONata function) is UNKNOWN, not flagged", !has(lerr("$map(a, function($x){$x})", "result.angulos"), /Loop "l"/));
 t("templated Formula input is UNKNOWN, not flagged", !has(lerr("a", "result.angulos", '{"a": {{@t:T.x}}}'), /Loop "l"/));
 t("constantFormulaResult bounded (oversize unknown)", oc.constantFormulaResult({ input: "[" + "1,".repeat(40000) + "1]", expression: "a" }).known === false);
+t("inner NON-ai step with an undeclared field is UNKNOWN, not flagged (outputFields not exhaustive)", !has(run([form("a"), N("l1", "L1", { actionType: "Loop", source: "{{@f:Lista.result}}", steps: [{ id: "g", actionType: "fal/generate-video", config: {} }] }), N("l2", "L2", { actionType: "Loop", source: "{{@l1:L1.items}}", steps: [{ id: "v", actionType: "ai-gateway/generate-text", config: { aiPrompt: "{{@item:Item.steps.g.whatever}}" } }] })], [E("t", "f"), E("f", "l1"), E("l1", "l2")]), /whatever/));
+// ---- C semantics vs REAL JSONata (differential, same lib the engine uses). Subset: plain dotted path over an object input, object/array literal. Anything else must be unknown.
+const jsonata: any = (await import("jsonata")).default;
+const cases: [string, string][] = [["a", '{"a":[1,2]}'], ["a.b", '{"a":{"b":[1]}}'], ["a.b", '{"a":{"b":5}}'], ["x", '{"a":1}'], ["a", '{"a":null}'], ["a.b", '{"a":null}'], ["a.b", '{"a":[{"b":1},{"b":2}]}'], ["a", '{"a":[[1],[2]]}'], ["true", '{"true":[1]}'], ["null", '{"null":[1]}'], ["and", '{"and":[1]}'], ["a", '[{"a":1}]'], ["a", '""'], ['{"k":[1,2]}', '{}'], ["[[1],[2]]", "{}"], ["[1,[2,3]]", "{}"], ['{"a":{"b":[]}}', "{}"], ["[]", "{}"], ["$x", "{}"], ["a.b.c", '{"a":{"b":{"c":[3]}}}'], ["a", '{"a":[3]}'], ["a", '{"a":{"b":1}}']];
+let diffBad = 0, known = 0;
+for (const [expr, input] of cases) {
+  const c = oc.constantFormulaResult({ input, expression: expr });
+  if (!c.known) continue; known++;
+  let real: any; try { real = await jsonata(expr).evaluate(JSON.parse(input)); } catch { real = "ERR"; }
+  const same = JSON.stringify(real === undefined ? null : real) === JSON.stringify(c.value);
+  if (!same) { diffBad++; console.log("  DIFF", expr, input, JSON.stringify(real), JSON.stringify(c.value)); }
+}
+t(`constantFormulaResult agrees with real JSONata on every case it claims to know (${known} known of ${cases.length}, diffs=${diffBad})`, diffBad === 0 && known > 5);
+t("reserved words true/null/and are UNKNOWN", ["true", "null", "and"].every((w) => oc.constantFormulaResult({ input: `{"${w}":[1]}`, expression: w }).known === false));
 // ---- Loop.items -> Loop / Formula over steps.<sid>.<field>
 const inner = (cfg: any, type = "ai-gateway/generate-text") => N("l1", "L1", { actionType: "Loop", source: "{{@f:Lista.result}}", steps: [{ id: "write_script", actionType: type, config: { aiPrompt: "x", ...cfg } }] });
 const nested = (path: string, cfg: any) => run([form("a"), inner(cfg), N("l2", "L2", { actionType: "Loop", source: "{{@l1:L1.items}}", steps: [{ id: "v", actionType: "ai-gateway/generate-text", config: { aiPrompt: `{{@item:Item.steps.write_script.${path}}}` } }] })], [E("t", "f"), E("f", "l1"), E("l1", "l2")]);
