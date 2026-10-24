@@ -1,5 +1,5 @@
 import { generateAIActionPrompts } from "@/plugins";
-import { generateAITriggerPrompts, getAllActions, getAllTriggers } from "@/plugins/registry";
+import { generateAITriggerPrompts, getAllActions, getAllIntegrations, getAllTriggers } from "@/plugins/registry";
 import { tool } from "ai";
 import { z } from "zod";
 import { getActionOutputFields, getActionOutputItemFields } from "@/plugins/registry";
@@ -263,6 +263,23 @@ export function getValidActionTypes(): Set<string> {
 
 
 
+
+// Deliverable check driven by the registry: when the request asks to create/generate videos, images or audio and the product has
+// actions whose output is that media, the canvas must contain one. Prevents silently swapping the deliverable for a script/text.
+const MEDIA: [RegExp, string, string][] = [[/\b(?:cre\w*|gener\w*|arm\w*|produc\w*|hac\w*|make|creat\w*|build)\s+(?:\w+\s+){0,4}?videos?\b/i, "video", "video"], [/\b(?:cre\w*|gener\w*|produc\w*|make|creat\w*)\s+(?:\w+\s+){0,3}?(?:im[aá]genes|imagen|images?)\b/i, "image", "image"], [/\b(?:cre\w*|gener\w*|produc\w*|make|creat\w*)\s+(?:\w+\s+){0,3}?(?:audios?|voz|voice)\b/i, "audio", "audio"]];
+export function deliverableCoverageError(requestText: string, nodes: FlowNode[]): string | null {
+  const types = new Map<string, Set<string>>();
+  for (const p of getAllIntegrations()) for (const a of p.actions) { const t = (a as { outputConfig?: { type?: string } }).outputConfig?.type; if (t) { if (!types.has(t)) types.set(t, new Set()); types.get(t)?.add(`${p.type}/${a.slug}`); } }
+  const missing: string[] = [];
+  for (const [re, kind, label] of MEDIA) {
+    if (!re.test(requestText)) continue;
+    const ids = types.get(kind); if (!ids?.size) continue;
+    const has = nodes.some(n => ids.has(String((n.data as { config?: { actionType?: string } } | undefined)?.config?.actionType ?? "")));
+    if (!has) missing.push(`${label} (use one of: ${[...ids].join(", ")})`);
+  }
+  return missing.length ? `consistencia: the request asks to create ${missing.join("; ")} but the canvas has no step that produces it; add that step (one per item when several are requested, inside the Loop) instead of stopping at text/scripts` : null;
+}
+
 export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map<string, string[]>; sheetContracts: SheetColumnsContract[]; userPrompt: string }): string[] {
   const { composioCatalogMap, sheetContracts, userPrompt } = ctx;
       const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes(), { validTriggerTypes: getValidTriggerTypes(), composioCatalog: composioCatalogMap, actionItemFields: getActionOutputItemFields(), userPrompt });
@@ -284,7 +301,9 @@ export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map
       if (condExpr) errs.push(condExpr);
       const formExpr = formulaExpressionError(shadow.nodes, getActionOutputItemFields());
       if (formExpr) errs.push(formExpr);
-      const cyclic = cyclicFlowError(shadow.nodes, shadow.edges);
+      const deliverable = deliverableCoverageError(userIntentText(userPrompt), shadow.nodes);
+  if (deliverable) errs.push(deliverable);
+  const cyclic = cyclicFlowError(shadow.nodes, shadow.edges);
       if (cyclic) errs.push(cyclic);
       const sheetContract = sheetContractError(shadow.nodes, sheetContracts);
       if (sheetContract) errs.push(sheetContract);

@@ -15,5 +15,6 @@ const body = await res.text(); const ev = body.split("\n").filter(l => l.startsW
 console.log("TEXT:", ev.filter((e: any) => e.type === "text-delta").map((e: any) => e.delta).join(""));
 console.log("RESULT:", JSON.stringify(ev.find((e: any) => e.type === "data-chat-result")?.data));
 { const b = ev.find((e: any) => e.type === "data-chat-result")?.data?.build; if (b) fs.writeFileSync("/tmp/plan.txt", b); }
+{ const f = ev.find((e: any) => e.type === "data-canvas-final")?.data; console.log("CANVAS:", f ? JSON.stringify({ name: f.name, actions: f.nodes.map((n: any) => n.data?.config?.actionType ?? n.data?.config?.triggerType), edges: f.edges.length, validation: f.validation, timedOut: f.timedOut }) : "none"); }
 console.log("ERR:", ev.find((e: any) => e.type === "data-chat-error")?.data?.error ?? "-");
 console.log("TRACE:", JSON.stringify(ev.find((e: any) => e.type === "data-model-trace")?.data ?? "-"));
