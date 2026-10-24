@@ -175,7 +175,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
         if (started) writer.write({ type: "text-end", id: textId });
         await (i.deps?.append ?? append)(i.userId, i.workflowId, "assistant", reply.trim());
         if (i.selection.choice !== "auto" || s.fellBack || s.paid) writer.write({ type: "data-model-trace", data: s });
-        writer.write({ type: "data-chat-result", data: { build: touched ? planText || "built" : null, connect: out.connect, form: out.connect || touched ? null : out.form, template: out.connect || touched ? null : out.template, templateImport: out.connect ? null : out.templateImport, undo: out.undo && !out.connect && !touched ? true : null, autoBuild: false, unified: true } });
+        writer.write({ type: "data-chat-result", data: { build: null, built: touched, connect: out.connect, form: out.connect || touched ? null : out.form, template: out.connect || touched ? null : out.template, templateImport: out.connect ? null : out.templateImport, undo: out.undo && !out.connect && !touched ? true : null, autoBuild: false, unified: true } });
       },
     }),
   });
