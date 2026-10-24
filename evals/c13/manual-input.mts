@@ -9,7 +9,11 @@ t("parse keeps valid fields", m.parseInputFields(cfg).length === 2);
 t("bad key rejected", m.manualInputProblems({ triggerType: "Manual", inputFields: [{ key: "1 x", label: "a" }] }).length > 0);
 t("reserved key rejected", m.manualInputProblems({ triggerType: "Manual", inputFields: [{ key: "timestamp", label: "a" }] }).length > 0);
 t("too many rejected", m.manualInputProblems({ triggerType: "Manual", inputFields: Array.from({ length: 9 }, (_, i) => ({ key: "k" + i, label: "a" })) }).length > 0);
+for (const k of ["constructor", "prototype", "toString", "hasOwnProperty", "__proto__"]) t("key " + k + " rejected", m.manualInputProblems({ triggerType: "Manual", inputFields: [{ key: k, label: "a" }] }).length > 0 && m.parseInputFields({ inputFields: [{ key: k, label: "a" }] }).length === 0);
 const f = m.parseInputFields(cfg);
+{ const polluted = JSON.parse('{"__proto__":{"x":"1"},"producto":"ok"}'); const r2 = m.prepareInput(f, polluted); t("__proto__ in body ignored", r2.input.producto === "ok" && ({} as any).x === undefined && Object.keys(r2.input).join() === "producto"); }
+{ const r3 = m.prepareInput(m.parseInputFields({ inputFields: [{ key: "a", label: "A" }] }), Object.create({ a: "inherited" })); t("inherited props not read", r3.missing.length === 1); }
+t("array/object values rejected", m.prepareInput(f, { producto: ["x"] }).missing.length === 1 && m.prepareInput(f, { producto: { a: 1 } }).missing.length === 1);
 let p = m.prepareInput(f, { producto: " 123 ", extra: "x" }); t("trims, drops undeclared", p.input.producto === "123" && !("extra" in p.input) && p.missing.length === 0);
 p = m.prepareInput(f, {}); t("required missing reported", p.missing.length === 1);
 p = m.prepareInput(f, { producto: "x".repeat(900) }); t("value capped", p.input.producto.length === 500);

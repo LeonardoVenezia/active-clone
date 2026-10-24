@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AuthDialog } from "@/components/auth/dialog";
 import { useSession } from "@/lib/auth-client";
+import { type ManualInputField, manualInputFields } from "@/lib/manual-input";
+import { askRunInput } from "@/components/workflow/run-input-dialog";
 import { api } from "@/lib/api-client";
 import {
   Dialog,
@@ -37,7 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type Row = { id: string; name: string; href: string; kind: "mail" | "canvas"; status?: string; steps?: number; trigger?: string; manual?: boolean; updated?: string; shared?: boolean; sharedByMe?: boolean; sharedAdmin?: boolean };
+type Row = { id: string; name: string; href: string; kind: "mail" | "canvas"; status?: string; steps?: number; trigger?: string; manual?: boolean; fields?: ManualInputField[]; updated?: string; shared?: boolean; sharedByMe?: boolean; sharedAdmin?: boolean };
 type Tpl = { id: string; name: string; description?: string | null; steps?: number; updatedAt?: string; orgId?: string | null; mine?: boolean; canManage?: boolean };
 type W = { id: string; name: string; updatedAt?: string; shared?: boolean; sharedByMe?: boolean; sharedAdmin?: boolean; nodes?: { data?: { type?: string; config?: { triggerType?: string } } }[] };
 type Share = { id: string; userId: string; email: string; name?: string | null };
@@ -85,7 +87,7 @@ export default function FlowsPage() {
       for (const w of ws.filter(w => w.name !== "__current__")) {
         const trig = (w.nodes || []).find(n => n.data?.type === "trigger");
         const t = trig?.data?.config?.triggerType || "Manual";
-        out.push({ id: w.id, name: w.name, href: `/workflows/${w.id}`, kind: "canvas", steps: (w.nodes || []).filter(n => n.data?.type !== "trigger").length, trigger: t === "Manual" ? "Manual" : t === "Schedule" ? "Programado" : t === "Webhook" ? "Webhook" : t, manual: t === "Manual", updated: w.updatedAt, shared: !!w.shared, sharedByMe: !!w.sharedByMe, sharedAdmin: !!w.sharedAdmin });
+        out.push({ id: w.id, name: w.name, href: `/workflows/${w.id}`, kind: "canvas", steps: (w.nodes || []).filter(n => n.data?.type !== "trigger").length, trigger: t === "Manual" ? "Manual" : t === "Schedule" ? "Programado" : t === "Webhook" ? "Webhook" : t, manual: t === "Manual", fields: manualInputFields(w.nodes as never), updated: w.updatedAt, shared: !!w.shared, sharedByMe: !!w.sharedByMe, sharedAdmin: !!w.sharedAdmin });
       }
       setRows(out); setError("");
       try {
@@ -103,7 +105,9 @@ export default function FlowsPage() {
     setBusy(row.kind + row.id);
     try {
       if (action === "run") {
-        const r = await fetch(`/api/workflow/${row.id}/execute`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: {} }) });
+        let input: Record<string, string> = {};
+        if (row.fields?.length) { const asked = await askRunInput(`Datos para ejecutar "${row.name}"`, row.fields); if (!asked) return; input = asked; }
+        const r = await fetch(`/api/workflow/${row.id}/execute`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input }) });
         const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || "No se pudo ejecutar.");
         toast.success(`Ejecutando "${row.name}". El resultado queda en Runs.`);
       } else {

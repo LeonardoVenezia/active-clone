@@ -6,7 +6,8 @@ export type ManualInputField = { key: string; label: string; required: boolean }
 export const MANUAL_INPUT_MAX_FIELDS = 8;
 export const MANUAL_INPUT_MAX_VALUE = 500;
 const KEY_RE = /^[a-zA-Z][a-zA-Z0-9_]{0,39}$/;
-const RESERVED = new Set(["triggered", "timestamp"]);
+// Reserved by the trigger output, plus names that exist on every JS object (never usable as data keys).
+const RESERVED = new Set(["triggered", "timestamp", "constructor", "prototype", "proto", "toString", "valueOf", "hasOwnProperty", "isPrototypeOf", "propertyIsEnumerable", "toLocaleString"]);
 
 type NodeLike = { id?: string; data?: { type?: string; label?: string; config?: Record<string, unknown> } };
 
@@ -58,7 +59,7 @@ export function prepareInput(fields: ManualInputField[], raw: unknown): { input:
   const input: Record<string, string> = {};
   const missing: string[] = [];
   for (const f of fields) {
-    const v = src[f.key];
+    const v = Object.prototype.hasOwnProperty.call(src, f.key) ? src[f.key] : undefined;
     const s = typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : "";
     if (s) input[f.key] = s.slice(0, MANUAL_INPUT_MAX_VALUE);
     else if (f.required) missing.push(f.label);
