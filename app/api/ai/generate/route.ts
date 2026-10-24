@@ -2,7 +2,7 @@ import { llmRoutes } from "@/lib/free-models";
 import OpenAI from "openai";
 import { generateText, stepCountIs, tool } from "ai";
 import { z } from "zod";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { ModelTrace, languageModel, selectRoutes } from "@/lib/model-select";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateAIActionPrompts } from "@/plugins";
@@ -311,9 +311,13 @@ export async function POST(request: Request) {
     if (!prompt) return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     if (!llmRoutes().length) return NextResponse.json({ error: "AI API key not configured on server." }, { status: 500 });
     // Optional model pin (used by the eval harness): restrict to the route whose model matches.
-    const allRoutes = llmRoutes();
-    const pinnedRoutes = typeof model === "string" && model ? allRoutes.filter(r => r.model === model) : [];
-    const activeRoutes = pinnedRoutes.length ? pinnedRoutes : allRoutes;
+    // Model choice: `ai` (g | ds) pins the whole journey, QA users only, never silently falls back. The old raw `model` pin is QA-only too.
+    const selection = selectRoutes(body.ai, session.user.id);
+    if (!selection.ok) return NextResponse.json({ error: selection.error }, { status: selection.status });
+    const qaUser = (process.env.QA_AI_USER_IDS ?? "").split(",").map((x: string) => x.trim()).filter(Boolean).some((x: string) => x === "*" || x === session.user.id);
+    const pinnedRoutes = qaUser && selection.choice === "auto" && typeof model === "string" && model ? selection.routes.filter(r => r.model === model) : [];
+    const activeRoutes = pinnedRoutes.length ? pinnedRoutes : selection.routes;
+    const trace = new ModelTrace(selection.choice, selection.strict || pinnedRoutes.length > 0);
     let composioCatalog = "";
     let composioCatalogMap: Map<string, string[]> = new Map();
     // Apps with a native plugin must never load a Composio catalog: keep them out of detection entirely.
@@ -605,7 +609,7 @@ export async function POST(request: Request) {
           if (buildAbort.signal.aborted) { timedOut = true; break; }
           try {
             console.info("[ai-generate] tools attempt", route.name, route.model, fixErrors.length ? "(corrective)" : "");
-            const provider = createOpenAICompatible({ name: route.name, apiKey: route.apiKey, baseURL: route.baseURL });
+            const started = Date.now();
             const messages: { role: "system" | "user"; content: string }[] = [{ role: "system", content: sysPrompt }];
             if (fixErrors.length) {
               const nodeList = shadow.nodes.map(n => `- ${n.id}: ${JSON.stringify({ label: n.data?.label, config: n.data?.config })}`).join("\n");
@@ -614,12 +618,13 @@ export async function POST(request: Request) {
             } else {
               messages.push({ role: "user", content: userPrompt });
             }
-            const res = await generateText({ model: provider(route.model), messages, tools: mkTools(), stopWhen: stepCountIs(25), maxOutputTokens: Math.max(8192, route.maxTokens), temperature: 0.2, maxRetries: 0, abortSignal: buildAbort.signal });
+            const res = await generateText({ model: languageModel(route), messages, tools: mkTools(), stopWhen: stepCountIs(25), maxOutputTokens: Math.max(8192, route.maxTokens), temperature: 0.2, maxRetries: 0, abortSignal: buildAbort.signal });
             console.info("[ai-generate] tools usage", route.name, JSON.stringify(res.usage));
+            trace.record(fixErrors.length ? "corrective" : "build", route, true, started);
             const outText = (res.text || "").trim();
             if (outText) lastModelText = outText;
             if (shadow.nodes.length > 0 || fixErrors.length) return;
-          } catch (error) { console.error("[ai-generate] tools pass failed", route.name, error instanceof Error ? error.message.slice(0, 240) : "unknown"); }
+          } catch (error) { trace.record(fixErrors.length ? "corrective" : "build", route, false, Date.now(), error); console.error("[ai-generate] tools pass failed", route.name, error instanceof Error ? error.message.slice(0, 240) : "unknown"); }
         }
       };
       // Deterministic repair: references into a Fórmula node's value need the
@@ -659,9 +664,8 @@ export async function POST(request: Request) {
           for (const route of activeRoutes) {
             if (noteAbort.signal.aborted) break;
             try {
-              const provider = createOpenAICompatible({ name: route.name, apiKey: route.apiKey, baseURL: route.baseURL });
               const res = await generateText({
-                model: provider(route.model),
+                model: languageModel(route),
                 messages: [
                   { role: "system", content: "Sos el asistente que trabaja sobre el lienzo del usuario. Respondé en español, breve y conversacional." },
                   { role: "user", content: `Estado real del lienzo: ${builtState}.${errs.length ? ` Temas sin resolver: ${errs.join(" | ")}.` : ""}${question ? ` Antes de armar le pediste este dato al usuario: "${question}".` : ""}${hitCap ? " El armado se cortó por el tope de tiempo de seguridad." : ""} Escribí el mensaje para el usuario: describí el estado REAL del lienzo tal como te lo pasé (si no se construyó nada, decilo claramente; nunca afirmes que hay una base o pasos que no existen), contá qué asumiste o qué falta, y hacé la pregunta o propuesta que sigue. Nunca digas que no pudiste; nunca lo dejes sin respuesta. Pedido original: ${userPrompt}` },
@@ -820,7 +824,7 @@ export async function POST(request: Request) {
               if (!pos) continue;
               operationCount = tryParseAndEnqueueOperation(JSON.stringify({ op: "updateNode", nodeId: n.id, updates: { position: pos } }), encoder, controller, operationCount, shadow);
             }
-          } const remaining = computeErrors(); if (remaining.length) { console.warn("[ai-generate] validation errors remain after retries", remaining); controller.enqueue(encodeMessage(encoder, { type: "validation", errors: remaining })); } controller.enqueue(encodeMessage(encoder, { type: "complete" })); controller.close(); } catch (error) { controller.enqueue(encodeMessage(encoder, { type: "error", error: error instanceof Error ? error.message : "Failed to generate workflow" })); controller.close(); } } });
+          } const remaining = computeErrors(); if (remaining.length) { console.warn("[ai-generate] validation errors remain after retries", remaining); controller.enqueue(encodeMessage(encoder, { type: "validation", errors: remaining })); } controller.enqueue(encodeMessage(encoder, { type: "trace", trace: trace.summary() })); if (trace.strict && !trace.entries.some(x => x.ok)) { const f = trace.entries[trace.entries.length - 1]; controller.enqueue(encodeMessage(encoder, { type: "error", error: `El modelo elegido (${f ? `${f.route}/${f.model}` : selection.choice}) no respondió${f?.status ? ` (${f.status})` : ""}. No se usó ningún otro modelo.` })); } controller.enqueue(encodeMessage(encoder, { type: "complete" })); controller.close(); } catch (error) { controller.enqueue(encodeMessage(encoder, { type: "error", error: error instanceof Error ? error.message : "Failed to generate workflow" })); controller.close(); } } });
     return new Response(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-cache", Connection: "keep-alive" } });
   } catch (error) { console.error("Failed to generate workflow:", error instanceof Error ? error.message.slice(0, 240) : "unknown"); return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to generate workflow" }, { status: 500 }); }
 }

@@ -21,6 +21,7 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@ai-sdk/google": "^2.0.0",
     "@ai-sdk/openai-compatible": "^1.0.58",
     "@ai-sdk/provider": "^2.0.0",
     "@dagrejs/dagre": "^3.1.1",

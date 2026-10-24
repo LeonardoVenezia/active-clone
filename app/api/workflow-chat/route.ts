@@ -1,4 +1,6 @@
 import { llmRoutes } from "@/lib/free-models";
+import { selectRoutes } from "@/lib/model-select";
+import { unifiedResponse } from "./unified";
 import { describeToolkit } from "@/lib/connectors/generic";
 import { myConnections } from "@/lib/connectors";
 import { PRESETS } from "@/lib/connectors/presets";
@@ -65,7 +67,7 @@ export async function POST(r: Request) {
   const previewOk = process.env.VERCEL_ENV === "preview" && !!origin && origin.endsWith(".vercel.app");
   if (!origin || (!ORIGINS.includes(origin) && !previewOk) || new URL(r.url).origin !== origin) return NextResponse.json({ error: "Invalid origin." }, { status: 403 });
   const id = await user(r); if (!id) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
-  let b: { workflowId?: unknown; message?: unknown; snapshot?: Snap };
+  let b: { workflowId?: unknown; message?: unknown; snapshot?: Snap; ai?: unknown; agent?: unknown; event?: unknown; review?: unknown };
   try { b = await r.json(); } catch { return NextResponse.json({ error: "Bad request." }, { status: 400 }); }
   const bodyShape = z.object({
     workflowId: z.unknown(),
@@ -77,13 +79,14 @@ export async function POST(r: Request) {
   });
   if (!bodyShape.safeParse(b).success) return NextResponse.json({ error: "Bad request." }, { status: 400 });
   if (!validWorkflowId(b.workflowId)) return NextResponse.json({ error: "Bad workflow." }, { status: 400 });
+  const event = b.event === "build_done" ? ("build_done" as const) : null;
   const text = typeof b.message === "string" ? b.message.trim().slice(0, 2000) : "";
-  if (!text) return NextResponse.json({ error: "Write a message first." }, { status: 400 });
+  if (!text && !event) return NextResponse.json({ error: "Write a message first." }, { status: 400 });
   if (!llmRoutes().length) return NextResponse.json({ error: "The chat model is not configured." }, { status: 503 });
   try {
     if ((await recentUserMessages(id)) >= 60) return NextResponse.json({ error: "You've sent a lot of messages this hour. Try again in a bit." }, { status: 429 });
     const past = await history(id, b.workflowId, 20);
-    await append(id, b.workflowId, "user", text);
+    if (!event) await append(id, b.workflowId, "user", text);
     const recentIntent = [...past.filter(m => m.role === "user").slice(-2).map(m => m.content), text].join("\n").replace(/\S+@\S+/g, " ");
     const recentAssistantText = past.filter(m => m.role === "assistant").slice(-4).map(m => m.content).join("\n");
     const explicitBuildIntent = /^\s*(?:(?:please|por favor)\s+)?(?:build|create|make it|put it on (?:the )?canvas|do it|go ahead|create it|arm[aá]lo|crea(?:lo|la|r)|hacelo|hazlo)\b/i.test(text) || /\b(?:por favor|please)\s+(?:cre[aá]|arm[aá]|constru[ií]|hac[eé]|build|create|make)/i.test(text) || /\bno\s+(?:veo|ves|est[aá]s|estas)\b[^.?!]{0,60}\b(?:cre|constru|arm|lienzo|canvas)/i.test(text) || /\b(?:cre[aá]lo|cre[aá]la|arm[aá]lo|hacelo|hazlo)\b/i.test(text);
@@ -127,6 +130,19 @@ export async function POST(r: Request) {
       }
     } catch (e) { console.error("[workflow-chat] template list failed", e instanceof Error ? e.message : "unknown"); }
     const messages = [{ role: "system" as const, content: `${SYSTEM}\n\n${connectionStatusContext}\n\n${templateContext}\n\n${describe(b.snapshot)}` }, ...past.map(m => ({ role: m.role, content: m.content })), { role: "user" as const, content: text }];
+  const selection = selectRoutes(b.ai, id);
+  if (!selection.ok) return NextResponse.json({ error: selection.error }, { status: selection.status });
+  const legacyAllowed = selection.choice !== "auto" || (process.env.QA_AI_USER_IDS ?? "").split(",").map(x => x.trim()).some(x => x === "*" || x === id);
+  if (!(b.agent === "legacy" && legacyAllowed)) {
+    const rv = (b.review && typeof b.review === "object" ? b.review : null) as { steps?: unknown; placeholders?: unknown } | null;
+    const review = event && rv ? {
+      steps: (Array.isArray(rv.steps) ? rv.steps : []).slice(0, 30).map((x: { label?: unknown; app?: unknown; aiPrompt?: unknown }) => ({ label: String(x.label ?? "step").slice(0, 80), ...(typeof x.app === "string" ? { app: x.app.slice(0, 40) } : {}), ...(typeof x.aiPrompt === "string" ? { aiPrompt: x.aiPrompt.slice(0, 700) } : {}) })),
+      placeholders: (Array.isArray(rv.placeholders) ? rv.placeholders : []).slice(0, 20).map(x => String(x).slice(0, 120)),
+    } : null;
+    const pastAll = event ? past : past; // history already contains every stored turn
+    const draft = /\b(maqueta|mockup|demo|borrador|sin\s+conectar|sin\s+ejecutar\s+nada\s+real)\b/i.test([...pastAll.filter(m => m.role === "user").map(m => m.content), text].join("\n"));
+    return unifiedResponse({ userId: id, workflowId: b.workflowId as string, text, event, review, past: (await history(id, b.workflowId as string, 40)).map(m => ({ role: m.role, content: m.content })).filter((m, k, arr) => !(event === null && k === arr.length - 1 && m.role === "user" && m.content === text)), snapshotText: describe(b.snapshot), templates: templatesVisible, selection, draftMode: draft });
+  }
   return createUIMessageStreamResponse({
     stream: createUIMessageStream({
       execute: async ({ writer }) => {

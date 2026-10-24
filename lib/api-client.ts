@@ -230,6 +230,8 @@ function processStreamLine(
     } else if (message.type === "error") {
       console.error("[API Client] Error:", message.error);
       state.streamError = message.error || "The AI request failed.";
+    } else if ((message as { type?: string }).type === "trace") {
+      console.info("[ai-trace]", JSON.stringify((message as { trace?: unknown }).trace));
     } else if (message.type === "summary" || message.type === "question" || message.type === "validation") {
       onEvent?.(message);
     }
@@ -287,7 +289,7 @@ export const aiApi = {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ prompt, existingWorkflow, builder: "tools", ...(toolkits?.length ? { toolkits } : {}), ...(model ? { model } : {}), ...(evalMode ? { evalMode } : {}) }),
+      body: JSON.stringify({ prompt, existingWorkflow, builder: "tools", ...(toolkits?.length ? { toolkits } : {}), ...(model ? { model } : {}), ...(evalMode ? { evalMode } : {}), ...(typeof window !== "undefined" && new URLSearchParams(window.location.search).get("ai") ? { ai: new URLSearchParams(window.location.search).get("ai") } : {}) }),
     });
 
     if (!response.ok) {
