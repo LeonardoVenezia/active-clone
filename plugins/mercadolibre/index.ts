@@ -257,6 +257,7 @@ const mercadolibrePlugin: IntegrationPlugin = {
       outputFields: [
         { field: "id", description: "Item ID" },
         { field: "title", description: "Title" },
+        { field: "description", description: "Listing description as plain text (empty when the listing has none)" },
         { field: "price", description: "Price" },
         { field: "currency", description: "Currency" },
         { field: "availableQuantity", description: "Available stock" },

@@ -251,6 +251,7 @@ const tiendanubePlugin: IntegrationPlugin = {
       outputFields: [
         { field: "id", description: "Product ID" },
         { field: "name", description: "Product name" },
+        { field: "description", description: "Product description as plain text (empty when the store has none)" },
         { field: "published", description: "Visible in the store" },
         { field: "variants", description: "Variants with SKU, price and stock" },
       ],

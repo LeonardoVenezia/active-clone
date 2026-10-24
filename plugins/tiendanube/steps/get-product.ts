@@ -13,6 +13,7 @@ import type { TiendanubeCredentials } from "../credentials";
 type TiendanubeProduct = {
   id: number;
   name: Record<string, string>;
+  description?: Record<string, string> | null;
   published?: boolean;
   variants?: Array<{
     id: number;
@@ -28,6 +29,7 @@ type GetProductResult =
       success: true;
       id: number;
       name: string;
+      description: string;
       published: boolean;
       variants: Array<{
         id: number;
@@ -53,6 +55,17 @@ function firstName(name: Record<string, string> | undefined): string {
     return "";
   }
   return name.es ?? name.pt ?? name.en ?? Object.values(name)[0] ?? "";
+}
+
+/** Tiendanube sends the description as localized HTML; steps and AI prompts need plain text. */
+export function descriptionText(description: Record<string, string> | null | undefined): string {
+  const html = firstName(description ?? undefined);
+  return html
+    .replace(/<\s*br\s*\/?>|<\/(p|div|li|h[1-6])>/gi, "\n")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim()
+    .slice(0, 4000);
 }
 
 async function stepHandler(
@@ -92,6 +105,7 @@ async function stepHandler(
       success: true,
       id: product.id,
       name: firstName(product.name),
+      description: descriptionText(product.description),
       published: product.published ?? false,
       variants: (product.variants ?? []).map((variant) => ({
         id: variant.id,
