@@ -62,7 +62,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
   const shadow: Shadow = { nodes: [...((i.canvas?.nodes ?? []) as FlowNode[])], edges: [...((i.canvas?.edges ?? []) as FlowEdge[])] };
   const startedEmpty = shadow.nodes.every(n => (n.data as { config?: { placeholder?: boolean } } | undefined)?.config?.placeholder === true);
   const initialIds = new Set(shadow.nodes.map(n => n.id));
-  let planText = ""; let flowName = ""; let touched = false; const composioMap = new Map<string, string[]>();
+  let planText = ""; let flowName = ""; let touched = false; let heldChars = 0; const composioMap = new Map<string, string[]>();
   const userRequest = [...i.past.filter(m => m.role === "user").map(m => m.content), i.text].join("\n");
   const discover = (i.deps?.discover ?? ((x: { catalog: string; search?: string; toolkit?: string }) => discoverComposio(x as Parameters<typeof discoverComposio>[0]))) as (x: { catalog: string; search?: string; toolkit?: string }) => Promise<{ items?: Record<string, unknown>[] }>;
   const canvasDesc = shadow.nodes.length ? `EXISTING CANVAS (edit these, keep their ids; do not recreate):\n${shadow.nodes.map(n => `- ${n.id}: ${JSON.stringify({ label: (n.data as { label?: string })?.label, config: (n.data as { config?: unknown })?.config }).slice(0, 600)}`).join("\n")}\nEdges: ${shadow.edges.map(e => `${e.source}->${e.target}`).join(", ") || "none"}` : "The canvas is empty.";
@@ -156,7 +156,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
             if (part.type === "start-step") { log.steps++; sep = visible && reply.trim().length > 0; continue; }
             if (part.type === "finish") log.finish = String((part as { finishReason?: unknown }).finishReason ?? "unknown");
             if (part.type === "tool-call") { produced = true; log.tools[part.toolName] = (log.tools[part.toolName] ?? 0) + 1; }
-            if (part.type === "text-delta" && part.text) { produced = true; if (visible) { emit((sep ? "\n\n" : "") + part.text); sep = false; } }
+            if (part.type === "text-delta" && part.text) { produced = true; if (visible) { if (touched) heldChars += part.text.length; else { emit((sep ? "\n\n" : "") + part.text); sep = false; } } }
           }
           const fe = failed as { statusCode?: number; status?: number; message?: string } | null;
           log.ms = Date.now() - tp; log.nodesAfter = shadow.nodes.length; log.capHit = abort.signal.aborted;
@@ -245,12 +245,12 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
           const msg = i.selection.strict ? `El modelo elegido (${f?.route}/${f?.model}) no respondió${f?.status ? ` (${f.status})` : ""}. No se usó ningún otro modelo. Tu mensaje quedó guardado; probá de nuevo.` : "The free AI model didn't answer (it may be busy). Your message was kept; send it again in a moment.";
           writer.write({ type: "data-chat-error", data: { error: msg } }); return;
         }
-        if (!reply.trim()) emit(touched ? (interrupted || validationLeft.length || timedOut ? "Dejé una parte del flujo en el lienzo pero quedó incompleta: no pude terminar de armarlo ni de revisarlo. Podés deshacerlo desde el chat o decime cómo seguimos." : "Armé el flujo en el lienzo.") : out.connect ? "Para seguir, conectá esta cuenta con la tarjeta de abajo." : out.undo ? "Deshago el último cambio." : out.templateImport ? "Importo la plantilla." : out.form ? out.form.title : "Listo.");
+        if (!reply.trim()) emit(touched ? (interrupted || validationLeft.length || timedOut ? "Dejé una parte del flujo en el lienzo pero quedó incompleta: no pude terminar de armarlo ni de revisarlo. Podés deshacerlo desde el chat o decime cómo seguimos." : "Dejé el flujo en el lienzo. Pasó las revisiones estructurales, pero todavía no confirmé que haga todo lo pedido: revisalo conmigo.") : out.connect ? "Para seguir, conectá esta cuenta con la tarjeta de abajo." : out.undo ? "Deshago el último cambio." : out.templateImport ? "Importo la plantilla." : out.form ? out.form.title : "Listo.");
         if (started) writer.write({ type: "text-end", id: textId });
         await (i.deps?.append ?? append)(i.userId, i.workflowId, "assistant", reply.trim());
         if (i.selection.choice !== "auto" || s.fellBack || s.paid) {
           // Redacted, QA-only: structure and counts, never message text or keys.
-          const build = { version: (process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 7), objective: Object.fromEntries(standing), closeReason: interrupted ? `${closeReason}+model-call-interrupted` : closeReason, capMs, elapsedMs: Date.now() - t0, interrupted, finalNodes: shadow.nodes.length, finalEdges: shadow.edges.length, validationLeft: validationLeft.slice(0, 5).map(e => e.slice(0, 120)), rounds, passes: passLog };
+          const build = { heldPreValidationChars: heldChars, version: (process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 7), objective: Object.fromEntries(standing), closeReason: interrupted ? `${closeReason}+model-call-interrupted` : closeReason, capMs, elapsedMs: Date.now() - t0, interrupted, finalNodes: shadow.nodes.length, finalEdges: shadow.edges.length, validationLeft: validationLeft.slice(0, 5).map(e => e.slice(0, 120)), rounds, passes: passLog };
           console.info("[ai-build-trace]", JSON.stringify(build));
           writer.write({ type: "data-model-trace", data: { ...s, build } });
         }
