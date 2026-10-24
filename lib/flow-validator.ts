@@ -447,6 +447,10 @@ export function validateFlow(
           const prob = loopSourceFormulaProblem(srcNode.data?.config as Record<string, unknown> | undefined, fp);
           if (prob) errors.push(`semántica: Loop "${n.id}" (${label}) source points to "${srcMatch[1]}.${fp}" but ${prob}`);
         }
+        if (srcAction === AI_TEXT_ACTION && srcNode) {
+          const fp2 = rest.includes(".") ? rest.slice(rest.indexOf(".") + 1) : rest;
+          errors.push(`semántica: Loop "${n.id}" (${label}) source points to "${srcMatch[1]}.${fp2}", an AI step output; an AI step returns only text or single string/number/boolean fields, never a list, so the Loop has nothing to iterate. Give the Loop a real list (a Fórmula that builds it from separate AI fields such as guion1, guion2, guion3, or the items of a search/Loop), or write the N items with N separate fields/steps`);
+        }
         loopItemFields = options.actionItemFields?.[srcAction]?.[arrayField ?? ""];
       }
       const rawSteps = Array.isArray(cfg.steps) ? cfg.steps : [];

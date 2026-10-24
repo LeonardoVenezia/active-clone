@@ -1,0 +1,12 @@
+import fs from "node:fs";
+const v: any = await import("../../lib/flow-validator"); const { validateFlow } = v.default ?? v;
+const OUT: any = { "Fórmula": ["result"], Loop: ["results","items","count"], "ai-gateway/generate-text": ["text","object"], "fal/generate-video": ["videoUrl"], Approval: ["approved"], "tiendanube/list-products": ["products","count"], "mercadolibre/list-items": ["items","count"], "perplexity/research": ["report"] };
+let fail = 0; const chk = (n: string, ok: boolean) => { console.log(ok ? "ok  " : "FAIL", n); if (!ok) fail++; };
+const bad = JSON.parse(fs.readFileSync("/home/sandbox/ac/evals/c13/fixtures/ai-array-loop-graph.json", "utf8"));
+const good = JSON.parse(fs.readFileSync("/home/sandbox/ac/evals/c13/fixtures/linear-spine-notify-graph.json", "utf8"));
+const sib = JSON.parse(fs.readFileSync("/home/sandbox/ac/evals/c13/fixtures/branch-siblings-graph.json", "utf8"));
+const eb = validateFlow(bad.nodes, bad.edges, OUT).filter((e: string) => /AI step output/.test(e));
+chk("Loop over AI object field is flagged", eb.length === 1);
+chk("notify fixture not flagged", validateFlow(good.nodes, good.edges, OUT).filter((e: string) => /AI step output/.test(e)).length === 0);
+chk("Formula-built list (siblings graph) not flagged", validateFlow(sib.nodes, sib.edges, OUT).filter((e: string) => /AI step output/.test(e)).length === 0);
+process.exit(fail ? 1 : 0);
