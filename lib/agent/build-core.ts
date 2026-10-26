@@ -420,6 +420,32 @@ export function fixFormulaRefsIn(shadow: Shadow): number {
         return fixed;
       }
 
+/** For each AI text step: the exact fields of upstream data its prompt can read (from the declared output contract, following Formula steps back to their sources). Facts only. */
+export function aiInputFacts(shadow: Shadow): string[] {
+  const itemFields = getActionOutputItemFields();
+  const byId = new Map(shadow.nodes.map(n => [n.id, n] as const));
+  const cfgOf = (id: string) => ((byId.get(id)?.data as { config?: Record<string, unknown> })?.config ?? {});
+  const label = (id: string) => String((byId.get(id)?.data as { label?: string })?.label ?? id);
+  const refsIn = (v: unknown) => [...JSON.stringify(v ?? "").matchAll(/\{\{@([A-Za-z0-9_-]+):[^}.]*\.?([A-Za-z0-9_]*)/g)].map(m => ({ id: m[1], field: m[2] }));
+  const describe = (id: string, field: string, depth: number, seen: Set<string>): string[] => {
+    const c = cfgOf(id); const at = String(c.actionType ?? "");
+    if (!byId.has(id) || seen.has(id + "." + field)) return [];
+    seen.add(id + "." + field);
+    if (at === "Formula" || at === "Fórmula") return depth > 3 ? [] : refsIn(c.input).flatMap(r => describe(r.id, r.field, depth + 1, seen));
+    if (at === "Loop") return [];
+    const f = itemFields[at]?.[field];
+    return f ? [`${label(id)}.${field} (each record has only: ${f.join(", ")})`] : field ? [`${label(id)}.${field}`] : [];
+  };
+  const out: string[] = [];
+  for (const n of shadow.nodes) {
+    const c = cfgOf(n.id);
+    if (c.actionType !== "ai-gateway/generate-text" || typeof c.aiPrompt !== "string") continue;
+    const src = [...new Set(refsIn(c.aiPrompt).filter(r => r.id !== "item" && r.id !== "index").flatMap(r => describe(r.id, r.field, 0, new Set())))];
+    if (src.length) out.push(`AI step "${label(n.id)}" can only use this upstream data: ${src.join("; ")}. Its prompt may ask only for results computable from those fields (plus today's date). If the prompt or your plan asks for anything those fields do not contain, remove that part from the prompt and tell the user plainly that it cannot be included; never promise it.`);
+  }
+  return out;
+}
+
 /** Deterministic facts about how data flows, for the agent to reconcile with what was agreed. Facts only: no verdicts, no per-example rules. */
 export function lineageFacts(shadow: Shadow): string[] {
   const refs = new Map<string, Set<string>>();
@@ -428,7 +454,7 @@ export function lineageFacts(shadow: Shadow): string[] {
     for (const m of txt.matchAll(/\{\{@([^:}]+):/g)) { const set = refs.get(m[1]) ?? new Set<string>(); set.add(n.id); refs.set(m[1], set); }
   }
   const label = (id: string) => String((shadow.nodes.find(n => n.id === id)?.data as { label?: string })?.label ?? id);
-  const out: string[] = [];
+  const out: string[] = [...aiInputFacts(shadow)];
   const hasOut = new Set(shadow.edges.map(e => e.source));
   const unused = shadow.nodes.filter(n => (n.data as { type?: string })?.type === "action" && hasOut.has(n.id) && !refs.has(n.id)).map(n => label(n.id));
   if (unused.length) out.push(`Steps whose output no later step reads: ${unused.join(", ")}.`);
