@@ -112,7 +112,7 @@ Example output (branching workflow with 250px vertical spacing):
 {"op": "addEdge", "edge": {"id": "e1", "source": "trigger-1", "target": "branch-a", "type": "default"}}
 {"op": "addEdge", "edge": {"id": "e2", "source": "trigger-1", "target": "branch-b", "type": "default"}}`;
 
-const TOOL_FORMAT = `CRITICAL: Build the workflow by CALLING THE PROVIDED TOOLS - never by writing JSON, JSONL, markdown fences or explanatory text as your reply.
+const toolFormat = (canAsk: boolean) => `CRITICAL: Build the workflow by CALLING THE PROVIDED TOOLS - never by writing JSON, JSONL, markdown fences or explanatory text as your reply.
 
 Tools you can call:
 - set_name(name, description?) - call once, first.
@@ -128,23 +128,24 @@ IMPORTANT RULES:
 - Call set_name first, then add nodes one at a time, then connect them
 - CRITICAL: Every node (except the last) MUST be connected to at least one other node
 - Each tool call is validated immediately: if a call returns an error, fix exactly THAT call and retry it - do NOT rebuild everything from scratch
-- If a value the flow needs is missing and no earlier step can produce it (a destination, an account, an id, the exact message text), call ask_user BEFORE adding nodes; never invent those values - EXCEPT when the user explicitly asked for a draft or mock (maqueta, ejemplo, prueba): then use clearly-marked placeholder values and name each assumption in your closing message instead of asking
+- If a value the flow needs is missing and no earlier step can produce it (a destination, an account, an id, the exact message text), ${canAsk ? "call ask_user BEFORE adding nodes" : "it must already have been settled in the conversation; do not guess it and do not build around a gap"}; never invent those values - EXCEPT when the user explicitly asked for a draft or mock (maqueta, ejemplo, prueba): then use clearly-marked placeholder values and name each assumption in your closing message instead of asking
 - Always close with a short conversational message in Spanish: what you built, anything you assumed, and any open question. Never stay silent and never say you could not - if something is missing, say what and ask`;
 
-const TOOL_EXAMPLES = `Example build sequence (linear workflow): set_name("Contact Form Workflow") -> add_node({"id":"trigger-1","nodeType":"trigger","label":"Contact Form","actionType":"Manual"}) -> add_node({"id":"draft-message","nodeType":"action","label":"Draft Message","actionType":"ai-gateway/generate-text","config":{"prompt":"Write a short welcome message for the new contact form submission"}}) -> add_node({"id":"notify-channel","nodeType":"action","label":"Notify Channel","actionType":"slack/send-message","config":{"channel":"#general","text":"{{@draft-message:Draft Message.text}}"}}) -> connect("trigger-1","draft-message") -> connect("draft-message","notify-channel")`;
+const TOOL_EXAMPLES = `Example build sequence (linear workflow): set_name("Contact Form Workflow") -> add_node({"id":"trigger-1","nodeType":"trigger","label":"Contact Form","actionType":"Manual"}) -> add_node({"id":"draft-message","nodeType":"action","label":"Draft Message","actionType":"ai-gateway/generate-text","config":{"aiPrompt":"Write a short welcome message for the new contact form submission"}}) -> add_node({"id":"notify-channel","nodeType":"action","label":"Notify Channel","actionType":"slack/send-message","config":{"channel":"#general","text":"{{@draft-message:Draft Message.text}}"}}) -> connect("trigger-1","draft-message") -> connect("draft-message","notify-channel")`;
 
 const OPS_OUTRO = `REMEMBER: After adding all nodes, you MUST add edges to connect them! Every node should be reachable from the trigger.`;
 
 const TOOL_OUTRO = `REMEMBER: after adding all nodes you MUST call connect for every wire! Every node should be reachable from the trigger. When the graph is complete and every node is wired, stop calling tools.`;
 
-export function getSystemPrompt(composioCatalog = "", mode: "ops" | "tools" = "ops"): string {
+export function getSystemPrompt(composioCatalog = "", mode: "ops" | "tools" = "ops", opts: { canAsk?: boolean } = {}): string {
+  const canAsk = opts.canAsk !== false;
   const pluginActionPrompts = generateAIActionPrompts();
   const pluginTriggerPrompts = generateAITriggerPrompts();
   return `You are a workflow automation expert. Generate a workflow based on the user's description.
 
-${mode === "tools" ? TOOL_FORMAT : OPS_FORMAT}
+${mode === "tools" ? toolFormat(canAsk) : OPS_FORMAT}
 
-Node structure:
+${mode === "ops" ? `Node structure:
 {
   "id": "unique-id",
   "type": "trigger" or "action",
@@ -158,9 +159,9 @@ Node structure:
   }
 }
 
-SCOPE RULE: build ONLY the steps and apps the user asked for. Never add extra steps with apps the user did not mention - no extra notifications (Slack/WhatsApp/email), no extra platforms, no extra tickets - even if they seem useful.
+` : ""}SCOPE RULE: build ONLY the steps and apps the user asked for. Never add extra steps with apps the user did not mention - no extra notifications (Slack/WhatsApp/email), no extra platforms, no extra tickets - even if they seem useful.
 
-NODE POSITIONING RULES:
+${mode === "ops" ? `NODE POSITIONING RULES:
 - Nodes are squares, so use equal spacing in both directions
 - Horizontal spacing between sequential nodes: 250px (e.g., x: 100, then x: 350, then x: 600)
 - Vertical spacing for parallel branches: 250px (e.g., y: 75, y: 325, y: 575)
@@ -169,7 +170,7 @@ NODE POSITIONING RULES:
 - For branching workflows: keep x the same for parallel branches, space y by 250px per branch
 - When adding nodes to existing workflows, position new nodes 250px away from existing nodes
 
-Trigger types:
+` : ""}Trigger types:
 - Choose the trigger from the user's words: anything repeating ("todos los días", "cada mañana", "every day", "a las 8", "diario", "semanal", "cada hora") is ALWAYS Schedule with the right scheduleCron, NEVER Manual. Manual only when the user asks to run it by hand.
 - Manual: {"triggerType": "Manual"}. Optional "inputFields": [{"key": "producto", "label": "Producto (ID o SKU)"}] (up to 8, key = short identifier): when the user presses Run, the app asks for those values and later steps read each one as {{@trigger-id:Trigger Label.producto}}. Use it only for a value the user must choose at run time (which product, which order); a value known now goes straight into the step. Nothing else can be read from a Manual trigger.
 - Webhook: {"triggerType": "Webhook", "webhookPath": "/webhooks/name", ...}
@@ -214,7 +215,7 @@ Example: "if good send Slack, if bad create ticket" needs TWO conditions:
 {"op": "addEdge", "edge": {"source": "cond-bad", "target": "ticket"}}
 
 PLANNING RULES (IMPORTANT):
-- Independent first steps with no dependency between them MUST be parallel branches from the trigger, never chained in series (e.g. a "get product" and a "get item" both connect from the trigger; their results join at the first step that needs both).
+- Independent first steps with no dependency between them: if a LATER step reads both results, chain them in ONE line (see ORDER AND OPTIONAL STEPS: the engine does not wait for every parent). Only when no later step needs more than one of them may they be separate branches from the trigger.
 - ORDER AND OPTIONAL STEPS: the engine starts a node as soon as its FIRST parent finishes, it does NOT wait for every parent, and an extra reference edge does not change that. So build ONE line of steps (each node has a single parent, the previous step) and never fork two branches that join again before a step that reads both. An optional step ("if the product exists on platform X, fetch its detail") is NOT a parallel branch: use a Loop whose source is that platform's result list with maxItems 1, so it runs 0 or 1 times, and read its output as {{@loop-id:Label.items[0].steps.<inner-id>.<field>}}. If nothing was found anywhere the rest of the line must not run: right after the last search put one Condition on the combined counts (> 0) that leads to the rest of the line, and a SECOND Condition on the same counts (=== 0) as its own branch from that search whose only step tells the user nothing was found (an Approval with that message). The validator enforces both.
 - N similar outputs from a list (e.g. "generate 3 videos from the 3 chosen scripts") MUST be ONE Loop node with a single inner step, never N separate nodes. The step that produces the list must output STRUCTURED data (an array), so when using an AI text step to produce it, ask it for JSON object output with an array field (use the action's structured/object format when it has one) and point the Loop's source at that array.
 - Market, competitor or web research MUST use the Perplexity research action when it is available in the plugin list (it has live web access). Never simulate research with a plain text-generation step.
@@ -225,7 +226,7 @@ PLANNING RULES (IMPORTANT):
 - Every edge endpoint MUST be the id of a node you actually emitted in this response. Never create an edge to or from a node that does not exist.
 - Template references MUST use only the output field names listed after "outputs:" for that action in the plugin list above (e.g. if the action lists "outputs: report, citations", {{@node-id:Label.report}} is valid and {{@node-id:Label.answer}} is not). For steps with structured/object format enabled, reference the object field; for plain text format, the text field.
 
-Edge structure:
+${mode === "ops" ? `Edge structure:
 {
   "id": "edge-id",
   "source": "source-node-id",
@@ -233,12 +234,12 @@ Edge structure:
   "type": "default"
 }
 
-WORKFLOW FLOW:
+` : ""}WORKFLOW FLOW:
 - Trigger connects to first action
-- Actions connect in sequence or to multiple branches
+- Actions connect in sequence; only a Condition leads to its own branch (see CONDITION and ORDER rules)
 - ALWAYS create edges to connect the workflow flow
 - For linear workflows: trigger -> action1 -> action2 -> etc
-- For branching (conditions): one source can connect to multiple targets
+- For branching (conditions): connect the Condition to the steps that run when it is true
 
 ${mode === "ops" ? OPS_EXAMPLES : TOOL_EXAMPLES}
 

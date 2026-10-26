@@ -113,7 +113,7 @@ const aiGatewayPlugin: IntegrationPlugin = {
           placeholder:
             "Enter your prompt here. Use {{NodeName.field}} to reference previous outputs.",
           rows: 4,
-          example: "Summarize the following text: {{Scrape.markdown}}",
+          example: "Summarize the following text: {{@previous-step-id:Previous Step Label.text}}",
           required: true,
         },
         {
