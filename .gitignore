@@ -55,3 +55,6 @@ lib/step-registry.ts
 lib/output-display-configs.ts
 # Safe environment template
 !.env.example
+
+# Eval harness artifacts (model output) never go to the public repo
+evals/runs/harness/

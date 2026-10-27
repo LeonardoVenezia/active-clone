@@ -1,0 +1,9 @@
+{
+  "_note": "Prices are USD per 1M tokens and must be filled from the provider's current price page before a run; null means unknown (the dry run then reports tokens only). model 'TO_CONFIRM' blocks the run. paid=true needs --allow-paid.",
+  "models": [
+    { "id": "ds-refuseless", "kind": "openai-compatible", "baseURL": "https://api.refuseless.com/v1", "model": "deepseek-v4.1-flash-fast", "envKey": "REFUSELESS_API_KEY", "maxTokens": 16384, "paid": true, "priceInPerM": null, "priceCachedInPerM": null, "priceOutPerM": null, "why": "the production DeepSeek route (lib/free-models.ts)" },
+    { "id": "ds-official", "kind": "openai-compatible", "baseURL": "https://api.deepseek.com/v1", "model": "TO_CONFIRM", "envKey": "DEEPSEEK_API_KEY", "maxTokens": 16384, "paid": true, "priceInPerM": null, "priceCachedInPerM": null, "priceOutPerM": null, "why": "same model family without the reseller, to rule the proxy in or out" },
+    { "id": "gemini-flash-lite", "kind": "google", "model": "gemini-3.5-flash-lite", "envKey": "GEMINI_API_KEY", "maxTokens": 4096, "paid": false, "priceInPerM": null, "priceCachedInPerM": null, "priceOutPerM": null, "why": "the production Gemini route (free tier key)" },
+    { "id": "ceiling", "kind": "openai-compatible", "baseURL": "TO_CONFIRM", "model": "TO_CONFIRM", "envKey": "CEILING_API_KEY", "maxTokens": 16384, "paid": true, "priceInPerM": null, "priceCachedInPerM": null, "priceOutPerM": null, "why": "a strong reference model: separates 'the model cannot' from 'the design makes any model fail'" }
+  ]
+}

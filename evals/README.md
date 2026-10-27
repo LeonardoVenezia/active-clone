@@ -30,6 +30,39 @@ todo el set como regresión ante cada cambio de prompt, tool o modelo.
 Todavía no hay runner automático: los casos se corren a mano por el chat en la
 cuenta QA (modo maqueta, sin ejecutar). El runner es la Etapa 1 pendiente.
 
+## Arnés (`evals/harness/`)
+
+Corre el `unifiedResponse` real (sin tocar producción: usa los `deps` que ya admite) y guarda por corrida un
+artefacto completo: cada turno, el grafo final con configs (fórmulas, Loops, aiPrompt), la salida del validador,
+cada llamada al modelo (etapa, tool calls con sus inputs, texto, uso de tokens) y el build trace de la app.
+Las aserciones están fijadas de antemano en `cases.jsonl` (`checks`; sin `checks` se usan las por defecto) y
+devuelven `pass | fail | unknown | na`. `unknown` = el contrato declarado no alcanza para decidir; nunca cuenta como fail.
+
+- `npx tsx evals/harness/offline.mts`: modelo simulado. Prueba CABLEADO y REGLAS, no calidad de ningún modelo.
+- `npx tsx evals/harness/live.mts ...`: modelos reales. Por defecto es dry run (matriz, claves faltantes, estimación
+  de tokens/costo); solo llama con `--run`, y las rutas pagas además piden `--allow-paid`. Modelos en `models.json`.
+  Los artefactos quedan FUERA del repo (es público): `~/active-clone-eval-runs` por defecto, o `EVAL_OUT_DIR` / `--out`;
+  una ruta dentro del repo se rechaza.
+- Variantes de orquestación: `current` (como producción) y `no-correctives` (las rondas correctivas reciben una
+  respuesta vacía en vez de llegar al modelo; la pasada guía sí llega).
+- `fail` solo cuando el código lo demuestra (nodo inexistente, fuente de Loop que el motor no lee, campo fuera de un
+  contrato exacto: paso de IA, Fórmula, inputs de Manual). Los `outputFields` de plugins son texto libre y pueden estar
+  incompletos: un campo que no listan da `unknown`.
+- Los checks marcados `signal` son indicios, no garantía de que el flujo funcione: `ai_prompt_backed` sigue la cadena de
+  referencias desde el aiPrompt hasta un paso fuente (no prueba que los valores lleguen en ejecución);
+  `disclosed_if_dropped` y `text_absent` son regex sobre el texto (una mención con negación no prueba un aviso correcto).
+  Revisar a mano una muestra.
+- Límites del arnés (`--call-ms`, `--run-ms`): por llamada al modelo, la app recibe un error al vencer aunque el proveedor
+  ignore el aborto; por corrida completa (todos los turnos), cada corrida va en su propio proceso y al vencer se mata
+  (SIGKILL). El artefacto se arma con lo último registrado y lista lo incompleto. Ninguno de los dos detiene al proveedor:
+  puede seguir procesando y cobrando la llamada.
+- Incidentes por corrida: `harness-run-timeout`, `harness-call-timeout`, `transport` (conexión: red, proxy o proveedor, no
+  distinguible), `provider` (status HTTP o evento de error del proveedor), `app-limit` (tope de tiempo del build o rondas
+  correctivas agotadas; no se atribuye causa), `unclassified`. Con un incidente que no sea `app-limit` la corrida es
+  "interrumpida" y se reporta aparte de las evaluaciones completas, con sus checks sobre el parcial.
+- No hay un "pass" agregado: `summary.txt` separa por corrida y por caso los checks determinísticos de las señales, con
+  pass/fail/unknown/na.
+
 ## Dos niveles de aceptación
 
 1. **PASS estructural** — los `expect` de `cases.jsonl` sobre el grafo
