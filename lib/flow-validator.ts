@@ -19,6 +19,8 @@ export type FlowEdge = { id?: string; source: string; target: string };
 type OutputsMap = Record<string, string[]>;
 
 const TEMPLATE_RE = /\{\{@([\w-]+):([^}]+)\}\}/g;
+// Same pattern without /g for yes/no checks: .test() on a /g regex advances lastIndex, which leaked into later validations.
+const HAS_TEMPLATE_RE = /\{\{@([\w-]+):([^}]+)\}\}/;
 const PLACEHOLDER_RES: RegExp[] = [
   /example\.(com|org|net)/i,
   /\bTODO\b/,
@@ -199,11 +201,9 @@ export function validateFlow(
     // Loop structure
     if (actionType === "Loop") {
       const source = cfg.source;
-      if (typeof source !== "string" || !TEMPLATE_RE.test(source)) {
-        TEMPLATE_RE.lastIndex = 0;
+      if (typeof source !== "string" || !HAS_TEMPLATE_RE.test(source)) {
         errors.push(`semántica: Loop node "${n.id}" (${label}) needs "source" pointing to an array field of an earlier step ({{@node-id:Label.arrayField}})`);
       }
-      TEMPLATE_RE.lastIndex = 0;
       const steps = cfg.steps;
       if (!Array.isArray(steps) || steps.length < 1 || steps.length > 3) {
         errors.push(`semántica: Loop node "${n.id}" (${label}) must have 1 to 3 inner steps`);
@@ -1235,10 +1235,7 @@ export function unwiredReportStepError(nodes: FlowNode[], edges: FlowEdge[]): st
     if (!REPORT_COMPOSIO_TOOL_RE.test(tool) && !REPORT_PLUGIN_ACTION_RE.test(at)) continue;
     const strings: Array<{ path: string; value: string }> = [];
     collectStrings(cfg, "", strings);
-    const hasRef = strings.some(({ value }) => {
-      TEMPLATE_RE.lastIndex = 0;
-      return TEMPLATE_RE.test(value);
-    });
+    const hasRef = strings.some(({ value }) => HAS_TEMPLATE_RE.test(value));
     if (hasRef) continue;
     const hasDataAncestor = [...ancestorsOf(n.id)].some((id) => {
       const a = byId.get(id);

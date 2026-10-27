@@ -1,0 +1,15 @@
+{
+  "nodes": [
+    { "id": "trigger", "type": "trigger", "data": { "label": "Cada mañana", "type": "trigger", "config": { "triggerType": "Schedule", "scheduleCron": "0 9 * * *" } } },
+    { "id": "buscar-pedidos", "type": "action", "data": { "label": "Buscar pedidos", "type": "action", "config": { "actionType": "tiendanube/search-orders" } } },
+    { "id": "loop", "type": "action", "data": { "label": "Detalle de pedidos", "type": "action", "config": { "actionType": "Loop", "source": "{{@buscar-pedidos:Buscar pedidos.orders}}", "maxItems": 50, "steps": [{ "id": "detalle", "actionType": "tiendanube/get-order", "config": { "orderId": "{{@item:Item.id}}" } }] } } },
+    { "id": "resumen", "type": "action", "data": { "label": "Resumen", "type": "action", "config": { "actionType": "ai-gateway/generate-text", "aiFormat": "text", "aiPrompt": "Resumí los pedidos procesados: {{@loop:Detalle de pedidos.count}}" } } },
+    { "id": "avisar", "type": "action", "data": { "label": "Avisar", "type": "action", "config": { "actionType": "slack/send-message", "slackChannel": "#ventas", "slackMessage": "Resumen diario de ventas de la tienda: {{@resumen:Resumen.text}}" } } }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger", "target": "buscar-pedidos" },
+    { "id": "e2", "source": "buscar-pedidos", "target": "loop" },
+    { "id": "e3", "source": "loop", "target": "resumen" },
+    { "id": "e4", "source": "resumen", "target": "avisar" }
+  ]
+}
