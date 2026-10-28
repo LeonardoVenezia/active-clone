@@ -19,8 +19,10 @@ export function selectRoutes(ai: unknown, userId: string): Selection {
   const choice = ALIASES[raw];
   if (!choice) return { ok: false, status: 400, error: `Unknown ai value "${raw.slice(0, 20)}". Use g or ds.` };
   const allowed = (process.env.QA_AI_USER_IDS ?? "").split(",").map(s => s.trim()).filter(Boolean);
-  if (!allowed.includes("*") && !allowed.includes(userId)) return { ok: false, status: 403, error: "Model selection is only available for QA users." };
-  if (choice === "ds" && allowed.includes("*")) return { ok: false, status: 403, error: "ai=ds needs an explicit QA user id (a wildcard does not enable the paid route)." };
+  // AI_DS_OPEN=1 opens ai=ds (only ds) to every signed-in user; the allowlist keeps governing ai=g. QA_ALLOW_PAID is still required.
+  const dsOpen = choice === "ds" && process.env.AI_DS_OPEN === "1" && !!userId;
+  if (!dsOpen && !allowed.includes("*") && !allowed.includes(userId)) return { ok: false, status: 403, error: "Model selection is only available for QA users." };
+  if (choice === "ds" && !dsOpen && allowed.includes("*")) return { ok: false, status: 403, error: "ai=ds needs an explicit QA user id (a wildcard does not enable the paid route)." };
   if (choice === "ds" && process.env.QA_ALLOW_PAID !== "1") return { ok: false, status: 403, error: "ai=ds uses a paid route and is disabled (QA_ALLOW_PAID is not set)." };
   const wanted = llmRoutes({ paid: choice === "ds" }).filter(r => (choice === "g" ? r.name === "gemini" : r.name === "refuseless"));
   if (!wanted.length) return { ok: false, status: 503, error: `The ${choice === "g" ? "Gemini" : "DeepSeek"} route is not configured on this server.` };
