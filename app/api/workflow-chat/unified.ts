@@ -8,6 +8,7 @@ import { type Selection, ModelTrace, languageModel } from "@/lib/model-select";
 import { type ConnStatus, canonicalApp, catalogText, connectOutcome, connectionStatuses } from "@/lib/agent/capabilities";
 import { type Operation, type Shadow, computeFlowErrors, createBuildTools, lineageFacts, missingMediaKinds, fixFormulaRefsIn, getSystemPrompt } from "@/lib/agent/build-core";
 import { findPlaceholders } from "@/lib/agent/review";
+import { pendingForUser } from "@/lib/agent/pending-summary";
 import { layoutPositions } from "@/lib/auto-layout";
 import type { FlowEdge, FlowNode } from "@/lib/flow-validator";
 import { append } from "@/lib/workflow-chat";
@@ -216,6 +217,8 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               if (startedEmpty && shadow.nodes.length) { const pos = layoutPositions(shadow.nodes, shadow.edges); for (const n of shadow.nodes) { const p = pos.get(n.id); if (p) { (n as { position?: unknown }).position = p; } } }
               for (const n of shadow.nodes) { const c = (n.data as { config?: Record<string, unknown> } | undefined)?.config; if (c?.placeholder === true && (typeof c.actionType === "string" || typeof c.triggerType === "string" || typeof c.scheduleCron === "string" || typeof c.cron === "string")) delete c.placeholder; }
               if (interrupted || timedOut || validationLeft.length) emit(`${reply.trim() ? "\n\n" : ""}Estado del armado: PARCIAL${interrupted ? " (se cortó una llamada al modelo)" : timedOut ? " (llegó al tiempo límite)" : ""}${validationLeft.length ? `, ${validationLeft.length} punto${validationLeft.length === 1 ? "" : "s"} sin resolver` : ""}. Lo que sigue describe lo que quedó en el lienzo; puede no cumplir todo lo pedido.`);
+              // Deterministic, so the user sees what is pending and how to continue even if the guide pass below writes nothing.
+              if (interrupted || timedOut || validationLeft.length) { const pend = pendingForUser(validationLeft); emit(`${pend ? `\n\n${pend}` : ""}\n\nPara seguir: pedime que lo corrija de nuevo, o tocá «Deshacer último cambio» para volver a como estaba.`); }
               writer.write({ type: "data-canvas-final", data: { name: flowName, nodes: shadow.nodes, edges: shadow.edges, validation: validationLeft, timedOut, startedEmpty, interrupted } });
               // Same agent, same conversation: it now sees what the app verified and guides the user through what is pending.
               const fresh = shadow.nodes.filter(n => !initialIds.has(n.id));

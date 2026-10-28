@@ -308,9 +308,55 @@ export function unknownConfigKeyError(nodes: FlowNode[]): string | null {
   return found.length ? `configuración: ${found.join("; ")}. Remove the unknown key; the step ignores it at run time.` : null;
 }
 
+// A config field whose declared example is an ISO date must not hold a literal that is not one (e.g. createdAtMin "NOW-1DAY").
+// Templates are not judged: their value is only known at run time.
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
+// Fields whose API also takes relative dates and whose step passes the value through: Resend scheduled_at accepts "in 1 hour".
+const FREE_DATE_FIELDS = new Set(["resend/send-email.emailScheduledAt"]);
+export function literalDateError(nodes: FlowNode[]): string | null {
+  const found: string[] = [];
+  const check = (label: string, cfg: Record<string, unknown>) => {
+    const a = typeof cfg.actionType === "string" ? getAllActions().find(x => x.id === cfg.actionType) : undefined;
+    for (const f of a ? flattenConfigFields(a.configFields ?? []) : []) {
+      const ex = String(f.example ?? f.placeholder ?? ""); const v = cfg[f.key];
+      if (ISO_DATE.test(ex) && !FREE_DATE_FIELDS.has(`${a?.id}.${f.key}`) && typeof v === "string" && v.trim() && !v.includes("{{") && !ISO_DATE.test(v.trim())) found.push(`"${label}" has ${f.key} "${v.slice(0, 40)}", which is not a date in the format this field takes (example: ${ex})`);
+    }
+  };
+  for (const n of nodes) {
+    const cfg = n.data?.config ?? {}; const label = n.data?.label ?? n.id;
+    check(label, cfg);
+    for (const st of Array.isArray(cfg.steps) ? (cfg.steps as { id?: string; actionType?: string; config?: Record<string, unknown> }[]) : []) check(`${label} > ${st.id ?? "?"}`, { actionType: st.actionType, ...(st.config ?? {}) });
+  }
+  return found.length ? `configuración: ${found.join("; ")}. Put a date in that format or reference a step that computes it.` : null;
+}
+
+// Exact wiring repair for a chain left half-built (e.g. a pass cut after add_node and before connect): a step with no incoming edge
+// whose references all point to one predecessor chain is connected after the last referenced step, but only when that step is
+// reachable from the trigger, has no outgoing edge yet and is not downstream of the dangling step. Anything ambiguous is left alone.
+export function wireDanglingRefs(shadow: Shadow): number {
+  const san = (id: string) => id.replace(/[^a-zA-Z0-9]/g, "_");
+  const reach = (from: string[], dir: "down" | "up") => { const seen = new Set(from); const q = [...from]; while (q.length) { const x = q.shift() as string; for (const e of shadow.edges) { const [a, b] = dir === "down" ? [e.source, e.target] : [e.target, e.source]; if (a === x && !seen.has(b)) { seen.add(b); q.push(b); } } } return seen; };
+  let wired = 0;
+  for (let changed = true; changed;) {
+    changed = false;
+    const fromTrigger = reach(shadow.nodes.filter(n => n.data?.type === "trigger").map(n => n.id), "down");
+    for (const x of shadow.nodes) {
+      if (x.data?.type === "trigger" || x.data?.config?.placeholder === true || shadow.edges.some(e => e.target === x.id)) continue;
+      const refs = new Set<string>(); for (const m of JSON.stringify(x.data?.config ?? {}).matchAll(/\{\{@([^:}]+):/g)) { const t = shadow.nodes.find(n => san(n.id) === san(m[1])); if (t && t.id !== x.id) refs.add(t.id); }
+      const last = [...refs].filter(p => [...refs].every(q => reach([p], "up").has(q)));
+      if (last.length !== 1) continue;
+      const p = last[0];
+      if (!fromTrigger.has(p) || shadow.edges.some(e => e.source === p) || reach([x.id], "down").has(p)) continue;
+      if (shadowApply({ op: "addEdge", edge: { source: p, target: x.id } } as Operation, shadow)) { wired++; changed = true; break; }
+    }
+  }
+  return wired;
+}
+
 export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map<string, string[]>; sheetContracts: SheetColumnsContract[]; userPrompt: string; userRequest?: string; skipDeliverables?: Set<string> }): string[] {
   const { composioCatalogMap, sheetContracts, userPrompt } = ctx;
   repairOutputContracts(shadow.nodes); // exact contract-path repairs only (see contract-repair.ts); never invents fields
+  wireDanglingRefs(shadow); // exact edge repair only; ambiguous dangling steps stay flagged by validateFlow
       const errs = validateFlow(shadow.nodes, shadow.edges, getActionOutputFields(), getValidActionTypes(), { validTriggerTypes: getValidTriggerTypes(), composioCatalog: composioCatalogMap, actionItemFields: getActionOutputItemFields(), userPrompt });
       const coverage = planCoverageError(userIntentText(userPrompt), shadow.nodes);
       if (coverage) errs.push(coverage);
@@ -348,6 +394,8 @@ export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map
       if (manualIn) errs.push(manualIn);
       const unknownKeys = unknownConfigKeyError(shadow.nodes);
       if (unknownKeys) errs.push(unknownKeys);
+      const dates = literalDateError(shadow.nodes);
+      if (dates) errs.push(dates);
       return errs;
     }
 

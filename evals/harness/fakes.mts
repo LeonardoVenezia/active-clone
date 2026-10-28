@@ -8,7 +8,7 @@ export const calls = (cs: [string, object][]): P[] => [{ type: "stream-start", w
 export const FORMULA = "{\"pedidos\": $count(o), \"total\": $sum(o.total)}";
 const steps: [string, object][] = [["start_build", { plan: "Schedule 9am; search-orders ayer; Fórmula cantidad y total; Slack #ventas" }],
   ["add_node", { id: "t", nodeType: "trigger", label: "Cada mañana", actionType: "Schedule", config: { scheduleCron: "0 9 * * *" } }],
-  ["add_node", { id: "s", nodeType: "action", label: "Buscar pedidos", actionType: "tiendanube/search-orders", config: { createdAtMin: "ayer" } }],
+  ["add_node", { id: "s", nodeType: "action", label: "Buscar pedidos", actionType: "tiendanube/search-orders", config: { createdAtMin: "2026-10-27T00:00:00-03:00" } }],
   ["add_node", { id: "f", nodeType: "action", label: "Totales", actionType: "Fórmula", config: { input: "{\"o\": {{@s:Buscar pedidos.orders}}}", expression: FORMULA } }],
   ["add_node", { id: "sl", nodeType: "action", label: "Avisar", actionType: "slack/send-message", config: { slackChannel: "#ventas", slackMessage: "Pedidos: {{@f:Totales.result.pedidos}} Total: {{@f:Totales.result.total}}" } }],
   ["connect", { source: "t", target: "s" }], ["connect", { source: "s", target: "f" }], ["connect", { source: "f", target: "sl" }]];
