@@ -1,7 +1,8 @@
 import { generateAIActionPrompts } from "@/plugins";
 import { mergeConfig } from "@/lib/agent/merge-config";
 import { manualInputError, candidateConfigProblem, type ToolRejectMeta } from "@/lib/manual-input";
-import { generateAITriggerPrompts, getAllActions, getAllIntegrations, getAllTriggers } from "@/plugins/registry";
+import { flattenConfigFields, generateAITriggerPrompts, getAllActions, getAllIntegrations, getAllTriggers } from "@/plugins/registry";
+import { analyzeConfigKeys, type RefNode } from "@/lib/agent/ref-contract";
 import { tool } from "ai";
 import { z } from "zod";
 import { getActionOutputFields, getActionOutputItemFields } from "@/plugins/registry";
@@ -292,6 +293,21 @@ export function deliverableCoverageError(requestText: string, nodes: FlowNode[],
   return missing.length ? `consistencia: the request asks to create ${missing.join("; ")} but the canvas has no step that produces it; add that step (one per item when several are requested, inside the Loop) instead of stopping at text/scripts. Never drop a requested deliverable on your own: if it truly cannot be built, say so to the user` : null;
 }
 
+// Blocks config keys a tiendanube/* action does not read (e.g. createdAtMax on search-orders, which the step drops silently).
+// Scoped to Tiendanube on purpose: other plugins, triggers and system actions are not judged here.
+export function unknownConfigKeyError(nodes: FlowNode[]): string | null {
+  const flat: RefNode[] = [];
+  for (const n of nodes) {
+    const cfg = n.data?.config ?? {};
+    flat.push({ id: n.id, label: n.data?.label ?? n.id, config: cfg });
+    for (const s of Array.isArray(cfg.steps) ? (cfg.steps as { id?: string; actionType?: string; config?: Record<string, unknown> }[]) : []) flat.push({ id: `${n.id}#${s.id ?? "?"}`, label: `${n.data?.label ?? n.id} > ${s.id ?? "?"}`, config: { actionType: s.actionType, ...(s.config ?? {}) } });
+  }
+  const tn = flat.filter(x => String(x.config?.actionType ?? "").startsWith("tiendanube/")); // analyzeConfigKeys also judges triggers; keep them out
+  const keysOf = (at: string) => { const a = getAllActions().find(x => x.id === at); return a ? flattenConfigFields(a.configFields ?? []).map(f => f.key) : undefined; };
+  const found = analyzeConfigKeys(tn, keysOf).map(f => { const n = tn.find(x => x.id === f.where); const at = String(n?.config?.actionType); return `"${n?.label}" sets ${f.key}, which ${at} does not read (it accepts: ${(keysOf(at) ?? []).join(", ")})`; });
+  return found.length ? `configuración: ${found.join("; ")}. Remove the unknown key; the step ignores it at run time.` : null;
+}
+
 export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map<string, string[]>; sheetContracts: SheetColumnsContract[]; userPrompt: string; userRequest?: string; skipDeliverables?: Set<string> }): string[] {
   const { composioCatalogMap, sheetContracts, userPrompt } = ctx;
   repairOutputContracts(shadow.nodes); // exact contract-path repairs only (see contract-repair.ts); never invents fields
@@ -330,6 +346,8 @@ export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map
       if (unwired) errs.push(unwired);
       const manualIn = manualInputError(shadow.nodes as never);
       if (manualIn) errs.push(manualIn);
+      const unknownKeys = unknownConfigKeyError(shadow.nodes);
+      if (unknownKeys) errs.push(unknownKeys);
       return errs;
     }
 

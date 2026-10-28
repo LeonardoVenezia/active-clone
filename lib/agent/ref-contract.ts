@@ -84,7 +84,8 @@ export function analyzeRefs(nodes: RefNode[], declared: DeclaredFields): RefFind
   return findings;
 }
 
-// ---- Unknown config keys (report-only) ----
+// ---- Unknown config keys ----
+// Report-only here; build-core unknownConfigKeyError blocks the findings on tiendanube/* actions only.
 // A key counts as "known" only if some code reads it (trigger keys below were derived by searching the repo) or the action declares it in configFields.
 // An unknown key is NOT proof of invalid: it only says nothing in the app reads or renders it.
 export type KeyFinding = { where: string; key: string; cls: "unknown-key"; note: string };
