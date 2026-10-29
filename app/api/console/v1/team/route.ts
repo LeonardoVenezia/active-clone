@@ -26,8 +26,8 @@ export async function GET(request: Request) {
       for(const row of extra)if(!rows.some(r=>r.id===row.id))rows.push(row);
     }
     const { effectiveGrant } = await import("@/lib/console/grants");
-    const { assignments } = await import("@/lib/console/data");
-    const ownWorkflowIds = assignments(null)
+    const { runtimeAssignments } = await import("@/lib/console/data");
+    const ownWorkflowIds = (await runtimeAssignments())
       .filter(
         (a) =>
           a.organizationId === ctx.grant.organizationId &&
@@ -71,7 +71,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         items,
-        workflows:(await (await import('@/lib/console/data')).visibleWorkflows(ctx.grant,null)).map(w=>({id:w.id,name:w.name})),teams:[...new Set(assignments(null).filter(a=>a.organizationId===ctx.grant.organizationId&&a.teamId&&(ctx.grant.role!=='manager'||ctx.grant.teamIds.includes(a.teamId))).map(a=>a.teamId))],
+        workflows:(await (await import('@/lib/console/data')).visibleWorkflows(ctx.grant,null)).map(w=>({id:w.id,name:w.name})),teams:[...new Set((await runtimeAssignments()).filter(a=>a.organizationId===ctx.grant.organizationId&&a.teamId&&(ctx.grant.role!=='manager'||ctx.grant.teamIds.includes(a.teamId))).map(a=>a.teamId))],
         managementAvailable:
           ["owner", "admin", "manager"].includes(ctx.grant.role) &&
           process.env.CONSOLE_STORAGE_ENABLED === "true",
@@ -144,8 +144,8 @@ export async function POST(request: Request) {
         { error: "No se puede cambiar al titular desde la consola." },
         { status: 403 },
       );
-    const { assignments } = await import("@/lib/console/data");
-    const permitted = assignments(null).filter(
+    const { runtimeAssignments } = await import("@/lib/console/data");
+    const permitted = (await runtimeAssignments()).filter(
       (a) => a.organizationId === ctx.grant.organizationId,
     );
     if (

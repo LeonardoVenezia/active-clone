@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { consoleContext } from "@/lib/console/context";
-import { assignments, visibleWorkflows } from "@/lib/console/data";
+import { runtimeAssignments, visibleWorkflows } from "@/lib/console/data";
 import { canExecute } from "@/lib/console/policy";
 import { reserveAndLaunch } from "@/lib/console/execution";
 import { validateWorkflowIntegrations } from "@/lib/db/integrations";
@@ -21,7 +21,7 @@ export async function POST(
     if (!ctx)
       return NextResponse.json({ error: "No autorizado." }, { status: 401 });
     const { workflowId } = await params;
-    const assignment = assignments(null).find(
+    const assignment = (await runtimeAssignments()).find(
       (x) =>
         x.organizationId === ctx.grant.organizationId &&
         x.workflowId === workflowId,

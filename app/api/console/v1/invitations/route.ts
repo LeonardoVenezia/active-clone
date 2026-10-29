@@ -8,7 +8,7 @@ import {consoleInvitations,consoleMemberships,consoleGrants,consoleAudit} from '
 import {effectiveGrant} from '@/lib/console/grants';
 import {hasConsoleAffiliation} from '@/lib/console/affiliation';
 import {canManageGrant,parseGrant} from '@/lib/console/policy';
-import {assignments} from '@/lib/console/data';
+import {runtimeAssignments} from '@/lib/console/data';
 const enabled=()=>process.env.CONSOLE_INVITATIONS_ENABLED==='true'&&process.env.CONSOLE_SEPARATE_MEMBERSHIP_ENABLED==='true'&&process.env.CONSOLE_STORAGE_ENABLED==='true';
 export async function GET(request:Request){try{
  if(!enabled())return NextResponse.json({items:[],enabled:false,emailDeliveryAvailable:false});
@@ -33,7 +33,7 @@ export async function POST(request:Request){try{
    const actor=await effectiveGrant(inv.inviterId,inv.organizationId);const grant={...inv,userId:session.user.id};
    if(!actor||!await hasConsoleAffiliation(inv.inviterId,inv.organizationId)||!canManageGrant(actor,await effectiveGrant(session.user.id,inv.organizationId),grant as any))return false;
    const current=await effectiveGrant(session.user.id,inv.organizationId);
-   const activeAssignments=assignments(null).filter(a=>a.organizationId===inv.organizationId);
+   const activeAssignments=(await runtimeAssignments()).filter(a=>a.organizationId===inv.organizationId);
    if(actor.role==='manager'&&current?.workflowIds.some(id=>!activeAssignments.some(a=>a.workflowId===id&&a.teamId&&actor.teamIds.includes(a.teamId))))return false;
    if(inv.workflowIds.some(id=>!activeAssignments.some(a=>a.workflowId===id&&(actor.role!=='manager'||a.teamId&&actor.teamIds.includes(a.teamId))))||inv.teamIds.some(id=>!activeAssignments.some(a=>a.teamId===id)))return false;
    await tx.insert(consoleMemberships).values({organizationId:inv.organizationId,userId:session.user.id}).onConflictDoUpdate({target:[consoleMemberships.organizationId,consoleMemberships.userId],set:{enabled:true}});
@@ -52,7 +52,7 @@ export async function POST(request:Request){try{
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254||email===session.user.email.toLowerCase())return NextResponse.json({error:'Email no válido.'},{status:400});
  const next=parseGrant(JSON.stringify({organizations:{[ctx.grant.organizationId]:{users:{recipient:body}}}}),'recipient',ctx.grant.organizationId);
  if(!next||!canManageGrant(ctx.grant,null,next))return NextResponse.json({error:'Permisos fuera de tu alcance.'},{status:403});
- const allowed=assignments(null).filter(a=>a.organizationId===ctx.grant.organizationId);
+ const allowed=(await runtimeAssignments()).filter(a=>a.organizationId===ctx.grant.organizationId);
  if(next.workflowIds.some(id=>!allowed.some(a=>a.workflowId===id&&(ctx.grant.role!=='manager'||a.teamId&&ctx.grant.teamIds.includes(a.teamId))))||next.teamIds.some(id=>!allowed.some(a=>a.teamId===id)))return NextResponse.json({error:'Asignación fuera de tu alcance.'},{status:403});
  const id=randomUUID();await db.transaction(async tx=>{await tx.update(consoleInvitations).set({status:'expired'}).where(and(eq(consoleInvitations.organizationId,ctx.grant.organizationId),eq(consoleInvitations.email,email),eq(consoleInvitations.status,'pending'),lt(consoleInvitations.expiresAt,new Date())));await tx.insert(consoleInvitations).values({id,organizationId:ctx.grant.organizationId,email,inviterId:session.user.id,role:next.role,teamIds:next.teamIds,workflowIds:next.workflowIds,canRun:next.canRun,expiresAt:new Date(Date.now()+86400000)});});
  return NextResponse.json({id,message:'Invitación guardada. No se envió correo. La persona debe ingresar con su email verificado.'},{status:201});

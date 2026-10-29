@@ -12,9 +12,9 @@ async function scope(request:Request,integrationId:string){
  const flows=await visibleWorkflows(ctx.grant,null);const [row]=await db.select().from(integrations).where(eq(integrations.id,integrationId));
  if(!row||!flows.some(w=>w.userId===row.userId&&(w.nodes as any[]).some(n=>n.data?.config?.integrationId===row.id)))throw Error('Not authorized');
  // A credential shared with a workflow outside this organization is unsafe to mutate.
- const {workflows}=await import('@/lib/db/schema');const {assignments}=await import('./data');
+ const {workflows}=await import('@/lib/db/schema');const {runtimeAssignments}=await import('./data');
  const owned=await db.select().from(workflows).where(eq(workflows.userId,row.userId));
- const mapped=assignments(null);
+ const mapped=(await runtimeAssignments());
  if(owned.some(w=>(w.nodes as any[]).some(n=>n.data?.config?.integrationId===row.id)&&!mapped.some(a=>a.workflowId===w.id&&a.organizationId===ctx.grant.organizationId)))throw Error('Connection used outside verified tenant');
  return {ctx,row};
 }

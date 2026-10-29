@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { consoleContext } from "@/lib/console/context";
 import { visibleWorkflows, runHistory } from "@/lib/console/data";
 import { canExecute } from "@/lib/console/policy";
-import { assignments } from "@/lib/console/data";
+import { runtimeAssignments } from "@/lib/console/data";
 import { manualInputFields } from "@/lib/manual-input";
 export async function GET(request: Request) {
   try {
@@ -16,6 +16,7 @@ export async function GET(request: Request) {
         { status: 401 },
       );
     const rows = await visibleWorkflows(ctx.grant, ctx.organization.metadata);
+    const mapped = await runtimeAssignments();
     const runs = await runHistory(rows.map((x) => x.id));
     return NextResponse.json(
       {
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
             manual,
             canRun:
               process.env.CONSOLE_EXECUTION_ENABLED === "true" &&
-              assignments(null).some(
+              mapped.some(
                 (a) =>
                   a.workflowId === w.id &&
                   canExecute(ctx.grant, a, manual, w.active),

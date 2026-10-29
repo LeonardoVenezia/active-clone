@@ -14,3 +14,9 @@ CREATE TABLE IF NOT EXISTS console_verification (id text PRIMARY KEY,user_id tex
 CREATE TABLE IF NOT EXISTS console_rate_limits (key text PRIMARY KEY,window_start timestamp NOT NULL,attempts integer NOT NULL);
 ALTER TABLE console_outbox ADD COLUMN IF NOT EXISTS claimed_at timestamp;
 ALTER TABLE console_outbox ADD COLUMN IF NOT EXISTS claim_id text;
+DO $console_config$
+BEGIN
+CREATE TABLE console_setups (organization_id text PRIMARY KEY,owner_id text NOT NULL,enabled boolean NOT NULL DEFAULT false,updated_at timestamp NOT NULL DEFAULT now());
+CREATE TABLE console_assignments (workflow_id text PRIMARY KEY,organization_id text NOT NULL,team_id text,updated_by text NOT NULL,updated_at timestamp NOT NULL DEFAULT now());
+END
+$console_config$;

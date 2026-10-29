@@ -92,3 +92,13 @@ export const consoleVerification=pgTable('console_verification',{
 export const consoleRateLimits=pgTable('console_rate_limits',{
  key:text('key').primaryKey(),windowStart:timestamp('window_start').notNull(),attempts:integer('attempts').notNull(),
 });
+
+// Runtime preparation state. Activation is a separate, explicit policy gate.
+export const consoleSetups = pgTable('console_setups', {
+ organizationId:text('organization_id').primaryKey(), ownerId:text('owner_id').notNull(),
+ enabled:boolean('enabled').notNull().default(false), updatedAt:timestamp('updated_at').notNull().defaultNow(),
+});
+export const consoleAssignments = pgTable('console_assignments', {
+ workflowId:text('workflow_id').primaryKey(),organizationId:text('organization_id').notNull(),
+ teamId:text('team_id'),updatedBy:text('updated_by').notNull(),updatedAt:timestamp('updated_at').notNull().defaultNow(),
+});
