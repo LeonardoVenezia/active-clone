@@ -165,6 +165,7 @@ export const auth = betterAuth({
   // Exact production aliases only. Keep the canonical callback URL unchanged.
   trustedOrigins: [
     getBaseURL(),
+    ...(process.env.CONSOLE_ORIGIN ? [process.env.CONSOLE_ORIGIN] : []),
     "https://active-clone.vercel.app",
     "https://active-clone-leonardo-venezias-projects.vercel.app",
   ],
