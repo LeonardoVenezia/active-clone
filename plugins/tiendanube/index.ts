@@ -99,12 +99,7 @@ const tiendanubePlugin: IntegrationPlugin = {
     },
   ],
 
-  webhook: {
-    getHandler: async () => {
-      const { tiendanubeWebhook } = await import("./webhook");
-      return tiendanubeWebhook;
-    },
-  },
+  webhook: {},
 
   actions: [
     {

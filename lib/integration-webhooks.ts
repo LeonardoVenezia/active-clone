@@ -17,6 +17,8 @@ import { executeWorkflow } from "@/lib/workflow-executor.workflow";
 import type { WorkflowEdge, WorkflowNode } from "@/lib/workflow-store";
 import { getCredentialMapping, getIntegration } from "@/plugins";
 
+import { loadWebhookHandler } from "./integration-webhook-handlers";
+
 const MAX_BODY_BYTES = 1024 * 1024;
 
 export type IntegrationWebhookResult = {
@@ -149,7 +151,7 @@ export async function receiveIntegrationWebhook(
     query: new URL(request.url).searchParams,
   };
 
-  const handler = await plugin.webhook.getHandler();
+  const handler = await loadWebhookHandler(type);
 
   const rejection = handler.verify(webhookRequest, credentials);
   if (rejection) {
@@ -221,7 +223,7 @@ export async function answerWebhookHandshake(
   if (!integration || integration.type !== type) {
     return { status: 404, body: "Not found" };
   }
-  const handler = await plugin.webhook.getHandler();
+  const handler = await loadWebhookHandler(type);
   const credentials = getCredentialMapping(
     plugin,
     integration.config as Record<string, unknown>

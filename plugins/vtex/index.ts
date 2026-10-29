@@ -79,12 +79,7 @@ const vtexPlugin: IntegrationPlugin = {
     },
   ],
 
-  webhook: {
-    getHandler: async () => {
-      const { vtexWebhook } = await import("./webhook");
-      return vtexWebhook;
-    },
-  },
+  webhook: {},
 
   actions: [
     {

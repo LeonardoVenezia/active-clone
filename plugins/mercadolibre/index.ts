@@ -76,12 +76,7 @@ const mercadolibrePlugin: IntegrationPlugin = {
     },
   ],
 
-  webhook: {
-    getHandler: async () => {
-      const { mercadolibreWebhook } = await import("./webhook");
-      return mercadolibreWebhook;
-    },
-  },
+  webhook: {},
 
   actions: [
     {

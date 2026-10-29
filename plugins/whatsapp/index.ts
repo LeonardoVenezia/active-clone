@@ -98,12 +98,7 @@ const whatsappPlugin: IntegrationPlugin = {
     },
   ],
 
-  webhook: {
-    getHandler: async () => {
-      const { whatsappWebhook } = await import("./webhook");
-      return whatsappWebhook;
-    },
-  },
+  webhook: {},
 
   actions: [
     {

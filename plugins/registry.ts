@@ -266,7 +266,7 @@ export type IntegrationPlugin = {
   // Incoming webhook support (optional). Events are received at
   // /api/integrations/webhooks/{type}/{integrationId}
   webhook?: {
-    getHandler: () => Promise<IntegrationWebhookHandler>;
+    // Handler loading lives in the server-only webhook registry.
   };
 };
 

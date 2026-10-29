@@ -63,12 +63,7 @@ const mercadoPagoPlugin: IntegrationPlugin = {
     },
   ],
 
-  webhook: {
-    getHandler: async () => {
-      const { mercadoPagoWebhook } = await import("./webhook");
-      return mercadoPagoWebhook;
-    },
-  },
+  webhook: {},
 
   actions: [
     {
