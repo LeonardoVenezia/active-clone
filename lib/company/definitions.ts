@@ -1,0 +1,3 @@
+import 'server-only';
+import {eq} from 'drizzle-orm';import {db} from '@/lib/db';import{companyVariableDefinitions}from'@/lib/console/schema';import{variableDefinitions}from'@/lib/company-variable-contract';
+export async function readCompanyDefinitions(organizationId:string){if(process.env.COMPANY_VARIABLE_DEFINITIONS_STORAGE_ENABLED!=='true')return variableDefinitions(process.env.COMPANY_VARIABLE_DEFINITIONS,organizationId);return db.select({key:companyVariableDefinitions.key,label:companyVariableDefinitions.label,secret:companyVariableDefinitions.secret}).from(companyVariableDefinitions).where(eq(companyVariableDefinitions.organizationId,organizationId))}

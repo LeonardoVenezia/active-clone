@@ -157,3 +157,7 @@ export const companyVariables = pgTable('company_variables', {
  secret:boolean('secret').notNull().default(false),
  ciphertext:text('ciphertext').notNull(),updatedBy:text('updated_by').notNull(),updatedAt:timestamp('updated_at').notNull().defaultNow(),
 },t=>[primaryKey({columns:[t.organizationId,t.key]})]);
+
+export const companyVariableDefinitions = pgTable('company_variable_definitions', {
+ organizationId:text('organization_id').notNull(),key:text('key').notNull(),label:text('label').notNull(),secret:boolean('secret').notNull(),createdBy:text('created_by').notNull(),createdAt:timestamp('created_at').notNull().defaultNow(),
+},t=>[primaryKey({columns:[t.organizationId,t.key]})]);

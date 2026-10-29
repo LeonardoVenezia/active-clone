@@ -1,3 +1,4 @@
+import {companyVariableKeys} from "@/lib/company-variables";
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -161,6 +162,7 @@ export async function POST(
       );
     }
 
+    if(companyVariableKeys(workflow.nodes).length)return NextResponse.json({error:"Las variables de empresa todavía no están habilitadas para ejecutar. No se inició ningún servicio."},{status:409});
     // Validate that all integrationIds in workflow nodes belong to the workflow owner
     const validation = await validateWorkflowIntegrations(
       workflow.nodes as WorkflowNode[],

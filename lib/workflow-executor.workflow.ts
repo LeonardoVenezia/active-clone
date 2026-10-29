@@ -1,3 +1,4 @@
+import {companyVariableKeys} from "@/lib/company-variables";
 /**
  * Workflow-based executor using "use workflow" and "use step" directives
  * This executor captures step executions through the workflow SDK for better observability
@@ -459,6 +460,8 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
     hasExecutionId: !!executionId,
     workflowId: workflowId || "none",
   });
+
+  if(companyVariableKeys(nodes).length)throw Error("Company variable execution is not enabled");
 
   const outputs: NodeOutputs = {};
   const results: Record<string, ExecutionResult> = {};

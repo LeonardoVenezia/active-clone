@@ -68,7 +68,7 @@ export default function Company({
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground">{data.scopeNote}</p>
-              <h2 className="text-xl font-semibold">Workflows</h2>
+              <Link className="inline-block underline" href={'/companies/'+encodeURIComponent(organizationId)+'/variables'}>Definir variables de la empresa</Link><h2 className="text-xl font-semibold">Workflows</h2>
               {data.items.length ? (
                 <div className="grid gap-4 sm:grid-cols-2">
                   {data.items.map((w) => (

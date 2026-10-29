@@ -1,3 +1,4 @@
+import {readCompanyDefinitions} from '@/lib/company/definitions';
 import 'server-only';
 import {and,eq} from 'drizzle-orm';
 import {db} from '@/lib/db';
@@ -16,7 +17,7 @@ export async function withCompanyVariablesInsideStep<T>(input:{executionId:strin
  const [execution]=await db.select({id:workflowExecutions.id}).from(workflowExecutions).where(and(eq(workflowExecutions.id,input.executionId),eq(workflowExecutions.workflowId,input.workflowId)));
  const [scope]=await db.select().from(managementWorkflowScopes).where(eq(managementWorkflowScopes.workflowId,input.workflowId));
  if(!execution||!scope)throw Error('Company variable execution scope missing');
- const defs=variableDefinitions(process.env.COMPANY_VARIABLE_DEFINITIONS,scope.organizationId);const values:Record<string,string>=Object.create(null);const secrets:string[]=[];
+ const defs=await readCompanyDefinitions(scope.organizationId);const values:Record<string,string>=Object.create(null);const secrets:string[]=[];
  for(const key of keys){const def=defs.find(d=>d.key===key);if(!def)throw Error('Company variable is not declared');const value=await readRuntimeVariable(scope.organizationId,key);values[key]=value;if(def.secret)secrets.push(value)}
  const resolved=resolveCompanyVariables(input.config,values);
  try{const result=await run(resolved);const safe=scrubCompanyValues(result,secrets);await record({input:scrubCompanyValues(resolved,secrets),output:safe});return safe}catch(error){const safe=scrubCompanyValues(error instanceof Error?error.message:'Company variable step failed',secrets);await record({status:'error',error:safe});throw Error(String(safe))}

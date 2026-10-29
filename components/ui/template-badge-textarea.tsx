@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { nodesAtom, selectedNodeAtom } from "@/lib/workflow-store";
 import { findActionById } from "@/plugins";
+import { CompanyVariablePicker } from "./company-variable-picker";
 import { TemplateAutocomplete } from "./template-autocomplete";
 
 export interface TemplateBadgeTextareaProps {
@@ -606,6 +607,7 @@ export function TemplateBadgeTextarea({
         />
       </div>
       
+      <CompanyVariablePicker value={value} onChange={onChange} disabled={disabled}/>
       <TemplateAutocomplete
         currentNodeId={selectedNodeId || undefined}
         filter={autocompleteFilter}

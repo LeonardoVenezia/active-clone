@@ -1,3 +1,4 @@
+import {companyVariableKeys} from "@/lib/company-variables";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { start } from "workflow/api";
@@ -102,6 +103,7 @@ export async function POST(
       }
     }
 
+    if(companyVariableKeys(workflow.nodes).length)return NextResponse.json({error:"Las variables de empresa todavía no están habilitadas para ejecutar. No se inició ningún servicio."},{status:409});
     // Validate integration references against the workflow owner (shared
     // editors run with the owner's connections)
     const validation = await validateWorkflowIntegrations(

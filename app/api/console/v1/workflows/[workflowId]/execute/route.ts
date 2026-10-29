@@ -1,3 +1,4 @@
+import {companyVariableKeys} from "@/lib/company-variables";
 import { isManualConsoleWorkflow } from "@/lib/console/workflow-summary";
 import { NextResponse } from "next/server";
 import { consoleContext } from "@/lib/console/context";
@@ -65,6 +66,7 @@ export async function POST(
         { status: 400 },
       );
     }
+    if(companyVariableKeys(w.nodes).length)return NextResponse.json({error:"Las variables de empresa todavía no están habilitadas para ejecutar. No se inició ningún servicio."},{status:409});
     const validation = await validateWorkflowIntegrations(
       w.nodes as never,
       w.userId,
