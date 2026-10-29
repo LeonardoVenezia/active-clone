@@ -864,6 +864,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
         // Build step context for logging (stepHandler will handle the logging)
         const stepContext: StepContext = {
           executionId,
+          workflowId,
           nodeId: node.id,
           nodeName: getNodeName(node),
           nodeType: actionType,

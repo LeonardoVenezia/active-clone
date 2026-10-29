@@ -13,6 +13,7 @@ import {
 } from "../workflow-logging";
 
 export type StepContext = {
+  workflowId?: string;
   executionId?: string;
   nodeId: string;
   nodeName: string;

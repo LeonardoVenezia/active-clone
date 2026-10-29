@@ -2,6 +2,8 @@
  * Executable step function for HTTP Request action
  */
 import "server-only";
+import {companyVariableKeys} from "@/lib/company-variables";
+import {withCompanyVariablesInsideStep} from "@/lib/company/step-variables";
 
 import { getErrorMessage } from "../utils";
 import { type StepInput, withStepLogging } from "./step-handler";
@@ -15,6 +17,7 @@ export type HttpRequestInput = StepInput & {
   httpMethod: string;
   httpHeaders?: string;
   httpBody?: string;
+  _companyTimeoutMs?: number;
 };
 
 function parseHeaders(httpHeaders?: string): Record<string, string> {
@@ -69,6 +72,7 @@ async function httpRequest(
       method: input.httpMethod,
       headers: parseHeaders(input.httpHeaders),
       body: parseBody(input.httpMethod, input.httpBody),
+      ...(input._companyTimeoutMs?{signal:AbortSignal.timeout(input._companyTimeoutMs)}:{}),
     });
 
     if (!response.ok) {
@@ -85,7 +89,7 @@ async function httpRequest(
   } catch (error) {
     return {
       success: false,
-      error: `HTTP request failed: ${getErrorMessage(error)}`,
+      error: input._companyTimeoutMs ? "No se pudo confirmar el resultado remoto. No reintentar automáticamente. " + getErrorMessage(error) : `HTTP request failed: ${getErrorMessage(error)}`,
     };
   }
 }
@@ -99,6 +103,16 @@ export async function httpRequestStep(
   input: HttpRequestInput
 ): Promise<HttpRequestResult> {
   "use step";
-  return withStepLogging(input, () => httpRequest(input));
+  if(!companyVariableKeys(input).length)return withStepLogging(input, () => httpRequest(input));
+  if(!input._context?.executionId||!input._context.workflowId)throw Error("Company variable step context missing");
+  // Parse JSON containers before substitution, then serialize afterwards so
+  // quotes/backslashes in values cannot break JSON or inject another header.
+  const jsonOrText=(value:string|undefined)=>{if(!value)return value;try{return JSON.parse(value)}catch{return value}};
+  const config={endpoint:input.endpoint,httpMethod:input.httpMethod,httpHeaders:jsonOrText(input.httpHeaders),httpBody:jsonOrText(input.httpBody)};
+  return withStepLogging(input, async()=> await withCompanyVariablesInsideStep({executionId:input._context!.executionId!,workflowId:input._context!.workflowId!,config},async resolved=>{
+    const r=resolved as typeof config;const stringify=(v:unknown)=>typeof v==='string'?v:v===undefined?undefined:JSON.stringify(v);
+    return httpRequest({endpoint:r.endpoint,httpMethod:r.httpMethod,httpHeaders:stringify(r.httpHeaders),httpBody:stringify(r.httpBody),_companyTimeoutMs:15000});
+  },async()=>{}) as HttpRequestResult);
+
 }
 httpRequestStep.maxRetries = 0;
