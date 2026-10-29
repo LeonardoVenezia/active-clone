@@ -3,6 +3,7 @@ import { consoleContext } from "@/lib/console/context";
 import { visibleWorkflows, runHistory } from "@/lib/console/data";
 import { canExecute } from "@/lib/console/policy";
 import { runtimeAssignments } from "@/lib/console/data";
+import { isManualConsoleWorkflow } from "@/lib/console/workflow-summary";
 import { manualInputFields } from "@/lib/manual-input";
 export async function GET(request: Request) {
   try {
@@ -23,17 +24,19 @@ export async function GET(request: Request) {
         user: { id: ctx.user.id, name: ctx.user.name || "" },
         organization: { id: ctx.organization.id, name: ctx.organization.name },
         role: ctx.grant.role,
+        recentRunLimit: 100,
         workflows: rows.map((w) => {
-          const manual = w.nodes.some(
-            (n: any) =>
-              n.data?.type === "trigger" &&
-              n.data?.config?.triggerType === "Manual",
-          );
+          const manual = isManualConsoleWorkflow(w.nodes);
           return {
             id: w.id,
             name: w.name,
             description: w.description || "",
-            teamName: null,
+            teamName:
+              mapped.find(
+                (a) =>
+                  a.workflowId === w.id &&
+                  a.organizationId === ctx.grant.organizationId,
+              )?.teamId || null,
             status: w.active ? "active" : "paused",
             manual,
             canRun:

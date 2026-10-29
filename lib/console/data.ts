@@ -31,7 +31,9 @@ export async function visibleWorkflows(
   grant: ConsoleGrant,
   metadata: string | null,
 ) {
-  const permitted = (await runtimeAssignments()).filter((x) => canView(grant, x));
+  const permitted = (await runtimeAssignments()).filter((x) =>
+    canView(grant, x),
+  );
   if (!permitted.length) return [];
   const owners = await db
     .select({ id: members.userId })
@@ -75,9 +77,28 @@ export function configuredAssignments() {
 }
 
 export async function runtimeAssignments(): Promise<Assignment[]> {
- if(process.env.CONSOLE_PERSISTENT_CONFIG_ENABLED!=="true")return assignments(null);
- const rows=await db.select({workflowId:consoleAssignments.workflowId,organizationId:consoleAssignments.organizationId,teamId:consoleAssignments.teamId}).from(consoleAssignments).innerJoin(consoleSetups,and(eq(consoleSetups.organizationId,consoleAssignments.organizationId),eq(consoleSetups.enabled,true)));
- const combined=[...assignments(null),...rows];
- const scopes=new Map<string,Set<string>>();for(const r of combined){const x=scopes.get(r.workflowId)||new Set<string>();x.add(r.organizationId);scopes.set(r.workflowId,x)}
- return combined.filter(r=>scopes.get(r.workflowId)?.size===1);
+  if (process.env.CONSOLE_PERSISTENT_CONFIG_ENABLED !== "true")
+    return assignments(null);
+  const rows = await db
+    .select({
+      workflowId: consoleAssignments.workflowId,
+      organizationId: consoleAssignments.organizationId,
+      teamId: consoleAssignments.teamId,
+    })
+    .from(consoleAssignments)
+    .innerJoin(
+      consoleSetups,
+      and(
+        eq(consoleSetups.organizationId, consoleAssignments.organizationId),
+        eq(consoleSetups.enabled, true),
+      ),
+    );
+  const combined = [...assignments(null), ...rows];
+  const scopes = new Map<string, Set<string>>();
+  for (const r of combined) {
+    const x = scopes.get(r.workflowId) || new Set<string>();
+    x.add(r.organizationId);
+    scopes.set(r.workflowId, x);
+  }
+  return combined.filter((r) => scopes.get(r.workflowId)?.size === 1);
 }

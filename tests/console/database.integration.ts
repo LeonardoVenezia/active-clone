@@ -1,11 +1,30 @@
-import {fixtureRateLimit} from '@/lib/console/rate-limit-test';
-import {processDryRunOutbox,quarantineStaleDryRuns,reconcileDryRun} from '@/lib/console/outbox-test';
-import {registerInvitedFixture,verifyFixtureEmail,queueDryRunNotice} from '@/lib/console/onboarding';
-import {prepareReconnect,finishReconnect,completeProviderCallback} from '@/lib/console/reconnect';
-import {integrations} from '@/lib/db/schema';
-import {POST as inviteAction,GET as invitationList} from '@/app/api/console/v1/invitations/route';
-import {GET as auditLog} from '@/app/api/console/v1/audit/route';
-import {consoleAudit} from '@/lib/console/schema';
+import { fixtureRateLimit } from "@/lib/console/rate-limit-test";
+import {
+  processDryRunOutbox,
+  quarantineStaleDryRuns,
+  reconcileDryRun,
+} from "@/lib/console/outbox-test";
+import {
+  registerInvitedFixture,
+  verifyFixtureEmail,
+  queueDryRunNotice,
+} from "@/lib/console/onboarding";
+import {
+  prepareReconnect,
+  finishReconnect,
+  completeProviderCallback,
+} from "@/lib/console/reconnect";
+import { integrations } from "@/lib/db/schema";
+import {
+  POST as inviteAction,
+  GET as invitationList,
+} from "@/app/api/console/v1/invitations/route";
+import { GET as auditLog } from "@/app/api/console/v1/audit/route";
+import {
+  consoleAudit,
+  consoleSetups,
+  consoleAssignments,
+} from "@/lib/console/schema";
 import {
   GET as loadWorkflowSettings,
   POST as saveWorkflowSettings,
@@ -36,7 +55,12 @@ import {
 } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
 import { consoleContext } from "@/lib/console/context";
-import { assignments, visibleWorkflows } from "@/lib/console/data";
+import { effectiveGrant } from "@/lib/console/grants";
+import {
+  assignments,
+  runtimeAssignments,
+  visibleWorkflows,
+} from "@/lib/console/data";
 import { GET as bootstrap } from "@/app/api/console/v1/bootstrap/route";
 import { GET as history } from "@/app/api/console/v1/history/route";
 import { GET as team } from "@/app/api/console/v1/team/route";
@@ -249,10 +273,22 @@ async function main() {
     );
     assert.equal(wrongFlow.status, 403);
     process.env.CONSOLE_STORAGE_ENABLED = "true";
-    await db.insert(consoleAudit).values({id:'audit-'+i,organizationId:i,actorId:'u-'+i,subjectId:'w-'+i,action:'notification.settings.updated'});
-    const auditItems=(await (await auditLog(request)).json()).items;
-    assert.ok(auditItems.some((x:any)=>x.id==='audit-'+i));
-    assert.ok(auditItems.every((x:any)=>x.id!=='audit-'+(i==='one'?'two':'one')));
+    await db
+      .insert(consoleAudit)
+      .values({
+        id: "audit-" + i,
+        organizationId: i,
+        actorId: "u-" + i,
+        subjectId: "w-" + i,
+        action: "notification.settings.updated",
+      });
+    const auditItems = (await (await auditLog(request)).json()).items;
+    assert.ok(auditItems.some((x: any) => x.id === "audit-" + i));
+    assert.ok(
+      auditItems.every(
+        (x: any) => x.id !== "audit-" + (i === "one" ? "two" : "one"),
+      ),
+    );
     const prefRequest = () =>
       new Request("http://localhost:4300", {
         method: "POST",
@@ -369,119 +405,585 @@ async function main() {
       assert.equal((await edit("manager", ["sales"], ["w-one"])).status, 403);
       const managedList = await (await team(request)).json();
       assert.deepEqual(managedList.teams, ["sales"]);
-      assert.deepEqual(managedList.workflows.map((w: any) => w.id), ["w-one"]);
-      assert.equal(managedList.items.find((u: any) => u.id === "team-target").editable, true);
-      assert.equal((await edit("operator", ["sales"], ["w-one"], false)).status, 200);
+      assert.deepEqual(
+        managedList.workflows.map((w: any) => w.id),
+        ["w-one"],
+      );
+      assert.equal(
+        managedList.items.find((u: any) => u.id === "team-target").editable,
+        true,
+      );
+      assert.equal(
+        (await edit("operator", ["sales"], ["w-one"], false)).status,
+        200,
+      );
       const { effectiveGrant } = await import("@/lib/console/grants");
       assert.equal(await effectiveGrant("team-target", "one"), null);
-      const keptMembership = await db.select().from(members).where(eq(members.userId, "team-target"));
+      const keptMembership = await db
+        .select()
+        .from(members)
+        .where(eq(members.userId, "team-target"));
       assert.equal(keptMembership.length, 1);
       assert.equal((await edit("operator", ["sales"], ["w-one"])).status, 200);
       process.env.CONSOLE_ACCESS_CONFIG = JSON.stringify(baseConfig);
     }
-    if(i==='one'){
-      process.env.CONSOLE_RECONNECT_ENABLED='true';process.env.INTEGRATION_ENCRYPTION_KEY=randomBytes(32).toString('hex');
-      await db.insert(integrations).values({id:'fixture-connection',userId:'u-one',name:'Fixture only',type:'openai' as any,config:'unused-fixture'});
-      await db.update(workflows).set({nodes:[{id:'fixture-node',data:{config:{integrationId:'fixture-connection'}}}]}).where(eq(workflows.id,'w-one'));
-      const ticket=await prepareReconnect(request,'fixture-connection');
-      await assert.rejects(()=>finishReconnect(request,ticket.id,{providerType:'wrong',config:{token:'fictitious'}}));
-      const done=await finishReconnect(request,ticket.id,{providerType:'openai',config:{token:'fictitious-not-real'}});assert.equal(done.integrationId,'fixture-connection');
-      await assert.rejects(()=>finishReconnect(request,ticket.id,{providerType:'openai',config:{token:'fictitious'}}));
-      const stored=(await db.select().from(integrations).where(eq(integrations.id,'fixture-connection')))[0];assert.equal(stored.userId,'u-one');assert.equal(stored.name,'Fixture only');assert.ok(typeof stored.config==='string'&&!stored.config.includes('fictitious'));
-      let exchanges=0;const fakeAdapter={type:'openai',exchange:async(code:string)=>{exchanges++;if(code!=='fictitious-code')throw Error('Invalid fixture code');return {config:{token:'fictitious-provider-token'},verified:true}}};
-      const callbackTicket=await prepareReconnect(request,'fixture-connection');
+    if (i === "one") {
+      process.env.CONSOLE_RECONNECT_ENABLED = "true";
+      process.env.INTEGRATION_ENCRYPTION_KEY = randomBytes(32).toString("hex");
+      await db
+        .insert(integrations)
+        .values({
+          id: "fixture-connection",
+          userId: "u-one",
+          name: "Fixture only",
+          type: "openai" as any,
+          config: "unused-fixture",
+        });
+      await db
+        .update(workflows)
+        .set({
+          nodes: [
+            {
+              id: "fixture-node",
+              data: { config: { integrationId: "fixture-connection" } },
+            },
+          ],
+        })
+        .where(eq(workflows.id, "w-one"));
+      const ticket = await prepareReconnect(request, "fixture-connection");
+      await assert.rejects(() =>
+        finishReconnect(request, ticket.id, {
+          providerType: "wrong",
+          config: { token: "fictitious" },
+        }),
+      );
+      const done = await finishReconnect(request, ticket.id, {
+        providerType: "openai",
+        config: { token: "fictitious-not-real" },
+      });
+      assert.equal(done.integrationId, "fixture-connection");
+      await assert.rejects(() =>
+        finishReconnect(request, ticket.id, {
+          providerType: "openai",
+          config: { token: "fictitious" },
+        }),
+      );
+      const stored = (
+        await db
+          .select()
+          .from(integrations)
+          .where(eq(integrations.id, "fixture-connection"))
+      )[0];
+      assert.equal(stored.userId, "u-one");
+      assert.equal(stored.name, "Fixture only");
+      assert.ok(
+        typeof stored.config === "string" &&
+          !stored.config.includes("fictitious"),
+      );
+      let exchanges = 0;
+      const fakeAdapter = {
+        type: "openai",
+        exchange: async (code: string) => {
+          exchanges++;
+          if (code !== "fictitious-code") throw Error("Invalid fixture code");
+          return {
+            config: { token: "fictitious-provider-token" },
+            verified: true,
+          };
+        },
+      };
+      const callbackTicket = await prepareReconnect(
+        request,
+        "fixture-connection",
+      );
       delete process.env.CONSOLE_RECONNECT_ENABLED;
-      await assert.rejects(()=>completeProviderCallback(request,{ticketId:callbackTicket.id,state:callbackTicket.id,code:'fictitious-code'},fakeAdapter));assert.equal(exchanges,0);
-      process.env.CONSOLE_RECONNECT_ENABLED='true';
-      await assert.rejects(()=>completeProviderCallback(request,{ticketId:callbackTicket.id,state:'wrong-state',code:'fictitious-code'},fakeAdapter));assert.equal(exchanges,0);
-      await assert.rejects(()=>completeProviderCallback(request,{ticketId:callbackTicket.id,state:callbackTicket.id,code:'invalid'},fakeAdapter));
-      await assert.rejects(()=>completeProviderCallback(request,{ticketId:callbackTicket.id,state:callbackTicket.id,code:'fictitious-code'},fakeAdapter));assert.equal(exchanges,1);
-      const raceTicket=await prepareReconnect(request,'fixture-connection');
-      const concurrent=await Promise.allSettled(Array.from({length:8},()=>completeProviderCallback(request,{ticketId:raceTicket.id,state:raceTicket.id,code:'fictitious-code'},fakeAdapter)));
-      assert.equal(concurrent.filter(x=>x.status==='fulfilled').length,1);assert.equal(exchanges,2);
-      await assert.rejects(()=>completeProviderCallback(request,{ticketId:raceTicket.id,state:raceTicket.id,code:'fictitious-code'},fakeAdapter));assert.equal(exchanges,2);
+      await assert.rejects(() =>
+        completeProviderCallback(
+          request,
+          {
+            ticketId: callbackTicket.id,
+            state: callbackTicket.id,
+            code: "fictitious-code",
+          },
+          fakeAdapter,
+        ),
+      );
+      assert.equal(exchanges, 0);
+      process.env.CONSOLE_RECONNECT_ENABLED = "true";
+      await assert.rejects(() =>
+        completeProviderCallback(
+          request,
+          {
+            ticketId: callbackTicket.id,
+            state: "wrong-state",
+            code: "fictitious-code",
+          },
+          fakeAdapter,
+        ),
+      );
+      assert.equal(exchanges, 0);
+      await assert.rejects(() =>
+        completeProviderCallback(
+          request,
+          {
+            ticketId: callbackTicket.id,
+            state: callbackTicket.id,
+            code: "invalid",
+          },
+          fakeAdapter,
+        ),
+      );
+      await assert.rejects(() =>
+        completeProviderCallback(
+          request,
+          {
+            ticketId: callbackTicket.id,
+            state: callbackTicket.id,
+            code: "fictitious-code",
+          },
+          fakeAdapter,
+        ),
+      );
+      assert.equal(exchanges, 1);
+      const raceTicket = await prepareReconnect(request, "fixture-connection");
+      const concurrent = await Promise.allSettled(
+        Array.from({ length: 8 }, () =>
+          completeProviderCallback(
+            request,
+            {
+              ticketId: raceTicket.id,
+              state: raceTicket.id,
+              code: "fictitious-code",
+            },
+            fakeAdapter,
+          ),
+        ),
+      );
+      assert.equal(
+        concurrent.filter((x) => x.status === "fulfilled").length,
+        1,
+      );
+      assert.equal(exchanges, 2);
+      await assert.rejects(() =>
+        completeProviderCallback(
+          request,
+          {
+            ticketId: raceTicket.id,
+            state: raceTicket.id,
+            code: "fictitious-code",
+          },
+          fakeAdapter,
+        ),
+      );
+      assert.equal(exchanges, 2);
 
-      const stale=await prepareReconnect(request,'fixture-connection');await db.update(integrations).set({updatedAt:new Date(Date.now()+1000)}).where(eq(integrations.id,'fixture-connection'));
-      await assert.rejects(()=>finishReconnect(request,stale.id,{providerType:'openai',config:{token:'fixture'}}));
-      await db.update(workflows).set({nodes:[{id:'cross',data:{config:{integrationId:'fixture-connection'}}}]}).where(eq(workflows.id,'w-wrong-owner'));
-      await assert.rejects(()=>prepareReconnect(request,'fixture-connection'));
-      await db.update(workflows).set({nodes:[]}).where(eq(workflows.id,'w-wrong-owner'));
-      delete process.env.CONSOLE_RECONNECT_ENABLED;delete process.env.INTEGRATION_ENCRYPTION_KEY;
+      const stale = await prepareReconnect(request, "fixture-connection");
+      await db
+        .update(integrations)
+        .set({ updatedAt: new Date(Date.now() + 1000) })
+        .where(eq(integrations.id, "fixture-connection"));
+      await assert.rejects(() =>
+        finishReconnect(request, stale.id, {
+          providerType: "openai",
+          config: { token: "fixture" },
+        }),
+      );
+      await db
+        .update(workflows)
+        .set({
+          nodes: [
+            {
+              id: "cross",
+              data: { config: { integrationId: "fixture-connection" } },
+            },
+          ],
+        })
+        .where(eq(workflows.id, "w-wrong-owner"));
+      await assert.rejects(() =>
+        prepareReconnect(request, "fixture-connection"),
+      );
+      await db
+        .update(workflows)
+        .set({ nodes: [] })
+        .where(eq(workflows.id, "w-wrong-owner"));
+      delete process.env.CONSOLE_RECONNECT_ENABLED;
+      delete process.env.INTEGRATION_ENCRYPTION_KEY;
     }
-    if(i==='one'){
-      process.env.CONSOLE_SEPARATE_MEMBERSHIP_ENABLED='true';process.env.CONSOLE_INVITATIONS_ENABLED='true';
-      const postInvite=(body:any,c=cookie)=>new Request('http://localhost:4300',{method:'POST',headers:{cookie:c,origin:'http://localhost:4301'},body:JSON.stringify(body)});
-      const created=await inviteAction(postInvite({email:'two@fixture.local',role:'operator',teamIds:['sales'],workflowIds:['w-one'],canRun:false}));
-      assert.equal(created.status,201);const invitation=await created.json();
-      const otherLogin=await auth.api.signInEmail({body:{email:'two@fixture.local',password},asResponse:true,headers:new Headers({origin:'http://localhost:4301'})});
-      const otherCookie=otherLogin.headers.getSetCookie().map(x=>x.split(';')[0]).join('; ');
-      assert.equal((await inviteAction(postInvite({action:'accept',id:invitation.id}))).status,403);
-      assert.equal((await inviteAction(postInvite({action:'accept',id:invitation.id},otherCookie))).status,200);
-      assert.equal((await inviteAction(postInvite({action:'accept',id:invitation.id},otherCookie))).status,403);
-      const builderMembers=await db.select().from(members).where(eq(members.userId,'u-two'));
-      assert.equal(builderMembers.filter(x=>x.organizationId==='one').length,0);
-      const otherRequest=new Request('http://localhost:4300',{headers:{cookie:otherCookie}});
-      const orgs=await (await listOrgs(otherRequest)).json();assert.ok(orgs.items.some((x:any)=>x.id==='one'));
-      assert.equal((await selectOrg(new Request('http://localhost:4300',{method:'POST',headers:{cookie:otherCookie,origin:'http://localhost:4301'},body:JSON.stringify({organizationId:'one'})}))).status,200);
-      assert.equal((await consoleContext(otherRequest))?.organization.id,'one');
-      assert.deepEqual((await (await bootstrap(otherRequest)).json()).workflows.map((x:any)=>x.id),['w-one']);
-      assert.equal(builderMembers.length,1);
-      const createAnother=async(email:string)=>{const r=await inviteAction(postInvite({email,role:'operator',teamIds:['sales'],workflowIds:['w-one'],canRun:false}));assert.equal(r.status,201);return (await r.json()).id};
-      const cancelled=await createAnother('cancel@fixture.local');assert.equal((await inviteAction(postInvite({action:'cancel',id:cancelled}))).status,200);
-      const {consoleInvitations}=await import('@/lib/console/schema');
-      assert.equal((await db.select().from(consoleInvitations).where(eq(consoleInvitations.id,cancelled)))[0].status,'cancelled');
-      const again=await createAnother('two@fixture.local');
-      await db.update(consoleInvitations).set({expiresAt:new Date(Date.now()-1000)}).where(eq(consoleInvitations.id,again));
-      assert.equal((await inviteAction(postInvite({action:'accept',id:again},otherCookie))).status,403);
-      process.env.CONSOLE_ONBOARDING_TEST_ONLY='true';
-      await createAnother('new@fixture.local');
-      const pendingChallenges:{id:string;token:string}[]=[];
-      await assert.rejects(()=>registerInvitedFixture('not-invited@fixture.local',password,c=>pendingChallenges.push(c)));
-      const registered=await registerInvitedFixture('new@fixture.local',password,c=>pendingChallenges.push(c));assert.equal(registered.emailVerified,false);assert.equal(registered.delivery,'dry-run');
-      const fixtureLogin=await auth.api.signInEmail({body:{email:'new@fixture.local',password},asResponse:true,headers:new Headers({origin:'http://localhost:4301'})});
-      const fixtureCookie=fixtureLogin.headers.getSetCookie().map(x=>x.split(';')[0]).join('; ');
-      const inviteRows=await (await invitationList(new Request('http://localhost:4300',{headers:{cookie:fixtureCookie}}))).json();
-      const pendingNew=inviteRows.items.find((x:any)=>x.email==='new@fixture.local');assert.ok(pendingNew);
-      assert.equal((await inviteAction(postInvite({action:'accept',id:pendingNew.id},fixtureCookie))).status,401);
-      assert.equal(await verifyFixtureEmail(pendingChallenges[0].id,'wrong'),false);
-      assert.equal(await verifyFixtureEmail(pendingChallenges[0].id,pendingChallenges[0].token),true);
-      assert.equal(await verifyFixtureEmail(pendingChallenges[0].id,pendingChallenges[0].token),false);
-      assert.equal((await inviteAction(postInvite({action:'accept',id:pendingNew.id},fixtureCookie))).status,200);
-      const builderNew=await db.select().from(members).where(eq(members.userId,registered.userId));assert.equal(builderNew.length,0);
-      await createAnother('expired-new@fixture.local');
-      await registerInvitedFixture('expired-new@fixture.local',password,c=>pendingChallenges.push(c));
-      const {consoleVerification}=await import('@/lib/console/schema');await db.update(consoleVerification).set({expiresAt:new Date(Date.now()-1000)}).where(eq(consoleVerification.id,pendingChallenges[1].id));
-      assert.equal(await verifyFixtureEmail(pendingChallenges[1].id,pendingChallenges[1].token),false);
-      const notice={organizationId:'one',recipient:'new@fixture.local',kind:'failure' as const,eventId:'fixture-event'};
-      assert.deepEqual(await queueDryRunNotice(notice),{queued:true,sent:false});assert.deepEqual(await queueDryRunNotice(notice),{queued:false,sent:false});
-      const {consoleOutbox}=await import('@/lib/console/schema');const outbox=await db.select().from(consoleOutbox);assert.ok(outbox.every(x=>x.status==='dry-run'));assert.equal(outbox.filter(x=>x.kind==='verify-email').length,2);
-      const dryItem=outbox.find(x=>x.kind==='failure')!;let previewCalls=0;
-      const preview=async()=>{previewCalls++;return {sent:false as const}};
-      const workerRace=await Promise.all(Array.from({length:8},()=>processDryRunOutbox(dryItem.id,preview)));assert.equal(workerRace.filter(x=>x.claimed).length,1);assert.equal(previewCalls,1);
-      await queueDryRunNotice({...notice,eventId:'retry-fixture'});const retryItem=(await db.select().from(consoleOutbox).where(eq(consoleOutbox.dedupeKey,'one:failure:retry-fixture')))[0];
-      for(let attempt=0;attempt<3;attempt++)assert.equal((await processDryRunOutbox(retryItem.id,async()=>{throw Error('Fictitious transport failure')})).claimed,true);
-      assert.equal((await processDryRunOutbox(retryItem.id,preview)).claimed,false);
-      assert.equal((await db.select().from(consoleOutbox).where(eq(consoleOutbox.id,retryItem.id)))[0].status,'dead-letter');
-      const clock=new Date('2030-01-01T00:00:00Z');
-      const limits=await Promise.all(Array.from({length:8},()=>fixtureRateLimit('race-fixture',3,60000,clock)));assert.equal(limits.filter(Boolean).length,3);
-      await assert.rejects(()=>registerInvitedFixture('new@fixture.local',password,()=>{}));
-      assert.equal((await db.select().from(users).where(eq(users.email,'new@fixture.local'))).length,1);
-      assert.equal(await fixtureRateLimit('race-fixture',3,60000,new Date(clock.getTime()+60000)),true);
-      await queueDryRunNotice({...notice,eventId:'crash-fixture'});const crashItem=(await db.select().from(consoleOutbox).where(eq(consoleOutbox.dedupeKey,'one:failure:crash-fixture')))[0];
-      await db.update(consoleOutbox).set({status:'previewing',claimId:'interrupted',claimedAt:clock}).where(eq(consoleOutbox.id,crashItem.id));
-      assert.equal((await quarantineStaleDryRuns(new Date(clock.getTime()+299000))).length,0);
-      assert.ok((await quarantineStaleDryRuns(new Date(clock.getTime()+301000))).some(x=>x.id===crashItem.id));
-      assert.equal((await processDryRunOutbox(crashItem.id,preview)).claimed,false);
-      await assert.rejects(()=>reconcileDryRun(crashItem.id,'discard','u-one',''));
-      assert.deepEqual(await reconcileDryRun(crashItem.id,'discard','u-one','Inspected fictitious interrupted preview'),{changed:true,sent:false});
-      assert.equal((await processDryRunOutbox(crashItem.id,preview)).claimed,false);
-      assert.deepEqual(await reconcileDryRun(crashItem.id,'confirmed-previewed','u-one','No second state change allowed'),{changed:false,sent:false});
+    if (i === "one") {
+      process.env.CONSOLE_SEPARATE_MEMBERSHIP_ENABLED = "true";
+      process.env.CONSOLE_INVITATIONS_ENABLED = "true";
+      const postInvite = (body: any, c = cookie) =>
+        new Request("http://localhost:4300", {
+          method: "POST",
+          headers: { cookie: c, origin: "http://localhost:4301" },
+          body: JSON.stringify(body),
+        });
+      const created = await inviteAction(
+        postInvite({
+          email: "two@fixture.local",
+          role: "operator",
+          teamIds: ["sales"],
+          workflowIds: ["w-one"],
+          canRun: false,
+        }),
+      );
+      assert.equal(created.status, 201);
+      const invitation = await created.json();
+      const otherLogin = await auth.api.signInEmail({
+        body: { email: "two@fixture.local", password },
+        asResponse: true,
+        headers: new Headers({ origin: "http://localhost:4301" }),
+      });
+      const otherCookie = otherLogin.headers
+        .getSetCookie()
+        .map((x) => x.split(";")[0])
+        .join("; ");
+      assert.equal(
+        (
+          await inviteAction(
+            postInvite({ action: "accept", id: invitation.id }),
+          )
+        ).status,
+        403,
+      );
+      assert.equal(
+        (
+          await inviteAction(
+            postInvite({ action: "accept", id: invitation.id }, otherCookie),
+          )
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await inviteAction(
+            postInvite({ action: "accept", id: invitation.id }, otherCookie),
+          )
+        ).status,
+        403,
+      );
+      const builderMembers = await db
+        .select()
+        .from(members)
+        .where(eq(members.userId, "u-two"));
+      assert.equal(
+        builderMembers.filter((x) => x.organizationId === "one").length,
+        0,
+      );
+      const otherRequest = new Request("http://localhost:4300", {
+        headers: { cookie: otherCookie },
+      });
+      const orgs = await (await listOrgs(otherRequest)).json();
+      assert.ok(orgs.items.some((x: any) => x.id === "one"));
+      assert.equal(
+        (
+          await selectOrg(
+            new Request("http://localhost:4300", {
+              method: "POST",
+              headers: { cookie: otherCookie, origin: "http://localhost:4301" },
+              body: JSON.stringify({ organizationId: "one" }),
+            }),
+          )
+        ).status,
+        200,
+      );
+      assert.equal(
+        (await consoleContext(otherRequest))?.organization.id,
+        "one",
+      );
+      assert.deepEqual(
+        (await (await bootstrap(otherRequest)).json()).workflows.map(
+          (x: any) => x.id,
+        ),
+        ["w-one"],
+      );
+      assert.equal(builderMembers.length, 1);
+      const createAnother = async (email: string) => {
+        const r = await inviteAction(
+          postInvite({
+            email,
+            role: "operator",
+            teamIds: ["sales"],
+            workflowIds: ["w-one"],
+            canRun: false,
+          }),
+        );
+        assert.equal(r.status, 201);
+        return (await r.json()).id;
+      };
+      const cancelled = await createAnother("cancel@fixture.local");
+      assert.equal(
+        (await inviteAction(postInvite({ action: "cancel", id: cancelled })))
+          .status,
+        200,
+      );
+      const { consoleInvitations } = await import("@/lib/console/schema");
+      assert.equal(
+        (
+          await db
+            .select()
+            .from(consoleInvitations)
+            .where(eq(consoleInvitations.id, cancelled))
+        )[0].status,
+        "cancelled",
+      );
+      const again = await createAnother("two@fixture.local");
+      await db
+        .update(consoleInvitations)
+        .set({ expiresAt: new Date(Date.now() - 1000) })
+        .where(eq(consoleInvitations.id, again));
+      assert.equal(
+        (
+          await inviteAction(
+            postInvite({ action: "accept", id: again }, otherCookie),
+          )
+        ).status,
+        403,
+      );
+      process.env.CONSOLE_ONBOARDING_TEST_ONLY = "true";
+      await createAnother("new@fixture.local");
+      const pendingChallenges: { id: string; token: string }[] = [];
+      await assert.rejects(() =>
+        registerInvitedFixture("not-invited@fixture.local", password, (c) =>
+          pendingChallenges.push(c),
+        ),
+      );
+      const registered = await registerInvitedFixture(
+        "new@fixture.local",
+        password,
+        (c) => pendingChallenges.push(c),
+      );
+      assert.equal(registered.emailVerified, false);
+      assert.equal(registered.delivery, "dry-run");
+      const fixtureLogin = await auth.api.signInEmail({
+        body: { email: "new@fixture.local", password },
+        asResponse: true,
+        headers: new Headers({ origin: "http://localhost:4301" }),
+      });
+      const fixtureCookie = fixtureLogin.headers
+        .getSetCookie()
+        .map((x) => x.split(";")[0])
+        .join("; ");
+      const inviteRows = await (
+        await invitationList(
+          new Request("http://localhost:4300", {
+            headers: { cookie: fixtureCookie },
+          }),
+        )
+      ).json();
+      const pendingNew = inviteRows.items.find(
+        (x: any) => x.email === "new@fixture.local",
+      );
+      assert.ok(pendingNew);
+      assert.equal(
+        (
+          await inviteAction(
+            postInvite({ action: "accept", id: pendingNew.id }, fixtureCookie),
+          )
+        ).status,
+        401,
+      );
+      assert.equal(
+        await verifyFixtureEmail(pendingChallenges[0].id, "wrong"),
+        false,
+      );
+      assert.equal(
+        await verifyFixtureEmail(
+          pendingChallenges[0].id,
+          pendingChallenges[0].token,
+        ),
+        true,
+      );
+      assert.equal(
+        await verifyFixtureEmail(
+          pendingChallenges[0].id,
+          pendingChallenges[0].token,
+        ),
+        false,
+      );
+      assert.equal(
+        (
+          await inviteAction(
+            postInvite({ action: "accept", id: pendingNew.id }, fixtureCookie),
+          )
+        ).status,
+        200,
+      );
+      const builderNew = await db
+        .select()
+        .from(members)
+        .where(eq(members.userId, registered.userId));
+      assert.equal(builderNew.length, 0);
+      await createAnother("expired-new@fixture.local");
+      await registerInvitedFixture("expired-new@fixture.local", password, (c) =>
+        pendingChallenges.push(c),
+      );
+      const { consoleVerification } = await import("@/lib/console/schema");
+      await db
+        .update(consoleVerification)
+        .set({ expiresAt: new Date(Date.now() - 1000) })
+        .where(eq(consoleVerification.id, pendingChallenges[1].id));
+      assert.equal(
+        await verifyFixtureEmail(
+          pendingChallenges[1].id,
+          pendingChallenges[1].token,
+        ),
+        false,
+      );
+      const notice = {
+        organizationId: "one",
+        recipient: "new@fixture.local",
+        kind: "failure" as const,
+        eventId: "fixture-event",
+      };
+      assert.deepEqual(await queueDryRunNotice(notice), {
+        queued: true,
+        sent: false,
+      });
+      assert.deepEqual(await queueDryRunNotice(notice), {
+        queued: false,
+        sent: false,
+      });
+      const { consoleOutbox } = await import("@/lib/console/schema");
+      const outbox = await db.select().from(consoleOutbox);
+      assert.ok(outbox.every((x) => x.status === "dry-run"));
+      assert.equal(outbox.filter((x) => x.kind === "verify-email").length, 2);
+      const dryItem = outbox.find((x) => x.kind === "failure")!;
+      let previewCalls = 0;
+      const preview = async () => {
+        previewCalls++;
+        return { sent: false as const };
+      };
+      const workerRace = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          processDryRunOutbox(dryItem.id, preview),
+        ),
+      );
+      assert.equal(workerRace.filter((x) => x.claimed).length, 1);
+      assert.equal(previewCalls, 1);
+      await queueDryRunNotice({ ...notice, eventId: "retry-fixture" });
+      const retryItem = (
+        await db
+          .select()
+          .from(consoleOutbox)
+          .where(eq(consoleOutbox.dedupeKey, "one:failure:retry-fixture"))
+      )[0];
+      for (let attempt = 0; attempt < 3; attempt++)
+        assert.equal(
+          (
+            await processDryRunOutbox(retryItem.id, async () => {
+              throw Error("Fictitious transport failure");
+            })
+          ).claimed,
+          true,
+        );
+      assert.equal(
+        (await processDryRunOutbox(retryItem.id, preview)).claimed,
+        false,
+      );
+      assert.equal(
+        (
+          await db
+            .select()
+            .from(consoleOutbox)
+            .where(eq(consoleOutbox.id, retryItem.id))
+        )[0].status,
+        "dead-letter",
+      );
+      const clock = new Date("2030-01-01T00:00:00Z");
+      const limits = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          fixtureRateLimit("race-fixture", 3, 60000, clock),
+        ),
+      );
+      assert.equal(limits.filter(Boolean).length, 3);
+      await assert.rejects(() =>
+        registerInvitedFixture("new@fixture.local", password, () => {}),
+      );
+      assert.equal(
+        (
+          await db
+            .select()
+            .from(users)
+            .where(eq(users.email, "new@fixture.local"))
+        ).length,
+        1,
+      );
+      assert.equal(
+        await fixtureRateLimit(
+          "race-fixture",
+          3,
+          60000,
+          new Date(clock.getTime() + 60000),
+        ),
+        true,
+      );
+      await queueDryRunNotice({ ...notice, eventId: "crash-fixture" });
+      const crashItem = (
+        await db
+          .select()
+          .from(consoleOutbox)
+          .where(eq(consoleOutbox.dedupeKey, "one:failure:crash-fixture"))
+      )[0];
+      await db
+        .update(consoleOutbox)
+        .set({ status: "previewing", claimId: "interrupted", claimedAt: clock })
+        .where(eq(consoleOutbox.id, crashItem.id));
+      assert.equal(
+        (await quarantineStaleDryRuns(new Date(clock.getTime() + 299000)))
+          .length,
+        0,
+      );
+      assert.ok(
+        (await quarantineStaleDryRuns(new Date(clock.getTime() + 301000))).some(
+          (x) => x.id === crashItem.id,
+        ),
+      );
+      assert.equal(
+        (await processDryRunOutbox(crashItem.id, preview)).claimed,
+        false,
+      );
+      await assert.rejects(() =>
+        reconcileDryRun(crashItem.id, "discard", "u-one", ""),
+      );
+      assert.deepEqual(
+        await reconcileDryRun(
+          crashItem.id,
+          "discard",
+          "u-one",
+          "Inspected fictitious interrupted preview",
+        ),
+        { changed: true, sent: false },
+      );
+      assert.equal(
+        (await processDryRunOutbox(crashItem.id, preview)).claimed,
+        false,
+      );
+      assert.deepEqual(
+        await reconcileDryRun(
+          crashItem.id,
+          "confirmed-previewed",
+          "u-one",
+          "No second state change allowed",
+        ),
+        { changed: false, sent: false },
+      );
 
       delete process.env.CONSOLE_ONBOARDING_TEST_ONLY;
-      const afterExpiry=await createAnother('two@fixture.local');
-      const savedConfig=process.env.CONSOLE_ACCESS_CONFIG;process.env.CONSOLE_ACCESS_CONFIG='{}';
-      assert.equal((await inviteAction(postInvite({action:'accept',id:afterExpiry},otherCookie))).status,403);process.env.CONSOLE_ACCESS_CONFIG=savedConfig;
-      delete process.env.CONSOLE_INVITATIONS_ENABLED;delete process.env.CONSOLE_SEPARATE_MEMBERSHIP_ENABLED;
+      const afterExpiry = await createAnother("two@fixture.local");
+      const savedConfig = process.env.CONSOLE_ACCESS_CONFIG;
+      process.env.CONSOLE_ACCESS_CONFIG = "{}";
+      assert.equal(
+        (
+          await inviteAction(
+            postInvite({ action: "accept", id: afterExpiry }, otherCookie),
+          )
+        ).status,
+        403,
+      );
+      process.env.CONSOLE_ACCESS_CONFIG = savedConfig;
+      delete process.env.CONSOLE_INVITATIONS_ENABLED;
+      delete process.env.CONSOLE_SEPARATE_MEMBERSHIP_ENABLED;
     }
     delete process.env.CONSOLE_STORAGE_ENABLED;
     const originalConfig: string = process.env.CONSOLE_ACCESS_CONFIG!;
@@ -495,7 +997,21 @@ async function main() {
     await db.delete(members).where(eq(members.id, "m-" + i));
     assert.equal(await consoleContext(request), null);
     await db.insert(members).values(originalMember);
-    results.push({notificationPreferencePersisted:true,workflowSettingsPolicyChecked:true,changeRequestPersistedAndIsolated:true,teamManagementPolicyChecked:true,explicitDryRunReconciliationNoResendChecked:true,atomicRateLimitWindowAndCrashQuarantineChecked:true,outboxConcurrentClaimAndBoundedRetryChecked:true,onboardingVerificationDryRunDedupeAndFakeCallbackChecked:true,fictitiousReconnectIdentityEncryptionReplayAndConflictChecked:true,consoleOnlyInvitationAcceptanceChecked:true,invitationCancellationExpiryAndRevokedIssuerChecked:true,auditOrganizationScopeChecked:true,teamAssignmentChoicesScoped:true,consoleAccessRevokedWithoutDeletingMember:true,
+    results.push({
+      notificationPreferencePersisted: true,
+      workflowSettingsPolicyChecked: true,
+      changeRequestPersistedAndIsolated: true,
+      teamManagementPolicyChecked: true,
+      explicitDryRunReconciliationNoResendChecked: true,
+      atomicRateLimitWindowAndCrashQuarantineChecked: true,
+      outboxConcurrentClaimAndBoundedRetryChecked: true,
+      onboardingVerificationDryRunDedupeAndFakeCallbackChecked: true,
+      fictitiousReconnectIdentityEncryptionReplayAndConflictChecked: true,
+      consoleOnlyInvitationAcceptanceChecked: true,
+      invitationCancellationExpiryAndRevokedIssuerChecked: true,
+      auditOrganizationScopeChecked: true,
+      teamAssignmentChoicesScoped: true,
+      consoleAccessRevokedWithoutDeletingMember: true,
       organization: i,
       realAuthLogin: true,
       realDbIsolation: true,
@@ -611,6 +1127,120 @@ async function main() {
     payloadMismatchDenied: true,
     requiredInputDenied: true,
     failureReplayDidNotRelaunch: true,
+  });
+  // Dedicated persistent-config fixtures, independent of earlier grant mutations.
+  process.env.CONSOLE_ACCESS_CONFIG = "{}";
+  process.env.CONSOLE_PERSISTENT_CONFIG_ENABLED = "true";
+  await db
+    .insert(users)
+    .values({
+      id: "persist-owner",
+      name: "Persistent fixture",
+      email: "persistent@fixture.local",
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+  await db
+    .insert(organizations)
+    .values({
+      id: "persist-org",
+      name: "Persistent fixture",
+      slug: "persist-fixture",
+      createdAt: now,
+    });
+  await db
+    .insert(members)
+    .values({
+      id: "persist-member",
+      userId: "persist-owner",
+      organizationId: "persist-org",
+      role: "owner",
+      createdAt: now,
+    });
+  await db
+    .insert(workflows)
+    .values({
+      id: "persist-flow",
+      userId: "persist-owner",
+      name: "Persistent flow",
+      nodes: [],
+      edges: [],
+      active: false,
+    });
+  await db
+    .insert(consoleSetups)
+    .values({
+      organizationId: "persist-org",
+      ownerId: "persist-owner",
+      enabled: false,
+    });
+  await db
+    .insert(consoleAssignments)
+    .values({
+      organizationId: "persist-org",
+      workflowId: "persist-flow",
+      teamId: "sales",
+      updatedBy: "persist-owner",
+    });
+  assert.equal(
+    await effectiveGrant("persist-owner", "persist-org"),
+    null,
+    "Draft must not grant owner access",
+  );
+  assert.deepEqual(
+    await runtimeAssignments(),
+    [],
+    "Draft assignment must stay invisible",
+  );
+  await db
+    .update(consoleSetups)
+    .set({ enabled: true })
+    .where(eq(consoleSetups.organizationId, "persist-org"));
+  const ownerGrant = await effectiveGrant("persist-owner", "persist-org");
+  assert.equal(ownerGrant?.role, "owner");
+  assert.equal(ownerGrant?.canRun, false);
+  assert.equal(
+    (await visibleWorkflows(ownerGrant!, null))[0]?.id,
+    "persist-flow",
+  );
+  process.env.CONSOLE_ACCESS_CONFIG = JSON.stringify({
+    assignments: [
+      { organizationId: "other-org", workflowId: "persist-flow", teamId: null },
+    ],
+  });
+  assert.deepEqual(
+    await runtimeAssignments(),
+    [],
+    "Persistent/env tenant collision must fail closed",
+  );
+  process.env.CONSOLE_ACCESS_CONFIG = "{}";
+  await db
+    .update(members)
+    .set({ role: "member" })
+    .where(eq(members.id, "persist-member"));
+  assert.equal(
+    await effectiveGrant("persist-owner", "persist-org"),
+    null,
+    "Owner removal must immediately revoke implicit grant",
+  );
+  await db
+    .update(members)
+    .set({ role: "owner" })
+    .where(eq(members.id, "persist-member"));
+  process.env.CONSOLE_PERSISTENT_CONFIG_ENABLED = "false";
+  assert.equal(
+    await effectiveGrant("persist-owner", "persist-org"),
+    null,
+    "Flag off must remove persistent grant",
+  );
+  assert.deepEqual(await runtimeAssignments(), []);
+  results.push({
+    persistentDraftNoAccess: true,
+    enabledFixtureReadOnlyOwner: true,
+    tenantCollisionClosed: true,
+    ownerRemovalRevokes: true,
+    persistentFlagOffClosed: true,
   });
   console.log(
     JSON.stringify(

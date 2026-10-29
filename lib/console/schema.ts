@@ -66,39 +66,80 @@ export const consoleChangeRequests = pgTable("console_change_requests", {
 });
 
 // Separate console affiliation and selection never grant builder membership.
-export const consoleMemberships=pgTable('console_memberships',{
- organizationId:text('organization_id').notNull(),userId:text('user_id').notNull(),
- enabled:boolean('enabled').notNull().default(true),createdAt:timestamp('created_at').notNull().defaultNow(),
-},t=>[primaryKey({columns:[t.organizationId,t.userId]})]);
-export const consoleSessions=pgTable('console_sessions',{
- sessionId:text('session_id').primaryKey(),organizationId:text('organization_id').notNull(),updatedAt:timestamp('updated_at').notNull().defaultNow(),
+export const consoleMemberships = pgTable(
+  "console_memberships",
+  {
+    organizationId: text("organization_id").notNull(),
+    userId: text("user_id").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.userId] })],
+);
+export const consoleSessions = pgTable("console_sessions", {
+  sessionId: text("session_id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
-export const consoleInvitations=pgTable('console_invitations',{
- id:text('id').primaryKey(),organizationId:text('organization_id').notNull(),email:text('email').notNull(),
- inviterId:text('inviter_id').notNull(),role:text('role').notNull(),teamIds:jsonb('team_ids').notNull().$type<string[]>(),workflowIds:jsonb('workflow_ids').notNull().$type<string[]>(),
- canRun:boolean('can_run').notNull().default(false),status:text('status').notNull().default('pending'),expiresAt:timestamp('expires_at').notNull(),createdAt:timestamp('created_at').notNull().defaultNow(),
+export const consoleInvitations = pgTable("console_invitations", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  email: text("email").notNull(),
+  inviterId: text("inviter_id").notNull(),
+  role: text("role").notNull(),
+  teamIds: jsonb("team_ids").notNull().$type<string[]>(),
+  workflowIds: jsonb("workflow_ids").notNull().$type<string[]>(),
+  canRun: boolean("can_run").notNull().default(false),
+  status: text("status").notNull().default("pending"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
-export const consoleReconnects=pgTable('console_reconnects',{
- id:text('id').primaryKey(),organizationId:text('organization_id').notNull(),integrationId:text('integration_id').notNull(),ownerId:text('owner_id').notNull(),actorId:text('actor_id').notNull(),
- expectedVersion:text('expected_version').notNull(),expiresAt:timestamp('expires_at').notNull(),status:text('status').notNull().default('pending'),
+export const consoleReconnects = pgTable("console_reconnects", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  integrationId: text("integration_id").notNull(),
+  ownerId: text("owner_id").notNull(),
+  actorId: text("actor_id").notNull(),
+  expectedVersion: text("expected_version").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  status: text("status").notNull().default("pending"),
 });
-export const consoleOutbox=pgTable('console_outbox',{
- id:text('id').primaryKey(),organizationId:text('organization_id').notNull(),recipient:text('recipient').notNull(),kind:text('kind').notNull(),
- dedupeKey:text('dedupe_key').notNull().unique(),status:text('status').notNull().default('dry-run'),attempts:integer('attempts').notNull().default(0),claimedAt:timestamp('claimed_at'),claimId:text('claim_id'),createdAt:timestamp('created_at').notNull().defaultNow(),
+export const consoleOutbox = pgTable("console_outbox", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  recipient: text("recipient").notNull(),
+  kind: text("kind").notNull(),
+  dedupeKey: text("dedupe_key").notNull().unique(),
+  status: text("status").notNull().default("dry-run"),
+  attempts: integer("attempts").notNull().default(0),
+  claimedAt: timestamp("claimed_at"),
+  claimId: text("claim_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
-export const consoleVerification=pgTable('console_verification',{
- id:text('id').primaryKey(),userId:text('user_id').notNull(),tokenHash:text('token_hash').notNull(),expiresAt:timestamp('expires_at').notNull(),used:boolean('used').notNull().default(false),
+export const consoleVerification = pgTable("console_verification", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").notNull().default(false),
 });
-export const consoleRateLimits=pgTable('console_rate_limits',{
- key:text('key').primaryKey(),windowStart:timestamp('window_start').notNull(),attempts:integer('attempts').notNull(),
+export const consoleRateLimits = pgTable("console_rate_limits", {
+  key: text("key").primaryKey(),
+  windowStart: timestamp("window_start").notNull(),
+  attempts: integer("attempts").notNull(),
 });
 
 // Runtime preparation state. Activation is a separate, explicit policy gate.
-export const consoleSetups = pgTable('console_setups', {
- organizationId:text('organization_id').primaryKey(), ownerId:text('owner_id').notNull(),
- enabled:boolean('enabled').notNull().default(false), updatedAt:timestamp('updated_at').notNull().defaultNow(),
+export const consoleSetups = pgTable("console_setups", {
+  organizationId: text("organization_id").primaryKey(),
+  ownerId: text("owner_id").notNull(),
+  enabled: boolean("enabled").notNull().default(false),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
-export const consoleAssignments = pgTable('console_assignments', {
- workflowId:text('workflow_id').primaryKey(),organizationId:text('organization_id').notNull(),
- teamId:text('team_id'),updatedBy:text('updated_by').notNull(),updatedAt:timestamp('updated_at').notNull().defaultNow(),
+export const consoleAssignments = pgTable("console_assignments", {
+  workflowId: text("workflow_id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  teamId: text("team_id"),
+  updatedBy: text("updated_by").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

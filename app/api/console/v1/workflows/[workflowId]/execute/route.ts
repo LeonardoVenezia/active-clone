@@ -1,3 +1,4 @@
+import { isManualConsoleWorkflow } from "@/lib/console/workflow-summary";
 import { NextResponse } from "next/server";
 import { consoleContext } from "@/lib/console/context";
 import { runtimeAssignments, visibleWorkflows } from "@/lib/console/data";
@@ -31,12 +32,7 @@ export async function POST(
       ctx.organization.metadata,
     );
     const w = workflows.find((x) => x.id === workflowId);
-    const manual =
-      w?.nodes.some(
-        (n: any) =>
-          n.data?.type === "trigger" &&
-          n.data?.config?.triggerType === "Manual",
-      ) || false;
+    const manual = !!w && isManualConsoleWorkflow(w.nodes);
     if (
       !assignment ||
       !w ||
