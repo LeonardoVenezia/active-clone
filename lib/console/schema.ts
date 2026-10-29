@@ -143,3 +143,17 @@ export const consoleAssignments = pgTable("console_assignments", {
   updatedBy: text("updated_by").notNull(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// Management ownership scope is distinct from client-console exposure.
+export const managementWorkflowScopes = pgTable('management_workflow_scopes', {
+ workflowId: text('workflow_id').primaryKey(),
+ organizationId: text('organization_id').notNull(),
+ assignedBy: text('assigned_by').notNull(),
+ createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const companyVariables = pgTable('company_variables', {
+ organizationId:text('organization_id').notNull(),key:text('key').notNull(),
+ secret:boolean('secret').notNull().default(false),
+ ciphertext:text('ciphertext').notNull(),updatedBy:text('updated_by').notNull(),updatedAt:timestamp('updated_at').notNull().defaultNow(),
+},t=>[primaryKey({columns:[t.organizationId,t.key]})]);

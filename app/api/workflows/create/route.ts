@@ -1,10 +1,11 @@
-import { eq } from "drizzle-orm";
+import { managementWorkflowScopes } from "@/lib/console/schema";
+import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { validateWorkflowIntegrations } from "@/lib/db/integrations";
-import { workflows } from "@/lib/db/schema";
+import { members, workflows } from "@/lib/db/schema";
 import { generateId } from "@/lib/utils/id";
 
 // Helper function to create a default trigger node
@@ -38,19 +39,36 @@ export async function POST(request: Request) {
     if (!(body.name && body.nodes && body.edges)) {
       return NextResponse.json(
         { error: "Name, nodes, and edges are required" },
-        { status: 400 }
+        { status: 400 },
       );
+    }
+
+    if (body.organizationId !== undefined) {
+      if (
+        typeof body.organizationId !== "string" ||
+        session.user.isAnonymous ||
+        !(await db.query.members.findFirst({
+          where: and(
+            eq(members.userId, session.user.id),
+            eq(members.organizationId, body.organizationId),
+          ),
+        }))
+      )
+        return NextResponse.json(
+          { error: "Sin acceso a esta empresa." },
+          { status: 403 },
+        );
     }
 
     // Validate that all integrationIds in nodes belong to the current user
     const validation = await validateWorkflowIntegrations(
       body.nodes,
-      session.user.id
+      session.user.id,
     );
     if (!validation.valid) {
       return NextResponse.json(
         { error: "Invalid integration references in workflow" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -73,17 +91,28 @@ export async function POST(request: Request) {
     // Generate workflow ID first
     const workflowId = generateId();
 
-    const [newWorkflow] = await db
-      .insert(workflows)
-      .values({
-        id: workflowId,
-        name: workflowName,
-        description: body.description,
-        nodes,
-        edges: body.edges,
-        userId: session.user.id,
-      })
-      .returning();
+    const newWorkflow = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(workflows)
+        .values({
+          id: workflowId,
+          name: workflowName,
+          description: body.description,
+          nodes,
+          edges: body.edges,
+          userId: session.user.id,
+        })
+        .returning();
+      if (body.organizationId)
+        await tx
+          .insert(managementWorkflowScopes)
+          .values({
+            workflowId,
+            organizationId: body.organizationId,
+            assignedBy: session.user.id,
+          });
+      return created;
+    });
 
     return NextResponse.json({
       ...newWorkflow,
@@ -97,7 +126,7 @@ export async function POST(request: Request) {
         error:
           error instanceof Error ? error.message : "Failed to create workflow",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

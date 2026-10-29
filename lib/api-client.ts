@@ -468,7 +468,7 @@ export const workflowApi = {
   getById: (id: string) => apiCall<SavedWorkflow>(`/api/workflows/${id}`),
 
   // Create a new workflow
-  create: (workflow: Omit<WorkflowData, "id">) =>
+  create: (workflow: Omit<WorkflowData, "id"> & {organizationId?:string}) =>
     apiCall<SavedWorkflow>("/api/workflows/create", {
       method: "POST",
       body: JSON.stringify(workflow),

@@ -1,0 +1,2 @@
+import {db} from '@/lib/db';import {workflows} from '@/lib/db/schema';import {eq} from 'drizzle-orm';
+async function main(){if(new URL(process.env.DATABASE_URL!).hostname!=='127.0.0.1')throw Error('Local only');await db.update(workflows).set({active:true,nodes:[{id:'fixture-trigger',type:'trigger',position:{x:0,y:0},data:{type:'trigger',label:'Inicio manual aislado',config:{triggerType:'Manual',inputFields:[{key:'detail',label:'Detalle',required:true}]}}}],edges:[]}).where(eq(workflows.id,'http-flow-one'));process.exit(0)}main().catch(e=>{console.error(e);process.exit(1)});

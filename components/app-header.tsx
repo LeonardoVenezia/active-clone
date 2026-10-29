@@ -14,14 +14,15 @@ import { UserMenu } from "@/components/workflows/user-menu";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS: { href: string; label: string; isActive: (p: string) => boolean }[] = [
-  { href: "/workflows", label: "Flows", isActive: (p) => p === "/workflows" },
+  { href: "/", label: "Empresas", isActive: (p) => p === "/" || p.startsWith("/companies/") },
+  { href: "/workflows", label: "Todos los workflows", isActive: (p) => p === "/workflows" },
   { href: "/history", label: "History", isActive: (p) => p.startsWith("/history") },
   { href: "/connections", label: "Connections", isActive: (p) => p.startsWith("/connections") },
   { href: "/org", label: "Empresa", isActive: (p) => p.startsWith("/org") },
   {
-    href: "/",
-    label: "Editor",
-    isActive: (p) => p === "/" || (p.startsWith("/workflows/") && p !== "/workflows"),
+    href: "/new-workflow",
+    label: "Nuevo workflow",
+    isActive: (p) => p === "/new-workflow" || (p.startsWith("/workflows/") && p !== "/workflows"),
   },
 ];
 
@@ -37,7 +38,7 @@ export function AppHeader({ fluid = false }: { fluid?: boolean }) {
         )}
       >
         <div className="flex min-w-0 items-center gap-6">
-        <Link className="flex shrink-0 items-center gap-2" href="/workflows">
+        <Link className="flex shrink-0 items-center gap-2" href="/">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img alt="Active-clone" className="size-7 rounded-md" src="/logo.png" />
           <span className="hidden font-semibold sm:inline">Active-clone</span>
