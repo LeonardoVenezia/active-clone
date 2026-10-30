@@ -1,0 +1,3 @@
+export type CompanyFixture={organizationId:string;workflowId:string;ownerId:string};
+export function companyFixture():CompanyFixture|null{try{const x=JSON.parse(process.env.COMPANY_VARIABLE_FIXTURE||'null');if(!x||[x.organizationId,x.workflowId,x.ownerId].some(v=>typeof v!=='string'||!v||v.length>128))return null;return{organizationId:x.organizationId,workflowId:x.workflowId,ownerId:x.ownerId}}catch{return null}}
+export function canUseCompanyFixture(userId:string,organizationId:string,workflowId?:string){const x=companyFixture();return !!x&&x.ownerId===userId&&x.organizationId===organizationId&&(!workflowId||workflowId===x.workflowId)}
