@@ -7,6 +7,9 @@ export type ConsoleGrant = {
   teamIds: string[];
   workflowIds: string[];
   canRun: boolean;
+  // When set, running is limited to exactly these workflow ids (owner scopes
+  // from server config); other workflows keep denial even if canRun is true.
+  runWorkflowIds?: string[];
 };
 // A separate, explicit grant namespace keeps builder membership from implicitly granting console access.
 export function parseGrant(
@@ -56,7 +59,10 @@ export function canExecute(
   manual: boolean,
   active: boolean,
 ) {
-  return canView(grant, assignment) && grant.canRun && manual && active;
+  const runAllowed = grant.runWorkflowIds
+    ? grant.runWorkflowIds.includes(assignment.workflowId)
+    : grant.canRun;
+  return canView(grant, assignment) && runAllowed && manual && active;
 }
 export function safeError() {
   return "No se pudo completar la operación. Contactá a tu administrador.";

@@ -19,12 +19,31 @@ test('run scopes only exact owner organization workflow, absent config and flags
  delete process.env.COMPANY_VARIABLE_RUN_SCOPES;delete process.env.COMPANY_VARIABLES_POLICY_APPROVED;delete process.env.COMPANY_VARIABLES_STEP_RUNTIME_ENABLED;
 });
 test('console owner run scopes are exact and deny by default',async()=>{
- const {consoleOwnerRunScopes}=await import('../../lib/company/run-policy');
+ const {consoleOwnerRunScopes,consoleOwnerRunWorkflowIds}=await import('../../lib/company/run-policy');
  delete process.env.CONSOLE_OWNER_RUN_SCOPES;
  assert.deepEqual(consoleOwnerRunScopes(),[]);
  process.env.CONSOLE_OWNER_RUN_SCOPES='not json';
  assert.deepEqual(consoleOwnerRunScopes(),[]);
+ // Entries without a workflow id are rejected: scoping is per workflow.
  process.env.CONSOLE_OWNER_RUN_SCOPES=JSON.stringify([{organizationId:'o',ownerId:'u'},{organizationId:'x'}]);
- assert.deepEqual(consoleOwnerRunScopes(),[{organizationId:'o',ownerId:'u'}]);
+ assert.deepEqual(consoleOwnerRunScopes(),[]);
+ process.env.CONSOLE_OWNER_RUN_SCOPES=JSON.stringify([{organizationId:'o',ownerId:'u',workflowId:'w1'},{organizationId:'o',ownerId:'v',workflowId:'w2'}]);
+ assert.deepEqual(consoleOwnerRunWorkflowIds('u','o'),['w1']);
+ assert.deepEqual(consoleOwnerRunWorkflowIds('v','o'),['w2']);
+ assert.deepEqual(consoleOwnerRunWorkflowIds('u','x'),[]);
  delete process.env.CONSOLE_OWNER_RUN_SCOPES;
+});
+
+test('canExecute limits owner-scope runs to the exact workflow',async()=>{
+ const {canExecute}=await import('../../lib/console/policy');
+ const grant:any={userId:'u',organizationId:'o',role:'owner',teamIds:[],workflowIds:[],canRun:true,runWorkflowIds:['w1']};
+ const a1:any={workflowId:'w1',organizationId:'o',teamId:null};
+ const a2:any={workflowId:'w2',organizationId:'o',teamId:null};
+ assert.equal(canExecute(grant,a1,true,true),true);
+ assert.equal(canExecute(grant,a2,true,true),false);
+ // Without runWorkflowIds the grant-wide flag applies unchanged.
+ const plain:any={userId:'u',organizationId:'o',role:'owner',teamIds:[],workflowIds:[],canRun:true};
+ assert.equal(canExecute(plain,a2,true,true),true);
+ const denied:any={...plain,canRun:false};
+ assert.equal(canExecute(denied,a1,true,true),false);
 });

@@ -34,8 +34,12 @@ export async function effectiveGrant(
         ),
       });
       if (member) {
-        const { consoleOwnerRunScopes } = await import(
+        const { consoleOwnerRunWorkflowIds } = await import(
           "@/lib/company/run-policy"
+        );
+        const runWorkflowIds = consoleOwnerRunWorkflowIds(
+          userId,
+          organizationId,
         );
         return {
           userId,
@@ -43,9 +47,8 @@ export async function effectiveGrant(
           role: "owner",
           teamIds: [],
           workflowIds: [],
-          canRun: consoleOwnerRunScopes().some(
-            (s) => s.ownerId === userId && s.organizationId === organizationId,
-          ),
+          canRun: runWorkflowIds.length > 0,
+          runWorkflowIds,
         };
       }
     }

@@ -47,11 +47,12 @@ export function canRunWithCompanyVariables(input: {
 }
 
 // Scoped allowance for a persistent-setup console owner to start runs from the
-// client console. Exact owner + organization from server configuration, deny
-// by default; everything not listed keeps canRun:false.
+// client console. Exact owner + organization + workflow from server
+// configuration, deny by default; everything not listed keeps canRun:false.
 export type ConsoleOwnerRunScope = {
   organizationId: string;
   ownerId: string;
+  workflowId: string;
 };
 
 function parseOwnerScopes(raw: string | undefined): ConsoleOwnerRunScope[] {
@@ -61,7 +62,7 @@ function parseOwnerScopes(raw: string | undefined): ConsoleOwnerRunScope[] {
     return parsed.filter(
       (v): v is ConsoleOwnerRunScope =>
         !!v &&
-        [v.organizationId, v.ownerId].every(
+        [v.organizationId, v.ownerId, v.workflowId].every(
           (s) => typeof s === "string" && s.length > 0 && s.length <= 128,
         ),
     );
@@ -72,4 +73,14 @@ function parseOwnerScopes(raw: string | undefined): ConsoleOwnerRunScope[] {
 
 export function consoleOwnerRunScopes(): ConsoleOwnerRunScope[] {
   return parseOwnerScopes(process.env.CONSOLE_OWNER_RUN_SCOPES);
+}
+
+// Workflow ids a persistent-setup owner may run in one organization.
+export function consoleOwnerRunWorkflowIds(
+  ownerId: string,
+  organizationId: string,
+): string[] {
+  return consoleOwnerRunScopes()
+    .filter((s) => s.ownerId === ownerId && s.organizationId === organizationId)
+    .map((s) => s.workflowId);
 }
