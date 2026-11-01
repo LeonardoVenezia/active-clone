@@ -1,0 +1,20 @@
+import{test}from'node:test';import assert from'node:assert/strict';import{companyRunScopes,canRunWithCompanyVariables}from'../../lib/company/run-policy';
+test('run scopes only exact owner organization workflow, absent config and flags closed',()=>{
+ delete process.env.COMPANY_VARIABLE_RUN_SCOPES;delete process.env.COMPANY_VARIABLES_POLICY_APPROVED;delete process.env.COMPANY_VARIABLES_STEP_RUNTIME_ENABLED;
+ assert.deepEqual(companyRunScopes(),[]);
+ assert(!canRunWithCompanyVariables({userId:'u',organizationId:'o',workflowId:'w'}));
+ process.env.COMPANY_VARIABLE_RUN_SCOPES=JSON.stringify([{ownerId:'u',organizationId:'o',workflowId:'w'}]);
+ assert(!canRunWithCompanyVariables({userId:'u',organizationId:'o',workflowId:'w'}));
+ process.env.COMPANY_VARIABLES_POLICY_APPROVED='true';
+ assert(!canRunWithCompanyVariables({userId:'u',organizationId:'o',workflowId:'w'}));
+ process.env.COMPANY_VARIABLES_STEP_RUNTIME_ENABLED='true';
+ assert(canRunWithCompanyVariables({userId:'u',organizationId:'o',workflowId:'w'}));
+ assert(!canRunWithCompanyVariables({userId:'x',organizationId:'o',workflowId:'w'}));
+ assert(!canRunWithCompanyVariables({userId:'u',organizationId:'x',workflowId:'w'}));
+ assert(!canRunWithCompanyVariables({userId:'u',organizationId:'o',workflowId:'x'}));
+ process.env.COMPANY_VARIABLE_RUN_SCOPES='not-json';
+ assert(!canRunWithCompanyVariables({userId:'u',organizationId:'o',workflowId:'w'}));
+ process.env.COMPANY_VARIABLE_RUN_SCOPES=JSON.stringify([{ownerId:'u',organizationId:'o',workflowId:''},{ownerId:'u2',organizationId:'o2',workflowId:'w2'}]);
+ assert.deepEqual(companyRunScopes(),[{ownerId:'u2',organizationId:'o2',workflowId:'w2'}]);
+ delete process.env.COMPANY_VARIABLE_RUN_SCOPES;delete process.env.COMPANY_VARIABLES_POLICY_APPROVED;delete process.env.COMPANY_VARIABLES_STEP_RUNTIME_ENABLED;
+});

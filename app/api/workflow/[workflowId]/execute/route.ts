@@ -1,4 +1,6 @@
 import {companyVariableKeys} from "@/lib/company-variables";
+import { canRunWithCompanyVariables } from "@/lib/company/run-policy";
+import { managementWorkflowScopes } from "@/lib/console/schema";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { start } from "workflow/api";
@@ -103,7 +105,30 @@ export async function POST(
       }
     }
 
-    if(companyVariableKeys(workflow.nodes).length)return NextResponse.json({error:"Las variables de empresa todavía no están habilitadas para ejecutar. No se inició ningún servicio."},{status:409});
+    if (companyVariableKeys(workflow.nodes).length) {
+      // Company references stay closed except for an exact server-configured
+      // owner/organization/workflow scope with both runtime flags enabled.
+      const [runScope] = await db
+        .select({ organizationId: managementWorkflowScopes.organizationId })
+        .from(managementWorkflowScopes)
+        .where(eq(managementWorkflowScopes.workflowId, workflowId));
+      if (
+        !runScope ||
+        !canRunWithCompanyVariables({
+          userId: workflow.userId,
+          organizationId: runScope.organizationId,
+          workflowId,
+        })
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Las variables de empresa todavía no están habilitadas para ejecutar. No se inició ningún servicio.",
+          },
+          { status: 409 }
+        );
+      }
+    }
     // Validate integration references against the workflow owner (shared
     // editors run with the owner's connections)
     const validation = await validateWorkflowIntegrations(
