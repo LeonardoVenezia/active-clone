@@ -37,3 +37,18 @@ test("real execution cannot fall through to builder runner", () => {
   );
   assert(s.includes("Noseejecutónada."));
 });
+test("console run of company-variable workflow stays scoped behind server config", () => {
+  const s = readFileSync(
+    "app/api/console/v1/workflows/[workflowId]/execute/route.ts",
+    "utf8",
+  )
+    .replace(/\s+/g, "")
+    .replace(/"/g, "'");
+  assert(s.includes("canRunWithCompanyVariables({userId:w.userId,organizationId:ctx.grant.organizationId,workflowId,})"));
+  assert(s.includes("canRunWithCompanyVariables") && s.includes("status:409"));
+  assert(
+    s.indexOf("canExecute(ctx.grant,assignment,manual,w.active)") <
+      s.indexOf("canRunWithCompanyVariables({userId"),
+  );
+  assert(s.indexOf("canRunWithCompanyVariables({userId") < s.indexOf("reserveAndLaunch(ctx"));
+});

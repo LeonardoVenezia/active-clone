@@ -1,4 +1,5 @@
 import {companyVariableKeys} from "@/lib/company-variables";
+import { canRunWithCompanyVariables } from "@/lib/company/run-policy";
 import { isManualConsoleWorkflow } from "@/lib/console/workflow-summary";
 import { NextResponse } from "next/server";
 import { consoleContext } from "@/lib/console/context";
@@ -66,7 +67,24 @@ export async function POST(
         { status: 400 },
       );
     }
-    if(companyVariableKeys(w.nodes).length)return NextResponse.json({error:"Las variables de empresa todavía no están habilitadas para ejecutar. No se inició ningún servicio."},{status:409});
+    if (companyVariableKeys(w.nodes).length) {
+      // Company references stay closed except for an exact server-configured
+      // owner/organization/workflow scope with both runtime flags enabled.
+      if (
+        !canRunWithCompanyVariables({
+          userId: w.userId,
+          organizationId: ctx.grant.organizationId,
+          workflowId,
+        })
+      )
+        return NextResponse.json(
+          {
+            error:
+              "Las variables de empresa todavía no están habilitadas para ejecutar. No se inició ningún servicio.",
+          },
+          { status: 409 },
+        );
+    }
     const validation = await validateWorkflowIntegrations(
       w.nodes as never,
       w.userId,
