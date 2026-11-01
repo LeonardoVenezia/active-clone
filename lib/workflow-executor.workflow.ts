@@ -1,4 +1,5 @@
 import {companyVariableKeys} from "@/lib/company-variables";
+import { companyVariablesDeniedForRun } from "@/lib/company/run-policy";
 /**
  * Workflow-based executor using "use workflow" and "use step" directives
  * This executor captures step executions through the workflow SDK for better observability
@@ -17,6 +18,7 @@ import { resolveFieldValue } from "./field-path";
 import { exposeStepOutput } from "./loop-output";
 import type { StepContext } from "./steps/step-handler";
 import { createHook, sleep } from "workflow";
+import { markExecutionStartErrorStep } from "./steps/execution-status";
 import { triggerStep } from "./steps/trigger";
 import {
   recordApprovalDecisionStep,
@@ -63,6 +65,8 @@ export type WorkflowExecutionInput = {
   triggerInput?: Record<string, unknown>;
   executionId?: string;
   workflowId?: string; // Used by steps to fetch credentials
+  userId?: string; // Workflow owner identity for the company-variable guard
+  organizationId?: string; // Scoped organization for the company-variable guard
 };
 
 
@@ -461,7 +465,23 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
     workflowId: workflowId || "none",
   });
 
-  if(companyVariableKeys(nodes).length)throw Error("Company variable execution is not enabled");
+  if (
+    companyVariablesDeniedForRun({
+      hasCompanyReferences: companyVariableKeys(nodes).length > 0,
+      userId: input.userId,
+      organizationId: input.organizationId,
+      workflowId,
+    })
+  ) {
+    // Closed by default: only the exact server-configured
+    // owner/organization/workflow scope may run company references. Record
+    // the refusal so it never stays an orphan pending row.
+    await markExecutionStartErrorStep({
+      executionId,
+      error: "Company variable execution is not enabled",
+    });
+    throw Error("Company variable execution is not enabled");
+  }
 
   const outputs: NodeOutputs = {};
   const results: Record<string, ExecutionResult> = {};

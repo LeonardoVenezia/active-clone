@@ -18,7 +18,8 @@ async function executeWorkflowBackground(
   workflowId: string,
   nodes: WorkflowNode[],
   edges: WorkflowEdge[],
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  companyScope?: { userId: string; organizationId: string }
 ) {
   try {
     console.log("[Workflow Execute] Starting execution:", executionId);
@@ -41,6 +42,8 @@ async function executeWorkflowBackground(
         triggerInput: input,
         executionId,
         workflowId, // Pass workflow ID so steps can fetch credentials
+        userId: companyScope?.userId,
+        organizationId: companyScope?.organizationId,
       },
     ]);
 
@@ -105,6 +108,7 @@ export async function POST(
       }
     }
 
+    let companyScope: { userId: string; organizationId: string } | undefined;
     if (companyVariableKeys(workflow.nodes).length) {
       // Company references stay closed except for an exact server-configured
       // owner/organization/workflow scope with both runtime flags enabled.
@@ -128,6 +132,10 @@ export async function POST(
           { status: 409 }
         );
       }
+      companyScope = {
+        userId: workflow.userId,
+        organizationId: runScope.organizationId,
+      };
     }
     // Validate integration references against the workflow owner (shared
     // editors run with the owner's connections)
@@ -193,7 +201,8 @@ export async function POST(
       workflowId,
       workflow.nodes as WorkflowNode[],
       workflow.edges as WorkflowEdge[],
-      input
+      input,
+      companyScope
     );
 
     // Return immediately with the execution ID

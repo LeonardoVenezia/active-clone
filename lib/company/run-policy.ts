@@ -84,3 +84,21 @@ export function consoleOwnerRunWorkflowIds(
     .filter((s) => s.ownerId === ownerId && s.organizationId === organizationId)
     .map((s) => s.workflowId);
 }
+
+// Executor-level second layer for runs whose nodes reference {{company.KEY}}.
+// The API routes check the exact scope before launch; the workflow re-checks
+// here so a launch that bypasses a route guard stays denied. Missing identity
+// (webhook/background callers without an authorized scope) is denied.
+export function companyVariablesDeniedForRun(input: {
+  hasCompanyReferences: boolean;
+  userId: string | undefined;
+  organizationId: string | undefined;
+  workflowId: string | undefined;
+}): boolean {
+  if (!input.hasCompanyReferences) return false;
+  return !canRunWithCompanyVariables({
+    userId: input.userId ?? "",
+    organizationId: input.organizationId ?? "",
+    workflowId: input.workflowId ?? "",
+  });
+}

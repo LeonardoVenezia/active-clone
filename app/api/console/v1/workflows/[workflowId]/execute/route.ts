@@ -111,6 +111,8 @@ export async function POST(
             triggerInput: input,
             executionId: id,
             workflowId: flow.id,
+            userId: ctx.user.id,
+            organizationId: ctx.grant.organizationId,
           },
         ]);
       },
