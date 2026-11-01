@@ -63,6 +63,7 @@ export async function runHistory(ids: string[]) {
       id: workflowExecutions.id,
       workflowId: workflowExecutions.workflowId,
       status: workflowExecutions.status,
+      error: workflowExecutions.error,
       startedAt: workflowExecutions.startedAt,
       completedAt: workflowExecutions.completedAt,
     })

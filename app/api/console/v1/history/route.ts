@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { consoleContext } from "@/lib/console/context";
 import { visibleWorkflows, runHistory } from "@/lib/console/data";
+import { failureHint } from "@/lib/console/failure-hint";
 export async function GET(request: Request) {
   try {
     const ctx = await consoleContext(request);
@@ -11,7 +12,12 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         items: runs.map((r) => ({
-          ...r,
+          id: r.id,
+          workflowId: r.workflowId,
+          status: r.status,
+          startedAt: r.startedAt,
+          completedAt: r.completedAt,
+          failureHint: failureHint(r.status, r.error),
           workflowName: rows.find((w) => w.id === r.workflowId)?.name || "",
         })),
         limit: 100,
