@@ -18,3 +18,13 @@ test('run scopes only exact owner organization workflow, absent config and flags
  assert.deepEqual(companyRunScopes(),[{ownerId:'u2',organizationId:'o2',workflowId:'w2'}]);
  delete process.env.COMPANY_VARIABLE_RUN_SCOPES;delete process.env.COMPANY_VARIABLES_POLICY_APPROVED;delete process.env.COMPANY_VARIABLES_STEP_RUNTIME_ENABLED;
 });
+test('console owner run scopes are exact and deny by default',async()=>{
+ const {consoleOwnerRunScopes}=await import('../../lib/company/run-policy');
+ delete process.env.CONSOLE_OWNER_RUN_SCOPES;
+ assert.deepEqual(consoleOwnerRunScopes(),[]);
+ process.env.CONSOLE_OWNER_RUN_SCOPES='not json';
+ assert.deepEqual(consoleOwnerRunScopes(),[]);
+ process.env.CONSOLE_OWNER_RUN_SCOPES=JSON.stringify([{organizationId:'o',ownerId:'u'},{organizationId:'x'}]);
+ assert.deepEqual(consoleOwnerRunScopes(),[{organizationId:'o',ownerId:'u'}]);
+ delete process.env.CONSOLE_OWNER_RUN_SCOPES;
+});

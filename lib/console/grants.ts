@@ -33,15 +33,21 @@ export async function effectiveGrant(
           eq(members.role, "owner"),
         ),
       });
-      if (member)
+      if (member) {
+        const { consoleOwnerRunScopes } = await import(
+          "@/lib/company/run-policy"
+        );
         return {
           userId,
           organizationId,
           role: "owner",
           teamIds: [],
           workflowIds: [],
-          canRun: false,
+          canRun: consoleOwnerRunScopes().some(
+            (s) => s.ownerId === userId && s.organizationId === organizationId,
+          ),
         };
+      }
     }
   }
   if (process.env.CONSOLE_STORAGE_ENABLED !== "true") return root;

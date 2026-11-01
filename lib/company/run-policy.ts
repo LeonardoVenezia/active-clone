@@ -45,3 +45,31 @@ export function canRunWithCompanyVariables(input: {
       s.workflowId === input.workflowId,
   );
 }
+
+// Scoped allowance for a persistent-setup console owner to start runs from the
+// client console. Exact owner + organization from server configuration, deny
+// by default; everything not listed keeps canRun:false.
+export type ConsoleOwnerRunScope = {
+  organizationId: string;
+  ownerId: string;
+};
+
+function parseOwnerScopes(raw: string | undefined): ConsoleOwnerRunScope[] {
+  try {
+    const parsed = JSON.parse(raw || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (v): v is ConsoleOwnerRunScope =>
+        !!v &&
+        [v.organizationId, v.ownerId].every(
+          (s) => typeof s === "string" && s.length > 0 && s.length <= 128,
+        ),
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function consoleOwnerRunScopes(): ConsoleOwnerRunScope[] {
+  return parseOwnerScopes(process.env.CONSOLE_OWNER_RUN_SCOPES);
+}
