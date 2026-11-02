@@ -7,6 +7,15 @@
  * organizationId, or the session's verified membership).
  */
 
+import { type FieldDef, isValidFieldList, parseFieldSpec, validateAgainstFields } from "./fields";
+
+/**
+ * Internal collection that keeps the optional fields of each collection (key = collection name).
+ * Its name contains "$", which no user collection name can contain (they match [a-z0-9_]+), so it can
+ * never collide with an existing or future collection, and normal save/read/list reject it.
+ */
+export const SCHEMA_COLLECTION = "$schemas";
+
 export const DATOS_LIMITS = {
   maxCollectionLength: 40,
   maxKeyLength: 120,
@@ -59,16 +68,40 @@ function parseValue(value: unknown): { ok: true; value: unknown } | { ok: false;
   return { ok: true, value: v ?? null };
 }
 
+/** Fields defined for a collection, or null (free-form collection, as before). */
+export async function datosGetFields(repo: DatosRepo, orgId: string, collection: string): Promise<FieldDef[] | null> {
+  const rec = await repo.get(orgId, SCHEMA_COLLECTION, collection);
+  const f = (rec?.value as { fields?: unknown } | undefined)?.fields;
+  return isValidFieldList(f) ? f : null;
+}
+
+/** Define (or replace) the optional fields of a collection. Existing records are NOT changed or deleted. */
+export async function datosDefineFields(repo: DatosRepo, orgId: unknown, args: { collection: unknown; fields: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ collection: string; fields: FieldDef[] }>> {
+  const g = guard(orgId, enabled) ?? checkNames(args.collection);
+  if (g) return { success: false, error: g };
+  const parsed = parseFieldSpec(args.fields);
+  if (!parsed.ok) return { success: false, error: parsed.error };
+  await repo.put(orgId as string, SCHEMA_COLLECTION, args.collection as string, { fields: parsed.fields });
+  return { success: true, collection: args.collection as string, fields: parsed.fields };
+}
+
 export async function datosSave(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; value: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ record: DatosRecord }>> {
   const g = guard(orgId, enabled) ?? checkNames(args.collection, args.key);
   if (g) return { success: false, error: g };
   const parsed = parseValue(args.value);
   if (!parsed.ok) return { success: false, error: parsed.error };
   const org = orgId as string, col = args.collection as string, key = args.key as string;
+  let toStore = parsed.value;
+  const fields = await datosGetFields(repo, org, col);
+  if (fields) {
+    const v = validateAgainstFields(fields, toStore);
+    if (!v.ok) return { success: false, error: v.error };
+    toStore = v.value;
+  }
   const exists = await repo.get(org, col, key);
   if (!exists && (await repo.count(org, col)) >= DATOS_LIMITS.maxRecordsPerCollection)
     return { success: false, error: "La colección llegó al máximo de 5000 registros." };
-  return { success: true, record: await repo.put(org, col, key, parsed.value) };
+  return { success: true, record: await repo.put(org, col, key, toStore) };
 }
 
 export async function datosRead(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ found: boolean; record: DatosRecord | null }>> {

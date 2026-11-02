@@ -4,7 +4,21 @@
  * "Ejecutar" button and a table of ONE Datos collection (polled, not realtime).
  * Pure helpers (no server-only) so they can be tested offline.
  */
-export type FrontendView = { title: string; collection: string; showRun: boolean };
+export type FrontendView = {
+  title: string;
+  collection: string;
+  showRun: boolean;
+  /** Fields of the stored value to show as table columns. Empty = the basic Clave / Valor / Actualizado table. */
+  columns: string[];
+  /** Show a form built from the collection's defined fields (needs fields defined in Datos). */
+  showForm: boolean;
+  /** Field whose value becomes the record key. Empty = automatic id. */
+  keyField: string;
+  /** After saving from the form, also run this workflow with the validated values as input. */
+  runOnSubmit: boolean;
+};
+const FIELD_NAME_RE = /^[A-Za-z][A-Za-z0-9_]{0,39}$/;
+export const MAX_COLUMNS = 12;
 
 const COLLECTION_RE = /^[a-z0-9_]{1,40}$/;
 
@@ -19,7 +33,17 @@ export function frontendViewFromNodes(nodes: unknown): FrontendView | null {
   const collection = typeof c.collection === "string" ? c.collection.trim() : "";
   if (!COLLECTION_RE.test(collection)) return null;
   const title = typeof c.title === "string" && c.title.trim() ? c.title.trim().slice(0, 80) : "Panel";
-  return { title, collection, showRun: c.showRun !== "false" && c.showRun !== false };
+  const columns = typeof c.columns === "string"
+    ? [...new Set(c.columns.split(",").map((x) => x.trim()).filter((x) => FIELD_NAME_RE.test(x)))].slice(0, MAX_COLUMNS)
+    : [];
+  const keyField = typeof c.keyField === "string" && FIELD_NAME_RE.test(c.keyField.trim()) ? c.keyField.trim() : "";
+  const showForm = c.showForm === "true" || c.showForm === true;
+  return { title, collection, showRun: c.showRun !== "false" && c.showRun !== false, columns, showForm, keyField, runOnSubmit: showForm && (c.runOnSubmit === "true" || c.runOnSubmit === true) };
+}
+
+/** Only organization owners and admins may define or change the fields of a collection. */
+export function canDefineDatosFields(role: unknown): boolean {
+  return role === "owner" || role === "admin";
 }
 
 export type AccessFacts = {
@@ -56,5 +80,18 @@ export function authorizeFrontendRun(input: { facts: AccessFacts; nodes: unknown
   if (!organizationId) return { ok: false, status: 403, reason: "Sin acceso a este workflow." };
   const view = frontendViewFromNodes(input.nodes);
   if (!view || !view.showRun) return { ok: false, status: 404, reason: "Esta página no tiene botón Ejecutar." };
+  return { ok: true, organizationId };
+}
+
+export type FrontendSubmitDecision = { ok: true; organizationId: string } | { ok: false; status: 401 | 403 | 404; reason: string };
+
+/** Authorization for sending the form of a Frontend page: same server checks as run, but the form must be on. */
+export function authorizeFrontendSubmit(input: { facts: AccessFacts; nodes: unknown; requestOrigin: string | null; urlOrigin: string }): FrontendSubmitDecision {
+  if (!input.facts.signedIn || input.facts.anonymous) return { ok: false, status: 401, reason: "Iniciá sesión." };
+  if (input.requestOrigin !== input.urlOrigin) return { ok: false, status: 403, reason: "Origen no permitido." };
+  const organizationId = decideWorkflowOrg(input.facts);
+  if (!organizationId) return { ok: false, status: 403, reason: "Sin acceso a este workflow." };
+  const view = frontendViewFromNodes(input.nodes);
+  if (!view || !view.showForm) return { ok: false, status: 404, reason: "Esta página no tiene formulario." };
   return { ok: true, organizationId };
 }

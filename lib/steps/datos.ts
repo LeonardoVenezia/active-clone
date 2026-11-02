@@ -6,7 +6,7 @@
  */
 import "server-only";
 
-import { datosList, datosRead, datosSave } from "../datos/core";
+import { datosDefineFields, datosList, datosRead, datosSave } from "../datos/core";
 import { pgDatosRepo } from "../datos/repo";
 import { type StepInput, withStepLogging } from "./step-handler";
 
@@ -16,7 +16,9 @@ export type DatosInput = StepInput & {
   key?: string;
   value?: unknown;
   limit?: unknown;
+  fields?: unknown;
   _dataOrganizationId?: string;
+  _dataCanDefineFields?: boolean;
 };
 
 async function stepHandler(input: DatosInput) {
@@ -27,7 +29,11 @@ async function stepHandler(input: DatosInput) {
       case "save": return await datosSave(pgDatosRepo, org, { collection, key: input.key, value: input.value });
       case "read": return await datosRead(pgDatosRepo, org, { collection, key: input.key });
       case "list": return await datosList(pgDatosRepo, org, { collection, limit: input.limit });
-      default: return { success: false as const, error: "Elegí una operación: guardar, leer o listar." };
+      case "fields":
+        // Server-decided by the executor (owner/admin of the organization); never from the node config.
+        if (input._dataCanDefineFields !== true) return { success: false as const, error: "Solo el Dueño o un Admin de la empresa puede definir los campos de una colección." };
+        return await datosDefineFields(pgDatosRepo, org, { collection, fields: input.fields });
+      default: return { success: false as const, error: "Elegí una operación: guardar, leer, listar o definir campos." };
     }
   } catch {
     // Never surface SQL or parameters (they can include the organization id).

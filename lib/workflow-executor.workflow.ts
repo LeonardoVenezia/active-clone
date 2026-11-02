@@ -78,6 +78,7 @@ export type WorkflowExecutionInput = {
   userId?: string; // Workflow owner identity for the company-variable guard
   organizationId?: string; // Scoped organization for the company-variable guard
   dataOrganizationId?: string; // Server-resolved organization for the Datos action (never from node config)
+  dataCanDefineFields?: boolean; // Server-decided: the runner is owner/admin of that organization (never from node config)
 };
 
 
@@ -223,6 +224,7 @@ async function executeActionStep(input: {
   outputs: NodeOutputs;
   context: StepContext;
   dataOrganizationId?: string;
+  dataCanDefineFields?: boolean;
 }) {
   const { actionType, config, outputs, context } = input;
 
@@ -234,8 +236,10 @@ async function executeActionStep(input: {
   // Datos: the organization is injected by the server after the config spread,
   // so a node config can never choose it. Other actions never receive it.
   delete stepInput._dataOrganizationId;
+  delete stepInput._dataCanDefineFields;
   if (actionType === "Datos") {
     stepInput._dataOrganizationId = input.dataOrganizationId;
+    stepInput._dataCanDefineFields = input.dataCanDefineFields === true;
   }
 
   // Special handling for Condition action - needs template evaluation
@@ -1063,6 +1067,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           outputs,
           context: stepContext,
           dataOrganizationId: input.dataOrganizationId,
+          dataCanDefineFields: input.dataCanDefineFields,
         });
 
         console.log("[Workflow Executor] Step result received:", {
