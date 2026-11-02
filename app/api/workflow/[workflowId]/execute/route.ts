@@ -10,6 +10,7 @@ import { validateWorkflowIntegrations } from "@/lib/db/integrations";
 import { workflowExecutions, workflowShares, workflows } from "@/lib/db/schema";
 import { MANUAL_INPUT_MAX_VALUE, manualInputConfigProblems, manualInputFields, prepareInput } from "@/lib/manual-input";
 import { orgForWorkflowRead } from "@/lib/datos/access";
+import { canDefineDatosFields } from "@/lib/datos/frontend";
 import { datosEnabled } from "@/lib/datos/core";
 import { executeWorkflow } from "@/lib/workflow-executor.workflow";
 import type { WorkflowEdge, WorkflowNode } from "@/lib/workflow-store";
@@ -22,7 +23,8 @@ async function executeWorkflowBackground(
   edges: WorkflowEdge[],
   input: Record<string, unknown>,
   companyScope?: { userId: string; organizationId: string },
-  dataOrganizationId?: string
+  dataOrganizationId?: string,
+  dataCanDefineFields?: boolean
 ) {
   try {
     console.log("[Workflow Execute] Starting execution:", executionId);
@@ -48,6 +50,7 @@ async function executeWorkflowBackground(
         userId: companyScope?.userId,
         organizationId: companyScope?.organizationId,
         dataOrganizationId,
+        dataCanDefineFields,
       },
     ]);
 
@@ -144,6 +147,7 @@ export async function POST(
     // Datos: the organization comes from the server-side scope of this workflow,
     // never from the request or the node config. Closed unless enabled.
     let dataOrganizationId: string | undefined;
+    let dataCanDefineFields = false;
     if ((workflow.nodes as WorkflowNode[]).some((n) => (n as { data?: { config?: { actionType?: unknown } } }).data?.config?.actionType === "Datos")) {
       // Same server decision as reading: owner/share AND membership of the
       // organization the workflow is scoped to (a share alone is not enough).
@@ -158,6 +162,8 @@ export async function POST(
         );
       }
       dataOrganizationId = dataCtx.organizationId;
+      // Only owners/admins of the organization may define collection fields (decided here, on the server, from the runner's membership).
+      dataCanDefineFields = canDefineDatosFields(dataCtx.memberRole);
     }
     // Validate integration references against the workflow owner (shared
     // editors run with the owner's connections)
@@ -225,7 +231,8 @@ export async function POST(
       workflow.edges as WorkflowEdge[],
       input,
       companyScope,
-      dataOrganizationId
+      dataOrganizationId,
+      dataCanDefineFields
     );
 
     // Return immediately with the execution ID
