@@ -1,9 +1,9 @@
 "use client";
 import { use, useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/app-header";
-import { FrontendPanel } from "@/components/frontend-panel";
+import { FrontendPanel, type PanelField, type PanelView } from "@/components/frontend-panel";
 
-type View = { title: string; collection: string; showRun: boolean };
+type View = PanelView;
 type Rec = { collection: string; key: string; value: unknown; updatedAt: string };
 
 // Basic Frontend node page: a manual trigger button and a live table of one Datos collection.
@@ -17,6 +17,9 @@ export default function FrontendPage({ params }: { params: Promise<{ workflowId:
   const [message, setMessage] = useState("");
   const [running, setRunning] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [fields, setFields] = useState<PanelField[] | null>(null);
+  const [formMessage, setFormMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     document.title = "Panel | Active-clone";
@@ -32,6 +35,7 @@ export default function FrontendPage({ params }: { params: Promise<{ workflowId:
       setView(d.view || null);
       setCanRun(!!d.canRun);
       setRecords(d.records || []);
+      setFields(d.fields || null);
     } catch { setMessage("No pudimos cargar los datos."); }
   }, [workflowId]);
 
@@ -52,10 +56,22 @@ export default function FrontendPage({ params }: { params: Promise<{ workflowId:
     setRunning(false);
   }
 
+  async function submit(values: Record<string, string>): Promise<boolean> {
+    setSubmitting(true); setFormMessage("");
+    try {
+      const r = await fetch(`/api/frontend/${encodeURIComponent(workflowId)}/submit`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ values }) });
+      const d = await r.json().catch(() => ({}));
+      setFormMessage(r.ok ? (d.started ? "Guardado. Workflow iniciado." : "Guardado.") : d.error || "No se pudo enviar.");
+      setTimeout(load, 500);
+      setSubmitting(false);
+      return r.ok || !!d.saved;
+    } catch { setFormMessage("No se pudo enviar."); setSubmitting(false); return false; }
+  }
+
   return (
     <main className="pointer-events-auto fixed inset-0 z-20 flex flex-col bg-background">
       <AppHeader />
-      <div className="flex-1 overflow-auto"><FrontendPanel blocked={blocked} canRun={canRun} message={message} onRun={run} records={records} running={running} view={view} /></div>
+      <div className="flex-1 overflow-auto"><FrontendPanel blocked={blocked} canRun={canRun} message={message} onRun={run} records={records} running={running} view={view} fields={fields} formMessage={formMessage} submitting={submitting} onSubmit={submit} /></div>
     </main>
   );
 }
