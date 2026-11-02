@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const ctx = workflowId ? await orgForWorkflowRead(request, workflowId) : null;
     if (!ctx) return NextResponse.json({ error: "Sin acceso a los datos de esta empresa." }, { status: 403 });
     const view = frontendViewFromNodes(ctx.nodes);
-    if (!view) return NextResponse.json({ error: "Este workflow no tiene un nodo Frontend configurado." }, { status: 404 });
+    if (!view) return NextResponse.json({ error: "Este workflow no tiene un nodo Frontend válido. Revisá que exista y que la colección use solo minúsculas, números y guion bajo (_)." }, { status: 404 });
     const result = await datosList(pgDatosRepo, ctx.organizationId, { collection: view.collection, limit: 50 });
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ enabled: true, view, canRun: true, records: result.records }, { headers: { "Cache-Control": "no-store" } });
