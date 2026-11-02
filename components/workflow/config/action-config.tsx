@@ -320,6 +320,93 @@ function DelayFields({
   );
 }
 
+// Unir (join) fields component
+function UnirFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  const mode = config?.joinMode === "timeout" ? "timeout" : "all";
+  const selectClass =
+    "h-9 w-full rounded-md border bg-transparent px-2 text-sm";
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="unir-mode">Cuándo seguir</Label>
+        <select
+          className={selectClass}
+          disabled={disabled}
+          id="unir-mode"
+          onChange={(e) => onUpdateConfig("joinMode", e.target.value)}
+          value={mode}
+        >
+          <option value="all">Esperar a todas las ramas</option>
+          <option value="timeout">Esperar hasta un tiempo máximo</option>
+        </select>
+      </div>
+      {mode === "timeout" && (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="unir-seconds">Tiempo máximo (segundos)</Label>
+            <Input
+              disabled={disabled}
+              id="unir-seconds"
+              min={1}
+              onChange={(e) => onUpdateConfig("timeoutSeconds", e.target.value)}
+              placeholder="Segundos"
+              type="number"
+              value={(config?.timeoutSeconds as string) || ""}
+            />
+            <p className="text-muted-foreground text-xs">
+              Se cuenta desde que llega la primera rama (máximo 24 horas). Si
+              todas llegan antes, sigue sin esperar el tiempo completo.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="unir-timeout">Si se acaba el tiempo</Label>
+            <select
+              className={selectClass}
+              disabled={disabled}
+              id="unir-timeout"
+              onChange={(e) => onUpdateConfig("onTimeout", e.target.value)}
+              value={config?.onTimeout === "continue" ? "continue" : "fail"}
+            >
+              <option value="fail">Frenar el flujo</option>
+              <option value="continue">Seguir con lo que llegó</option>
+            </select>
+            <p className="text-muted-foreground text-xs">
+              Esto solo impide que sigan los pasos de después. Las ramas que
+              todavía no terminaron siguen corriendo hasta el final (incluidos
+              pasos que gastan, como generar video): no se cancelan.
+            </p>
+          </div>
+        </>
+      )}
+      <div className="space-y-2">
+        <Label htmlFor="unir-fail">Si una rama falla</Label>
+        <select
+          className={selectClass}
+          disabled={disabled}
+          id="unir-fail"
+          onChange={(e) => onUpdateConfig("onParentFailure", e.target.value)}
+          value={config?.onParentFailure === "continue" ? "continue" : "fail"}
+        >
+          <option value="fail">Fallar (no sigue)</option>
+          <option value="continue">Seguir con las ramas que funcionaron</option>
+        </select>
+        <p className="text-muted-foreground text-xs">
+          Una rama que no corrió por una Condición falsa nunca bloquea la unión.
+          Salida: inputs (datos por rama), completed, failed, skipped, timedOut.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Approval fields component
 function ApprovalFields({
   config,
@@ -469,6 +556,14 @@ function SystemActionFields({
           onUpdateConfig={onUpdateConfig}
         />
       );
+    case "Unir":
+      return (
+        <UnirFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
     case "Approval":
       return (
         <ApprovalFields
@@ -498,6 +593,7 @@ const SYSTEM_ACTIONS: Array<{ id: string; label: string }> = [
   { id: "Loop", label: "Loop" },
   { id: "Fórmula", label: "Fórmula" },
   { id: "Delay", label: "Delay" },
+  { id: "Unir", label: "Unir" },
 ];
 
 const SYSTEM_ACTION_IDS = SYSTEM_ACTIONS.map((a) => a.id);
