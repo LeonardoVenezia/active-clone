@@ -78,6 +78,12 @@ const SYSTEM_ACTIONS: ActionType[] = [
     category: "System",
   },
   {
+    id: "Unir",
+    label: "Unir",
+    description: "Espera varias ramas y las junta en una sola salida",
+    category: "System",
+  },
+  {
     id: "Approval",
     label: "Aprobación",
     description: "Pausa el flujo hasta que una persona apruebe o rechace",

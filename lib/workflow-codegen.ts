@@ -28,6 +28,8 @@ const CONST_ASSIGNMENT_PATTERN = /^(\s*)(const\s+\w+\s*=\s*)(.*)$/;
 /**
  * Generate TypeScript code from workflow JSON with "use workflow" directive
  */
+const UNIR_GUARD_LINES: string[] = ["  // EXPORT BLOCKED: this flow has a Unir (join) node. The platform engine waits there for parallel branches (or a timeout);", "  // this exported code cannot reproduce that, so it refuses to run instead of silently behaving differently.", "  const unirNotSupported: boolean = true;", "  if (unirNotSupported) {", "    throw new Error(\"Export not supported: this flow uses a Unir node (join of parallel branches). Run it on the platform.\");", "  }"];
+
 export function generateWorkflowCode(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[],
@@ -72,6 +74,10 @@ export function generateWorkflowCode(
   codeLines.push(functionSignature);
   codeLines.push(`  "use workflow";`);
   codeLines.push("");
+  if (nodes.some((n) => n.data.type === "action" && n.data.config?.actionType === "Unir")) {
+    codeLines.push(...UNIR_GUARD_LINES);
+    codeLines.push("");
+  }
 
   // Build a map of nodeId to variable name for template references
   const nodeIdToVarName = new Map<string, string>();
@@ -879,6 +885,13 @@ export function generateWorkflowCode(
       lines.push(
         ...wrapActionCall(generateDelayActionCode(node, indent, varName))
       );
+    } else if (actionType === "Unir") {
+      lines.push(
+        `${indent}// Unir "${node.data.label}": NOT exported. The platform engine runs the branches in parallel and waits here;`,
+        `${indent}// this exported code runs steps one after another, so the join and its timeout are not reproduced.`,
+        `${indent}const ${varName} = { status: 'not-exported', actionType: "Unir" };`,
+        `${indent}void ${varName};`
+      );
     } else if (actionType === "Approval") {
       lines.push(
         ...wrapActionCall(generateApprovalActionCode(node, indent, varName))
@@ -1070,6 +1083,12 @@ export function generateWorkflowCode(
   ): string[] {
     const actionType = node.data.config?.actionType as string;
     const actionLabel = node.data.label || actionType || "Unknown Action";
+    if (actionType === "Unir") {
+      return [
+        `${indent}// Unir "${actionLabel}": NOT exported. The platform engine waits here for its parallel branches;`,
+        `${indent}// this exported code does not reproduce the join or its timeout.`,
+      ];
+    }
     const stepInfo = getStepInfo(actionType);
     const configParams = buildActionConfigParams(node, `${indent}  `);
 
@@ -1390,4 +1409,4 @@ export function generateWorkflowModule(
 
 ${code}
 `;
-}
+                                       }

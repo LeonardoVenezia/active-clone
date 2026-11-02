@@ -507,6 +507,114 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
     "trigger nodes"
   );
 
+  // Branch bookkeeping. A plain step with several parents still runs ONCE, when its first live parent reaches it (as before).
+  // Only explicit "Unir" nodes wait for their parents (see arriveAtJoin). Parents are told whether they delivered (active) or
+  // will never deliver (skipped by a false Condition, or failed) so a Unir never waits for a branch that cannot arrive.
+  // Only parents reachable from a trigger count, and loop-back edges are ignored, so nothing waits forever.
+  const reachable = new Set<string>();
+  const backEdges = new Set<string>();
+  {
+    const state = new Map<string, 1 | 2>();
+    const dfs = (id: string) => {
+      state.set(id, 1);
+      reachable.add(id);
+      for (const t of edgesBySource.get(id) || []) {
+        if (state.get(t) === 1) backEdges.add(`${id}->${t}`);
+        else if (!state.has(t)) dfs(t);
+      }
+      state.set(id, 2);
+    };
+    for (const trigger of triggerNodes) if (!state.has(trigger.id)) dfs(trigger.id);
+  }
+  const waitingOn = new Map<string, Set<string>>();
+  for (const edge of edges) {
+    if (!(reachable.has(edge.source) && nodeMap.has(edge.target))) continue;
+    if (backEdges.has(`${edge.source}->${edge.target}`)) continue;
+    const set = waitingOn.get(edge.target) || new Set<string>();
+    set.add(edge.source);
+    waitingOn.set(edge.target, set);
+  }
+  const resolvedParents = new Map<string, Set<string>>();
+  const propagated = new Set<string>();
+  // Tell every child of `nodeId` whether this parent delivered (active) or will never deliver (inactive).
+  async function resolveChildren(nodeId: string, active: boolean, visited: Set<string>) {
+    if (propagated.has(nodeId)) return;
+    propagated.add(nodeId);
+    const children = [...new Set(edgesBySource.get(nodeId) || [])];
+    await Promise.all(children.map((child) => arrive(nodeId, child, active, visited)));
+  }
+  const isJoinNode = (id: string) => {
+    const n = nodeMap.get(id);
+    return n?.data.type === "action" && n.data.config?.actionType === "Unir";
+  };
+  // Explicit "Unir" nodes: the only place where branches wait for each other.
+  type JoinState = {
+    status: Map<string, "ok" | "skipped" | "failed">;
+    open: boolean;
+    leader: boolean;
+    timedOut: string[];
+    release: () => void;
+    gate: Promise<void>;
+  };
+  const joinStates = new Map<string, JoinState>();
+  function joinStateFor(id: string): JoinState {
+    let st = joinStates.get(id);
+    if (!st) {
+      let release: () => void = () => {};
+      const gate = new Promise<void>((res) => {
+        release = res;
+      });
+      st = { status: new Map(), open: true, leader: false, timedOut: [], release, gate };
+      joinStates.set(id, st);
+    }
+    return st;
+  }
+  function joinTimeoutMs(id: string): number | null {
+    const cfg = nodeMap.get(id)?.data.config || {};
+    if (cfg.joinMode !== "timeout") return null;
+    const secs = Number(cfg.timeoutSeconds);
+    if (!Number.isFinite(secs) || secs <= 0) return null;
+    return Math.min(Math.round(secs), 24 * 60 * 60) * 1000;
+  }
+  async function arriveAtJoin(parentId: string, childId: string, active: boolean, visited: Set<string>) {
+    const st = joinStateFor(childId);
+    if (!st.open || st.status.has(parentId)) return; // late arrival after the deadline: ignored
+    st.status.set(parentId, active ? "ok" : results[parentId]?.success === false ? "failed" : "skipped");
+    const needed = waitingOn.get(childId);
+    if (!needed || st.status.size >= needed.size) st.release();
+    if (st.leader) return;
+    st.leader = true; // the first branch to arrive carries the wait; the others just report in and return
+    const ms = joinTimeoutMs(childId);
+    if (ms === null) await st.gate;
+    else await Promise.race([st.gate, sleep(ms)]);
+    st.open = false;
+    st.timedOut = [...(needed || [])].filter((p) => !st.status.has(p));
+    const anyOk = [...st.status.values()].includes("ok");
+    if (anyOk || st.timedOut.length > 0 || [...st.status.values()].includes("failed")) {
+      await executeNode(childId, visited);
+    } else {
+      await resolveChildren(childId, false, visited);
+    }
+  }
+  async function arrive(parentId: string, childId: string, active: boolean, visited: Set<string>) {
+    if (backEdges.has(`${parentId}->${childId}`)) {
+      if (active) await executeNode(childId, visited);
+      return;
+    }
+    if (isJoinNode(childId)) return arriveAtJoin(parentId, childId, active, visited);
+    const done = resolvedParents.get(childId) || new Set<string>();
+    resolvedParents.set(childId, done);
+    if (done.has(parentId)) return;
+    done.add(parentId);
+    if (active) {
+      await executeNode(childId, visited); // first live parent runs it, once (visited)
+      return;
+    }
+    const needed = waitingOn.get(childId);
+    if (needed && done.size < needed.size) return;
+    if (!visited.has(childId)) await resolveChildren(childId, false, visited);
+  }
+
   // Helper to get a meaningful node name
   function getNodeName(node: WorkflowNode): string {
     if (node.data.label) {
@@ -745,6 +853,13 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
   // Helper to execute a single node
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Node execution requires type checking and error handling
   async function executeNode(nodeId: string, visited: Set<string> = new Set()) {
+    if (visited.has(nodeId)) return; // Prevent cycles and double runs
+    await runNode(nodeId, visited);
+    // A step that ended without releasing its children (failed, no action type, unknown) counts as "will not deliver".
+    await resolveChildren(nodeId, false, visited);
+  }
+
+  async function runNode(nodeId: string, visited: Set<string>) {
     console.log("[Workflow Executor] Executing node:", nodeId);
 
     if (visited.has(nodeId)) {
@@ -771,9 +886,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
       };
 
       const nextNodes = edgesBySource.get(nodeId) || [];
-      await Promise.all(
-        nextNodes.map((nextNodeId) => executeNode(nextNodeId, visited))
-      );
+      await resolveChildren(nodeId, true, visited);
       return;
     }
 
@@ -859,10 +972,42 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           };
           if (result.success) {
             const nextNodes = edgesBySource.get(nodeId) || [];
-            await Promise.all(
-              nextNodes.map((nextNodeId) => executeNode(nextNodeId, visited))
-            );
+            await resolveChildren(nodeId, true, visited);
           }
+          return;
+        }
+
+        // Unir: build the unified output from what each parent delivered; never calls a provider.
+        if (actionType === "Unir") {
+          const st = joinStateFor(nodeId);
+          const label = (id: string) => nodeMap.get(id)?.data.label || id;
+          const key = (id: string) => id.replace(/[^a-zA-Z0-9]/g, "_");
+          const inputs: Record<string, unknown> = {};
+          const completed: string[] = [];
+          const failed: string[] = [];
+          const skipped: string[] = [];
+          for (const [pid, status] of st.status) {
+            if (status === "ok") {
+              completed.push(label(pid));
+              inputs[key(pid)] = outputs[key(pid)]?.data ?? null;
+            } else if (status === "failed") failed.push(label(pid));
+            else skipped.push(label(pid));
+          }
+          const timedOut = st.timedOut.map(label);
+          const data = { inputs, completed, failed, skipped, timedOut, hasTimedOut: timedOut.length > 0 };
+          const cfg2 = config as Record<string, unknown>;
+          let error: string | undefined;
+          if (failed.length > 0 && cfg2.onParentFailure !== "continue") {
+            error = `Unir: fallaron ramas de entrada: ${failed.join(", ")}.`;
+          } else if (timedOut.length > 0 && cfg2.onTimeout !== "continue") {
+            error = `Unir: se agotó el tiempo de espera; faltaron: ${timedOut.join(", ")}.`;
+          } else if (completed.length === 0) {
+            error = "Unir: ninguna rama de entrada terminó con datos.";
+          }
+          result = error ? { success: false, error, data } : { success: true, data };
+          results[nodeId] = result;
+          outputs[nodeId.replace(/[^a-zA-Z0-9]/g, "_")] = { label: node.data.label || nodeId, data };
+          if (result.success) await resolveChildren(nodeId, true, visited);
           return;
         }
 
@@ -981,9 +1126,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
               "next nodes in parallel"
             );
             // Execute all next nodes in parallel
-            await Promise.all(
-              nextNodes.map((nextNodeId) => executeNode(nextNodeId, visited))
-            );
+            await resolveChildren(nodeId, true, visited);
           } else {
             console.log(
               "[Workflow Executor] Condition is false, skipping next nodes"
@@ -1014,9 +1157,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
             "next nodes in parallel"
           );
           // Execute all next nodes in parallel
-          await Promise.all(
-            nextNodes.map((nextNodeId) => executeNode(nextNodeId, visited))
-          );
+          await resolveChildren(nodeId, true, visited);
         }
       }
     } catch (error) {

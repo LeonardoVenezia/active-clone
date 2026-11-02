@@ -676,6 +676,14 @@ ${stepBody}
           // Conditions handle their own next nodes
           return lines;
         }
+        if (actionType === "Unir") {
+          lines.push(
+            `${indent}// Unir "${node.data.label}": NOT exported. The platform engine runs branches in parallel and waits here;`,
+            `${indent}// this exported code runs steps one after another, so the join and its timeout are NOT reproduced.`,
+            `${indent}const result_${sanitizeVarName(nodeId)} = { status: "not-exported", actionType: "Unir" };`
+          );
+          break;
+        }
         lines.push(
           ...generateActionTransformCode(
             nodeId,
@@ -729,10 +737,12 @@ ${stepBody}
   }
 
   const functionName = sanitizeFunctionName(workflowName);
+  const hasUnir = nodes.some((n) => n.data.type === "action" && n.data.config?.actionType === "Unir");
+  const UNIR_GUARD = `\n  // EXPORT BLOCKED: this flow has a Unir (join) node. The platform engine waits there for parallel branches (or a timeout);\n  // this exported code cannot reproduce that, so it refuses to run instead of silently behaving differently.\n  const unirNotSupported: boolean = true;\n  if (unirNotSupported) {\n    throw new Error("Export not supported: this flow uses a Unir node (join of parallel branches). Run it on the platform.");\n  }\n`;
 
   const mainFunction = `export async function ${functionName}() {
   "use workflow";
-  
+${hasUnir ? UNIR_GUARD : ""}
   // Input from workflow trigger - replace with your trigger data
   const input: Record<string, unknown> = {};
   
