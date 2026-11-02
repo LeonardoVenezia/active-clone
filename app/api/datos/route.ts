@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { orgForWorkflowRead } from "@/lib/datos/access";
-import { datosEnabled, datosList } from "@/lib/datos/core";
+import { datosEnabled, datosGetFields, datosList } from "@/lib/datos/core";
 import { frontendViewFromNodes } from "@/lib/datos/frontend";
 import { pgDatosRepo } from "@/lib/datos/repo";
 
@@ -17,7 +17,8 @@ export async function GET(request: Request) {
     if (!view) return NextResponse.json({ error: "Este workflow no tiene un nodo Frontend válido. Revisá que exista y que la colección use solo minúsculas, números y guion bajo (_)." }, { status: 404 });
     const result = await datosList(pgDatosRepo, ctx.organizationId, { collection: view.collection, limit: 50 });
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
-    return NextResponse.json({ enabled: true, view, canRun: true, records: result.records }, { headers: { "Cache-Control": "no-store" } });
+    const fields = view.showForm ? await datosGetFields(pgDatosRepo, ctx.organizationId, view.collection) : null;
+    return NextResponse.json({ enabled: true, view, canRun: true, fields, records: result.records }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json({ error: "No pudimos cargar los datos." }, { status: 503 });
   }
