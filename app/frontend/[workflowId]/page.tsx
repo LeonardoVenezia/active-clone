@@ -16,6 +16,7 @@ export default function FrontendPage({ params }: { params: Promise<{ workflowId:
   const [records, setRecords] = useState<Rec[] | null>(null);
   const [message, setMessage] = useState("");
   const [running, setRunning] = useState(false);
+  const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     document.title = "Panel | Active-clone";
@@ -25,7 +26,8 @@ export default function FrontendPage({ params }: { params: Promise<{ workflowId:
     try {
       const r = await fetch(`/api/datos?workflowId=${encodeURIComponent(workflowId)}`, { cache: "no-store" });
       const d = await r.json();
-      if (!r.ok) { setMessage(d.error || "No pudimos cargar los datos."); setRecords([]); return; }
+      if (!r.ok) { setMessage(d.error || "No pudimos cargar los datos."); setBlocked(true); setCanRun(false); setView(null); setRecords([]); return; }
+      setBlocked(false);
       setMessage(d.enabled === false ? "Los datos todavía no están habilitados." : "");
       setView(d.view || null);
       setCanRun(!!d.canRun);
@@ -53,7 +55,7 @@ export default function FrontendPage({ params }: { params: Promise<{ workflowId:
   return (
     <main className="pointer-events-auto fixed inset-0 z-20 flex flex-col bg-background">
       <AppHeader />
-      <div className="flex-1 overflow-auto"><FrontendPanel canRun={canRun} message={message} onRun={run} records={records} running={running} view={view} /></div>
+      <div className="flex-1 overflow-auto"><FrontendPanel blocked={blocked} canRun={canRun} message={message} onRun={run} records={records} running={running} view={view} /></div>
     </main>
   );
 }
