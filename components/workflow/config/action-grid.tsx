@@ -72,6 +72,18 @@ const SYSTEM_ACTIONS: ActionType[] = [
     category: "System",
   },
   {
+    id: "Frontend",
+    label: "Frontend",
+    description: "Una página básica con botón de ejecutar y los datos de una colección",
+    category: "System",
+  },
+  {
+    id: "Datos",
+    label: "Datos",
+    description: "Guardá y leé datos de tu empresa (SKU, listas, estados)",
+    category: "System",
+  },
+  {
     id: "Delay",
     label: "Delay",
     description: "Espera un tiempo antes de seguir (hasta 24 h)",
