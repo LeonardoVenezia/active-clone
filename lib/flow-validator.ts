@@ -34,6 +34,8 @@ const SYSTEM_OUTPUTS: OutputsMap = {
   Loop: ["results", "items", "failed", "filtered", "count", "completed", "failedCount", "filteredCount"],
   Approval: ["approved", "note"],
   Fórmula: ["result"],
+  Frontend: ["page", "success"],
+  Datos: ["record", "found", "records", "count", "success"],
   "HTTP Request": ["data", "status", "success"],
   "Database Query": ["rows", "count", "success"],
 };
@@ -1335,4 +1337,4 @@ export function emptyResultGuardError(nodes: FlowNode[], edges: FlowEdge[], acti
   if (!guardOk) problems.push(`add ONE Condition right after the last search that reads the count of ${searchIds.map((s) => `"${s}"`).join(" and ")} (e.g. {{@${searchIds[0]}:<Label>.count}}${searchIds.slice(1).map((s) => ` + {{@${s}:<Label>.count}}`).join("")} > 0) and place it before every step that reads the optional detail Loops and before any Approval`);
   if (!nones.length) problems.push(`add a SECOND Condition on the same counts testing emptiness (e.g. ... === 0) whose child step tells the user nothing was found (an Approval or message step with the text), as its own branch from the last search; the engine has no else path and, without it, an empty search ends silently`);
   return problems.length ? `seguridad: the optional-step Loops over ${searchIds.map((s) => `"${s}"`).join(", ")} can run with 0 results; ${problems.join("; ")}` : null;
-      }
+     }
