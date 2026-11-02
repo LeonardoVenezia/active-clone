@@ -9,6 +9,8 @@ import { db } from "@/lib/db";
 import { validateWorkflowIntegrations } from "@/lib/db/integrations";
 import { workflowExecutions, workflowShares, workflows } from "@/lib/db/schema";
 import { MANUAL_INPUT_MAX_VALUE, manualInputConfigProblems, manualInputFields, prepareInput } from "@/lib/manual-input";
+import { orgForWorkflowRead } from "@/lib/datos/access";
+import { datosEnabled } from "@/lib/datos/core";
 import { executeWorkflow } from "@/lib/workflow-executor.workflow";
 import type { WorkflowEdge, WorkflowNode } from "@/lib/workflow-store";
 
@@ -19,7 +21,8 @@ async function executeWorkflowBackground(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[],
   input: Record<string, unknown>,
-  companyScope?: { userId: string; organizationId: string }
+  companyScope?: { userId: string; organizationId: string },
+  dataOrganizationId?: string
 ) {
   try {
     console.log("[Workflow Execute] Starting execution:", executionId);
@@ -44,6 +47,7 @@ async function executeWorkflowBackground(
         workflowId, // Pass workflow ID so steps can fetch credentials
         userId: companyScope?.userId,
         organizationId: companyScope?.organizationId,
+        dataOrganizationId,
       },
     ]);
 
@@ -137,6 +141,24 @@ export async function POST(
         organizationId: runScope.organizationId,
       };
     }
+    // Datos: the organization comes from the server-side scope of this workflow,
+    // never from the request or the node config. Closed unless enabled.
+    let dataOrganizationId: string | undefined;
+    if ((workflow.nodes as WorkflowNode[]).some((n) => (n as { data?: { config?: { actionType?: unknown } } }).data?.config?.actionType === "Datos")) {
+      // Same server decision as reading: owner/share AND membership of the
+      // organization the workflow is scoped to (a share alone is not enough).
+      const dataCtx = datosEnabled() ? await orgForWorkflowRead(request, workflowId) : null;
+      if (!dataCtx) {
+        return NextResponse.json(
+          {
+            error:
+              "Datos no está disponible para este workflow todavía. No se inició ningún servicio.",
+          },
+          { status: 409 }
+        );
+      }
+      dataOrganizationId = dataCtx.organizationId;
+    }
     // Validate integration references against the workflow owner (shared
     // editors run with the owner's connections)
     const validation = await validateWorkflowIntegrations(
@@ -202,7 +224,8 @@ export async function POST(
       workflow.nodes as WorkflowNode[],
       workflow.edges as WorkflowEdge[],
       input,
-      companyScope
+      companyScope,
+      dataOrganizationId
     );
 
     // Return immediately with the execution ID
