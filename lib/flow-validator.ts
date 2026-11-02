@@ -291,6 +291,20 @@ export function validateFlow(
       }
     }
 
+    // Unir sanity
+    if (actionType === "Unir") {
+      if (cfg.joinMode === "timeout") {
+        const secs = Number(cfg.timeoutSeconds);
+        if (!Number.isFinite(secs) || secs < 1 || secs > 86400) {
+          errors.push(`semántica: Unir node "${n.id}" (${label}) with joinMode "timeout" needs timeoutSeconds between 1 and 86400`);
+        }
+      }
+      const incoming = edges.filter((e) => e.target === n.id).length;
+      if (incoming < 2) {
+        errors.push(`semántica: Unir node "${n.id}" (${label}) joins branches: it needs at least 2 incoming edges (has ${incoming})`);
+      }
+    }
+
     // Condition sanity
     if (actionType === "Condition") {
       const cond = cfg.condition;
@@ -1262,6 +1276,7 @@ export function refOrderRaceError(nodes: FlowNode[], edges: FlowEdge[]): string 
     const k = `${x}>${y}`; if (memo.has(k)) return memo.get(k)!;
     if (seen.has(y)) return false; seen.add(y);
     const ps = parents.get(y) ?? [];
+    if (actionTypeOf(byId.get(y) as FlowNode) === "Unir") { memo.set(k, true); return true; } // an explicit Unir waits for its branches
     const r = ps.length > 0 && ps.every((p) => p === x || guaranteed(x, p, seen));
     memo.set(k, r); return r;
   };
@@ -1280,7 +1295,7 @@ export function refOrderRaceError(nodes: FlowNode[], edges: FlowEdge[]): string 
     }
   }
   if (!problems.length) return null;
-  return `orden: ${problems.slice(0, 4).join("; ")}. Chain the steps in one line (each node's only parent is the previous step) so every reference is already produced; for an optional step use a Loop over the list with maxItems 1 instead of a parallel branch. Do not add an extra reference edge: it does not make a node wait for all its parents`;
+  return `orden: ${problems.slice(0, 4).join("; ")}. Put an explicit Unir node after the parallel branches (the next step then reads {{@unirId:Unir.inputs.<branchId>.field}}), or chain the steps in one line (each node's only parent is the previous step) so every reference is already produced; for an optional step use a Loop over the list with maxItems 1 instead of a parallel branch. Do not add an extra reference edge: it does not make a node wait for all its parents`;
 }
 
 
@@ -1320,4 +1335,4 @@ export function emptyResultGuardError(nodes: FlowNode[], edges: FlowEdge[], acti
   if (!guardOk) problems.push(`add ONE Condition right after the last search that reads the count of ${searchIds.map((s) => `"${s}"`).join(" and ")} (e.g. {{@${searchIds[0]}:<Label>.count}}${searchIds.slice(1).map((s) => ` + {{@${s}:<Label>.count}}`).join("")} > 0) and place it before every step that reads the optional detail Loops and before any Approval`);
   if (!nones.length) problems.push(`add a SECOND Condition on the same counts testing emptiness (e.g. ... === 0) whose child step tells the user nothing was found (an Approval or message step with the text), as its own branch from the last search; the engine has no else path and, without it, an empty search ends silently`);
   return problems.length ? `seguridad: the optional-step Loops over ${searchIds.map((s) => `"${s}"`).join(", ")} can run with 0 results; ${problems.join("; ")}` : null;
-}
+      }
