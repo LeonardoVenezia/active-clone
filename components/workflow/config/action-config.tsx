@@ -315,6 +315,67 @@ function FrontendFields({
         </p>
       </div>
       <div className="space-y-2">
+        <Label htmlFor="frontend-columns">Columnas de la tabla (opcional)</Label>
+        <Input
+          disabled={disabled}
+          id="frontend-columns"
+          onChange={(e) => onUpdateConfig("columns", e.target.value)}
+          placeholder="nombre, precio, stock"
+          value={(config?.columns as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Campos del valor que se muestran como columnas (hasta 12). Vacío: tabla básica Clave / Valor.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="frontend-form">Formulario</Label>
+        <select
+          className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+          disabled={disabled}
+          id="frontend-form"
+          onChange={(e) => onUpdateConfig("showForm", e.target.value)}
+          value={config?.showForm === "true" ? "true" : "false"}
+        >
+          <option value="false">Ocultar</option>
+          <option value="true">Mostrar</option>
+        </select>
+        <p className="text-muted-foreground text-xs">
+          Se arma con los campos que definas para la colección en un nodo Datos (Definir campos).
+          Cada envío se valida en el servidor y se guarda en la colección.
+        </p>
+      </div>
+      {config?.showForm === "true" && (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="frontend-keyfield">Campo que se usa como clave (opcional)</Label>
+            <Input
+              disabled={disabled}
+              id="frontend-keyfield"
+              onChange={(e) => onUpdateConfig("keyField", e.target.value)}
+              placeholder="sku"
+              value={(config?.keyField as string) || ""}
+            />
+            <p className="text-muted-foreground text-xs">Vacío: clave automática. Con clave, enviar de nuevo el mismo valor actualiza ese registro.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="frontend-runsubmit">Al enviar, ejecutar este workflow</Label>
+            <select
+              className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+              disabled={disabled}
+              id="frontend-runsubmit"
+              onChange={(e) => onUpdateConfig("runOnSubmit", e.target.value)}
+              value={config?.runOnSubmit === "true" ? "true" : "false"}
+            >
+              <option value="false">No</option>
+              <option value="true">Sí, con los valores del formulario</option>
+            </select>
+            <p className="text-muted-foreground text-xs">
+              Los valores validados llegan al disparador Manual (si ese disparador declara campos, recibe solo esos).
+            </p>
+          </div>
+        </>
+      )}
+      <div className="space-y-2">
         <Label htmlFor="frontend-run">Botón Ejecutar</Label>
         <select
           className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
@@ -360,6 +421,7 @@ function DatosFields({
           <option value="save">Guardar un dato</option>
           <option value="read">Leer un dato</option>
           <option value="list">Listar los últimos datos</option>
+          <option value="fields">Definir campos de la colección (opcional)</option>
         </select>
       </div>
       <div className="space-y-2">
@@ -375,7 +437,7 @@ function DatosFields({
           Minúsculas, números y _ (por ejemplo: productos). Los datos son de tu empresa.
         </p>
       </div>
-      {operation !== "list" && (
+      {operation !== "list" && operation !== "fields" && (
         <div className="space-y-2">
           <Label htmlFor="datos-key">Clave</Label>
           <Input
@@ -398,6 +460,24 @@ function DatosFields({
             value={(config?.value as string) || ""}
           />
           <p className="text-muted-foreground text-xs">Texto o JSON, hasta 16 KB.</p>
+        </div>
+      )}
+      {operation === "fields" && (
+        <div className="space-y-2">
+          <Label htmlFor="datos-fields">Campos</Label>
+          <textarea
+            className="min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-sm"
+            disabled={disabled}
+            id="datos-fields"
+            onChange={(e) => onUpdateConfig("fields", e.target.value)}
+            placeholder={"nombre:texto:obligatorio\nprecio:numero\nactivo:booleano\nalta:fecha"}
+            value={(config?.fields as string) || ""}
+          />
+          <p className="text-muted-foreground text-xs">
+            Un campo por línea: nombre:tipo (texto, numero, booleano, fecha) o nombre:tipo:obligatorio.
+            Desde ese momento, Guardar en esta colección acepta solo objetos con esos campos.
+            Los registros ya guardados no se cambian ni se borran.
+          </p>
         </div>
       )}
       {operation === "list" && (
