@@ -9,6 +9,7 @@ import {
   Database,
   EyeOff,
   GitBranch,
+  GitMerge,
   Sigma,
   Timer,
   UserCheck,
@@ -80,6 +81,7 @@ const SYSTEM_ACTION_LABELS: Record<string, string> = {
   Condition: "Condition",
   "Fórmula": "Fórmula",
   Delay: "Delay",
+  Unir: "Unir",
   Approval: "Aprobación",
   "Execute Code": "System",
 };
@@ -141,6 +143,8 @@ const getProviderLogo = (actionType: string) => {
       return <Sigma className="size-12 text-violet-300" strokeWidth={1.5} />;
     case "Delay":
       return <Timer className="size-12 text-amber-300" strokeWidth={1.5} />;
+    case "Unir":
+      return <GitMerge className="size-12 text-sky-300" strokeWidth={1.5} />;
     case "Approval":
       return <UserCheck className="size-12 text-emerald-300" strokeWidth={1.5} />;
     default:
