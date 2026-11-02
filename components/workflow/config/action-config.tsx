@@ -277,6 +277,147 @@ function FormulaFields({
 
 
 // Delay fields component
+// Frontend fields component (one basic page per workflow; prototype)
+function FrontendFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="frontend-title">Título de la página</Label>
+        <Input
+          disabled={disabled}
+          id="frontend-title"
+          maxLength={80}
+          onChange={(e) => onUpdateConfig("title", e.target.value)}
+          placeholder="Panel"
+          value={(config?.title as string) || ""}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="frontend-collection">Colección de Datos a mostrar</Label>
+        <Input
+          disabled={disabled}
+          id="frontend-collection"
+          onChange={(e) => onUpdateConfig("collection", e.target.value)}
+          placeholder="productos"
+          value={(config?.collection as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Minúsculas, números y _. La página muestra los últimos datos de esa
+          colección y se actualiza cada pocos segundos.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="frontend-run">Botón Ejecutar</Label>
+        <select
+          className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+          disabled={disabled}
+          id="frontend-run"
+          onChange={(e) => onUpdateConfig("showRun", e.target.value)}
+          value={config?.showRun === "false" ? "false" : "true"}
+        >
+          <option value="true">Mostrar</option>
+          <option value="false">Ocultar</option>
+        </select>
+        <p className="text-muted-foreground text-xs">
+          La página es /frontend/(id de este workflow). Solo entra quien tiene
+          acceso al workflow y a la empresa.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Datos fields component (generic per-company records; prototype)
+function DatosFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  const operation = (config?.operation as string) || "save";
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="datos-operation">Qué hacer</Label>
+        <select
+          className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+          disabled={disabled}
+          id="datos-operation"
+          onChange={(e) => onUpdateConfig("operation", e.target.value)}
+          value={operation}
+        >
+          <option value="save">Guardar un dato</option>
+          <option value="read">Leer un dato</option>
+          <option value="list">Listar los últimos datos</option>
+        </select>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="datos-collection">Colección</Label>
+        <Input
+          disabled={disabled}
+          id="datos-collection"
+          onChange={(e) => onUpdateConfig("collection", e.target.value)}
+          placeholder="productos"
+          value={(config?.collection as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Minúsculas, números y _ (por ejemplo: productos). Los datos son de tu empresa.
+        </p>
+      </div>
+      {operation !== "list" && (
+        <div className="space-y-2">
+          <Label htmlFor="datos-key">Clave</Label>
+          <Input
+            disabled={disabled}
+            id="datos-key"
+            onChange={(e) => onUpdateConfig("key", e.target.value)}
+            placeholder="SKU-123"
+            value={(config?.key as string) || ""}
+          />
+        </div>
+      )}
+      {operation === "save" && (
+        <div className="space-y-2">
+          <Label htmlFor="datos-value">Valor</Label>
+          <Input
+            disabled={disabled}
+            id="datos-value"
+            onChange={(e) => onUpdateConfig("value", e.target.value)}
+            placeholder='{"stock": 3}'
+            value={(config?.value as string) || ""}
+          />
+          <p className="text-muted-foreground text-xs">Texto o JSON, hasta 16 KB.</p>
+        </div>
+      )}
+      {operation === "list" && (
+        <div className="space-y-2">
+          <Label htmlFor="datos-limit">Cantidad máxima</Label>
+          <Input
+            disabled={disabled}
+            id="datos-limit"
+            min={1}
+            onChange={(e) => onUpdateConfig("limit", e.target.value)}
+            placeholder="50"
+            type="number"
+            value={(config?.limit as string) || ""}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DelayFields({
   config,
   onUpdateConfig,
@@ -548,6 +689,22 @@ function SystemActionFields({
           onUpdateConfig={onUpdateConfig}
         />
       );
+    case "Frontend":
+      return (
+        <FrontendFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
+    case "Datos":
+      return (
+        <DatosFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
     case "Delay":
       return (
         <DelayFields
@@ -594,6 +751,8 @@ const SYSTEM_ACTIONS: Array<{ id: string; label: string }> = [
   { id: "Fórmula", label: "Fórmula" },
   { id: "Delay", label: "Delay" },
   { id: "Unir", label: "Unir" },
+  { id: "Datos", label: "Datos" },
+  { id: "Frontend", label: "Frontend" },
 ];
 
 const SYSTEM_ACTION_IDS = SYSTEM_ACTIONS.map((a) => a.id);

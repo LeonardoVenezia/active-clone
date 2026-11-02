@@ -28,6 +28,8 @@ const CONST_ASSIGNMENT_PATTERN = /^(\s*)(const\s+\w+\s*=\s*)(.*)$/;
 /**
  * Generate TypeScript code from workflow JSON with "use workflow" directive
  */
+const PLATFORM_ONLY_ACTIONS = ["Datos", "Frontend"];
+const PLATFORM_ONLY_GUARD_LINES: string[] = ["  // EXPORT BLOCKED: this flow has a Datos or Frontend node. They depend on the platform (per-company data store and workflow page);", "  // this exported code cannot reproduce them, so it refuses to run instead of silently behaving differently.", "  const platformOnlyNotSupported: boolean = true;", "  if (platformOnlyNotSupported) {", "    throw new Error(\"Export not supported: this flow uses a Datos or Frontend node. Run it on the platform.\");", "  }"];
 const UNIR_GUARD_LINES: string[] = ["  // EXPORT BLOCKED: this flow has a Unir (join) node. The platform engine waits there for parallel branches (or a timeout);", "  // this exported code cannot reproduce that, so it refuses to run instead of silently behaving differently.", "  const unirNotSupported: boolean = true;", "  if (unirNotSupported) {", "    throw new Error(\"Export not supported: this flow uses a Unir node (join of parallel branches). Run it on the platform.\");", "  }"];
 
 export function generateWorkflowCode(
@@ -76,6 +78,10 @@ export function generateWorkflowCode(
   codeLines.push("");
   if (nodes.some((n) => n.data.type === "action" && n.data.config?.actionType === "Unir")) {
     codeLines.push(...UNIR_GUARD_LINES);
+    codeLines.push("");
+  }
+  if (nodes.some((n) => n.data.type === "action" && PLATFORM_ONLY_ACTIONS.includes(String(n.data.config?.actionType)))) {
+    codeLines.push(...PLATFORM_ONLY_GUARD_LINES);
     codeLines.push("");
   }
 
@@ -885,6 +891,12 @@ export function generateWorkflowCode(
       lines.push(
         ...wrapActionCall(generateDelayActionCode(node, indent, varName))
       );
+    } else if (PLATFORM_ONLY_ACTIONS.includes(actionType)) {
+      lines.push(
+        `${indent}// ${actionType} "${node.data.label}": NOT exported. It depends on the platform (data store / workflow page).`,
+        `${indent}const ${varName} = { status: 'not-exported', actionType: "${actionType}" };`,
+        `${indent}void ${varName};`
+      );
     } else if (actionType === "Unir") {
       lines.push(
         `${indent}// Unir "${node.data.label}": NOT exported. The platform engine runs the branches in parallel and waits here;`,
@@ -1083,6 +1095,9 @@ export function generateWorkflowCode(
   ): string[] {
     const actionType = node.data.config?.actionType as string;
     const actionLabel = node.data.label || actionType || "Unknown Action";
+    if (PLATFORM_ONLY_ACTIONS.includes(actionType)) {
+      return [`${indent}// ${actionType} "${actionLabel}": NOT exported. It depends on the platform (data store / workflow page).`];
+    }
     if (actionType === "Unir") {
       return [
         `${indent}// Unir "${actionLabel}": NOT exported. The platform engine waits here for its parallel branches;`,
@@ -1409,4 +1424,4 @@ export function generateWorkflowModule(
 
 ${code}
 `;
-                                       }
+    }

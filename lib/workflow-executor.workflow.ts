@@ -49,6 +49,16 @@ const SYSTEM_ACTIONS: Record<string, StepImporter> = {
     importer: () => import("./steps/formula") as Promise<any>,
     stepFunction: "formulaStep",
   },
+  Frontend: {
+    // biome-ignore lint/suspicious/noExplicitAny: Dynamic module import
+    importer: () => import("./steps/frontend") as Promise<any>,
+    stepFunction: "frontendStep",
+  },
+  Datos: {
+    // biome-ignore lint/suspicious/noExplicitAny: Dynamic module import
+    importer: () => import("./steps/datos") as Promise<any>,
+    stepFunction: "datosStep",
+  },
 };
 
 type ExecutionResult = {
@@ -67,6 +77,7 @@ export type WorkflowExecutionInput = {
   workflowId?: string; // Used by steps to fetch credentials
   userId?: string; // Workflow owner identity for the company-variable guard
   organizationId?: string; // Scoped organization for the company-variable guard
+  dataOrganizationId?: string; // Server-resolved organization for the Datos action (never from node config)
 };
 
 
@@ -211,6 +222,7 @@ async function executeActionStep(input: {
   config: Record<string, unknown>;
   outputs: NodeOutputs;
   context: StepContext;
+  dataOrganizationId?: string;
 }) {
   const { actionType, config, outputs, context } = input;
 
@@ -219,6 +231,12 @@ async function executeActionStep(input: {
     ...config,
     _context: context,
   };
+  // Datos: the organization is injected by the server after the config spread,
+  // so a node config can never choose it. Other actions never receive it.
+  delete stepInput._dataOrganizationId;
+  if (actionType === "Datos") {
+    stepInput._dataOrganizationId = input.dataOrganizationId;
+  }
 
   // Special handling for Condition action - needs template evaluation
   if (actionType === "Condition") {
@@ -1044,6 +1062,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           config: processedConfig,
           outputs,
           context: stepContext,
+          dataOrganizationId: input.dataOrganizationId,
         });
 
         console.log("[Workflow Executor] Step result received:", {

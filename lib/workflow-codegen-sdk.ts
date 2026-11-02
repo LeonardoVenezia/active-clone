@@ -676,6 +676,13 @@ ${stepBody}
           // Conditions handle their own next nodes
           return lines;
         }
+        if (actionType === "Datos" || actionType === "Frontend") {
+          lines.push(
+            `${indent}// ${actionType} "${node.data.label}": NOT exported. It depends on the platform (data store / workflow page).`,
+            `${indent}const result_${sanitizeVarName(nodeId)} = { status: "not-exported", actionType: "${actionType}" };`
+          );
+          break;
+        }
         if (actionType === "Unir") {
           lines.push(
             `${indent}// Unir "${node.data.label}": NOT exported. The platform engine runs branches in parallel and waits here;`,
@@ -738,11 +745,13 @@ ${stepBody}
 
   const functionName = sanitizeFunctionName(workflowName);
   const hasUnir = nodes.some((n) => n.data.type === "action" && n.data.config?.actionType === "Unir");
+  const hasPlatformOnly = nodes.some((n) => n.data.type === "action" && (n.data.config?.actionType === "Datos" || n.data.config?.actionType === "Frontend"));
+  const PLATFORM_ONLY_GUARD = `\n  // EXPORT BLOCKED: this flow has a Datos or Frontend node. They depend on the platform (per-company data store and workflow page);\n  // this exported code cannot reproduce them, so it refuses to run instead of silently behaving differently.\n  const platformOnlyNotSupported: boolean = true;\n  if (platformOnlyNotSupported) {\n    throw new Error("Export not supported: this flow uses a Datos or Frontend node. Run it on the platform.");\n  }\n`;
   const UNIR_GUARD = `\n  // EXPORT BLOCKED: this flow has a Unir (join) node. The platform engine waits there for parallel branches (or a timeout);\n  // this exported code cannot reproduce that, so it refuses to run instead of silently behaving differently.\n  const unirNotSupported: boolean = true;\n  if (unirNotSupported) {\n    throw new Error("Export not supported: this flow uses a Unir node (join of parallel branches). Run it on the platform.");\n  }\n`;
 
   const mainFunction = `export async function ${functionName}() {
   "use workflow";
-${hasUnir ? UNIR_GUARD : ""}
+${hasUnir ? UNIR_GUARD : ""}${hasPlatformOnly ? PLATFORM_ONLY_GUARD : ""}
   // Input from workflow trigger - replace with your trigger data
   const input: Record<string, unknown> = {};
   

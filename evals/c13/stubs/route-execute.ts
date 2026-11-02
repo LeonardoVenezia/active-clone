@@ -1,0 +1,1 @@
+export async function POST(req: Request, ctx: any) { const body = await req.json(); ((globalThis as any).__exec ??= []).push({ url: req.url, body, workflowId: (await ctx.params).workflowId, cookie: req.headers.get("cookie") }); return new Response(JSON.stringify({ executionId: "x" }), { status: 200 }); }
