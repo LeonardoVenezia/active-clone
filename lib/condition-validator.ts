@@ -341,7 +341,12 @@ export function preValidateConditionExpression(
     "prototype",
   ];
 
-  const lowerExpression = expression.toLowerCase();
+  // Template references like {{@nodeId:Step label.field}} are replaced by safe
+  // variable names before evaluation (and the result is re-validated by
+  // validateConditionExpression), so a step label such as "Evaluar umbral" must
+  // not trip the keyword scan. Everything outside the references is still scanned.
+  const withoutTemplateRefs = expression.replace(/\{\{@([^:]+):([^}]+)\}\}/g, " ");
+  const lowerExpression = withoutTemplateRefs.toLowerCase();
   for (const keyword of dangerousKeywords) {
     if (lowerExpression.includes(keyword.toLowerCase())) {
       return {
