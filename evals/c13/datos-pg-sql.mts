@@ -1,0 +1,45 @@
+// @ts-nocheck
+// Runs the REAL pgDatosRepo SQL against an in-process Postgres (PGlite). Validates SQL semantics sequentially
+// (jsonb equality, numeric add, locks, ledger). It is NOT a concurrency test (PGlite is single-connection).
+import Module from "node:module"; import { createRequire } from "node:module";
+const r = createRequire(import.meta.url);
+const PG = process.env.PGLITE_DIR || "/tmp/pgl/node_modules/@electric-sql/pglite/dist/index.js";
+const { PGlite } = await import(PG);
+const { drizzle } = await import("drizzle-orm/pglite");
+const client = new PGlite();
+await client.exec(`CREATE TABLE data_records (organization_id text NOT NULL, collection text NOT NULL, key text NOT NULL, value jsonb NOT NULL, updated_at timestamp NOT NULL DEFAULT now(), PRIMARY KEY (organization_id, collection, key));`);
+(globalThis as any).__db = drizzle(client);
+const stub = r.resolve("./stubs/pg-db-stub.ts");
+const o = (Module as any)._resolveFilename; (Module as any)._resolveFilename = function (q: string, ...a: any[]) { if (q === "@/lib/db") return stub; if (q === "server-only") return r.resolve("../semantic/stubs/server-only.ts"); return o.call(this, q, ...a); };
+const repo = (await import("../../lib/datos/repo")).pgDatosRepo; const core = await import("../../lib/datos/core");
+const { datosSaveIfAbsent, datosUpdateIfMatches, datosAdd, datosSave } = (core as any).default ?? core;
+let fails = 0; const ok = (c: boolean, m: string) => { console.log(`${c ? "PASS" : "FAIL"} ${m}`); if (!c) fails++; };
+const O = "o1", C = "c1";
+let x: any = await datosSave(repo, O, { collection: C, key: "a", value: { n: 1, t: "7", s: "x" } }, true); ok(x.success, "S1 Guardar through putWithQuota (new)");
+x = await datosSave(repo, O, { collection: C, key: "a", value: { n: 2, t: "7", s: "x" } }, true); ok(x.success && (await repo.count(O, C)) === 1, "S2 Guardar overwrites existing, no duplicate");
+x = await datosSaveIfAbsent(repo, O, { collection: C, key: "b", value: { v: 1 } }, true); ok(x.creado === true, "S3 saveIfAbsent creates");
+x = await datosSaveIfAbsent(repo, O, { collection: C, key: "b", value: { v: 9 } }, true); ok(x.creado === false && x.record.value.v === 1, "S4 saveIfAbsent keeps existing");
+x = await datosUpdateIfMatches(repo, O, { collection: C, key: "b", expected: '{"v":1.0}', value: { v: 2 } }, true); ok(x.actualizado === true && x.record.value.v === 2, "S5 CAS jsonb equality (1.0 equals 1)");
+x = await datosUpdateIfMatches(repo, O, { collection: C, key: "b", expected: { v: 1 }, value: { v: 3 } }, true); ok(x.actualizado === false && x.record.value.v === 2, "S6 CAS mismatch leaves value");
+x = await datosUpdateIfMatches(repo, O, { collection: C, key: "zz", expected: 1, value: 3 }, true); ok(x.actualizado === false && x.record === null, "S7 CAS missing");
+const add = (a: any) => datosAdd(repo, O, { collection: C, key: "a", field: "n", amount: 1, ...a }, true);
+x = await add({}); ok(x.aplicado && x.valor === 3 && x.record.value.s === "x", "S8 add +1, other fields kept");
+x = await add({ amount: 0.1 }); x = await add({ amount: 0.2 }); ok(x.aplicado && x.valor === 3.3, `S9 decimals exact (${x.valor})`);
+x = await datosAdd(repo, O, { collection: C, key: "a", field: "t", amount: 1 }, true); ok(!x.aplicado && /no es un número/.test(x.motivo) && (await repo.get(O, C, "a")).value.t === "7", "S10 text field never converted");
+x = await datosAdd(repo, O, { collection: C, key: "a", field: "new", amount: 1 }, true); ok(!x.aplicado && /no existe/.test(x.motivo), "S11 missing field no default");
+x = await datosAdd(repo, O, { collection: C, key: "a", field: "new", amount: 4, startAtZero: true }, true); ok(x.aplicado && x.valor === 4, "S12 startAtZero");
+x = await add({ amount: -1000, min: 0 }); ok(!x.aplicado && /mínimo/.test(x.motivo), "S13 min rejects");
+x = await add({ amount: 1000, max: 10 }); ok(!x.aplicado && /máximo/.test(x.motivo), "S14 max rejects");
+x = await datosAdd(repo, O, { collection: C, key: "nope", field: "n", amount: 1 }, true); ok(!x.aplicado && /no existe/.test(x.motivo), "S15 missing record");
+await repo.put(O, C, "big", { n: 9007199254740991 }); x = await datosAdd(repo, O, { collection: C, key: "big", field: "n", amount: 1 }, true); ok(!x.aplicado, `S16 beyond safe range rejected (${x.motivo})`);
+await repo.put(O, C, "dig", { n: 0.1234567890123456 }); x = await datosAdd(repo, O, { collection: C, key: "dig", field: "n", amount: 1 }, true); ok(!x.aplicado && /precisión/.test(x.motivo) && (await repo.get(O, C, "dig")).value.n === 0.1234567890123456, `S17 digits that would be lost rejected, unchanged (${x.motivo})`);
+await repo.put(O, C, "arr", [1]); x = await datosAdd(repo, O, { collection: C, key: "arr", field: "n", amount: 1 }, true); ok(!x.aplicado, "S18 array record rejected");
+const ad = (id: any) => datosAdd(repo, O, { collection: C, key: "a", field: "n", amount: 10, operationId: id }, true);
+const before = (await repo.get(O, C, "a")).value.n; const p1 = await ad("e1|n1"), p2 = await ad("e1|n1"), p3 = await ad("e1|n2");
+ok(p1.aplicado && !p2.aplicado && p2.repetido && p3.aplicado && (await repo.get(O, C, "a")).value.n === before + 20, "S19 same operation id applies once (ledger), another id applies");
+const led = (await client.query("select collection,key,value from data_records where collection='$ops'")).rows; ok(led.length === 1 && led[0].value.ids.length === 2, "S20 one ledger row per record, bounded ids");
+for (let i = 0; i < 60; i++) await ad(`w${i}`); const led2 = (await client.query("select value from data_records where collection='$ops'")).rows; ok(led2.length === 1 && led2[0].value.ids.length === 50, "S21 ledger window capped at 50");
+x = await repo.insertIfAbsent(O, "q", "k1", 1, 2); x = await repo.insertIfAbsent(O, "q", "k2", 1, 2); const f = await repo.insertIfAbsent(O, "q", "k3", 1, 2); ok(f.status === "full" && (await repo.count(O, "q")) === 2, "S22 quota (limit 2): third insert refused");
+const f2 = await repo.putWithQuota(O, "q", "k4", 1, 2); const f3 = await repo.putWithQuota(O, "q", "k1", 5, 2); ok(f2.status === "full" && f3.status === "saved", "S23 putWithQuota shares the quota; overwrite at limit allowed");
+ok((await repo.count("o2", C)) === 0 && (await repo.get("o2", C, "a")) === null, "S24 organization isolation");
+console.log(fails ? `\n${fails} FAILED` : "\nALL PASS"); process.exit(fails ? 1 : 0);

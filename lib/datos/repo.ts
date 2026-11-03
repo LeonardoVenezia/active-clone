@@ -8,6 +8,8 @@ import { dataRecords } from "./schema";
 
 const toRecord = (r: typeof dataRecords.$inferSelect): DatosRecord => ({ collection: r.collection, key: r.key, value: r.value, updatedAt: r.updatedAt.toISOString() });
 const ledgerKey = (c: string, key: string) => createHash("sha256").update(`${c}\u0000${key}`).digest("hex").slice(0, 40);
+// postgres-js returns an array; other drivers (tests) return { rows }.
+const rowsOf = <T,>(res: unknown): T[] => (Array.isArray(res) ? (res as T[]) : ((res as { rows?: T[] })?.rows ?? []));
 const scope = (o: string, c: string) => and(eq(dataRecords.organizationId, o), eq(dataRecords.collection, c));
 
 export const pgDatosRepo: DatosRepo = {
@@ -44,7 +46,7 @@ export const pgDatosRepo: DatosRepo = {
     const rows = await db.execute(sql`UPDATE data_records SET value = ${JSON.stringify(next)}::jsonb, updated_at = now()
       WHERE organization_id = ${o} AND collection = ${c} AND key = ${key} AND value = ${JSON.stringify(expected)}::jsonb
       RETURNING collection, key, value, updated_at`);
-    const row = (rows as unknown as Array<{ collection: string; key: string; value: unknown; updated_at: Date | string }>)[0];
+    const row = rowsOf<{ collection: string; key: string; value: unknown; updated_at: Date | string }>(rows)[0];
     if (row) return { updated: true, record: { collection: row.collection, key: row.key, value: row.value, updatedAt: new Date(row.updated_at).toISOString() } };
     return { updated: false, record: await this.get(o, c, key) };
   },
@@ -68,7 +70,7 @@ export const pgDatosRepo: DatosRepo = {
     const MAXS = String(MAX_SAFE);
     return db.transaction(async (tx) => {
       // Lock the record: concurrent adds on it queue here, so the ledger read-modify-write below is serialized too.
-      const locked = (await tx.execute(sql`SELECT 1 AS x FROM data_records WHERE organization_id = ${o} AND collection = ${c} AND key = ${key} FOR UPDATE`)) as unknown as unknown[];
+      const locked = rowsOf<unknown>(await tx.execute(sql`SELECT 1 AS x FROM data_records WHERE organization_id = ${o} AND collection = ${c} AND key = ${key} FOR UPDATE`));
       const getCur = async () => { const [r] = await tx.select().from(dataRecords).where(and(scope(o, c), eq(dataRecords.key, key))).limit(1); return r ? toRecord(r) : null; };
       if (locked.length === 0) return { applied: false, reason: "missing" as IncrementReason, record: null };
       const opHash = opId ? createHash("sha256").update(opId).digest("hex").slice(0, 24) : "";
@@ -94,7 +96,7 @@ export const pgDatosRepo: DatosRepo = {
           AND (${max}::numeric IS NULL OR x.nv <= ${max}::numeric)
           AND octet_length(jsonb_set(d.value, ARRAY[${field}]::text[], to_jsonb(x.nv), true)::text) <= ${DATOS_LIMITS.maxValueBytes}
         RETURNING d.collection, d.key, d.value, d.updated_at`);
-      const row = (rows as unknown as Array<{ collection: string; key: string; value: unknown; updated_at: Date | string }>)[0];
+      const row = rowsOf<{ collection: string; key: string; value: unknown; updated_at: Date | string }>(rows)[0];
       if (row) {
         if (opId) {
           const next = { ids: [...ids, opHash].slice(-OPS_WINDOW) };
