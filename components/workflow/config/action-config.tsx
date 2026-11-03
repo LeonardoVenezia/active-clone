@@ -468,8 +468,8 @@ function DatosFields({
           </label>
           <p className="text-muted-foreground text-xs">
             Suma en un solo paso, sin pisar cambios simultáneos. Si el resultado queda fuera del mínimo/máximo, no se cambia nada y el nodo devuelve aplicado = falso con el motivo (el flujo sigue igual: agregá un nodo Condición sobre aplicado si los pasos siguientes dependen de que la suma se hizo).
-            Si este mismo paso se reintenta dentro de la misma ejecución, no suma dos veces (se guarda un registro interno por cada suma aplicada).
-            Una ejecución nueva sí suma: si el mismo evento puede llegar repetido (por ejemplo un aviso de venta duplicado), antes usá &quot;Guardar solo si no existe&quot; con una clave única por evento y sumá solo si creado = verdadero. Piloto: cada operación de estas tres queda registrada para evitar repetirla en un reintento; el límite es de 5000 operaciones por empresa y no se borran solas. Al llegar al límite, la operación no se hace y el flujo muestra el error.
+            Si este mismo paso se reintenta dentro de la misma ejecución, no suma dos veces y devuelve el mismo resultado que la primera vez (se guarda un registro interno por cada operación, con su resultado).
+            Una ejecución nueva sí suma: si el mismo evento puede llegar repetido (por ejemplo un aviso de venta duplicado), antes usá &quot;Guardar solo si no existe&quot; con una clave única por evento y sumá solo si creado = verdadero. Piloto: el límite es de 5000 operaciones por empresa y no se borran solas. Al llegar al límite, la operación no se hace y el flujo muestra el error.
           </p>
         </div>
       )}
