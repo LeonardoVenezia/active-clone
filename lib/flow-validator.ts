@@ -35,7 +35,7 @@ const SYSTEM_OUTPUTS: OutputsMap = {
   Approval: ["approved", "note"],
   Fórmula: ["result"],
   Frontend: ["page", "success"],
-  Datos: ["record", "found", "records", "count", "success"],
+  Datos: ["record", "found", "records", "count", "success", "creado", "actualizado", "aplicado", "valor", "motivo"],
   "HTTP Request": ["data", "status", "success"],
   "Database Query": ["rows", "count", "success"],
 };

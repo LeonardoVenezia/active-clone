@@ -419,6 +419,9 @@ function DatosFields({
           value={operation}
         >
           <option value="save">Guardar un dato</option>
+          <option value="saveIfAbsent">Guardar solo si no existe</option>
+          <option value="updateIfMatches">Actualizar solo si el valor actual coincide</option>
+          <option value="add">Sumar a un número</option>
           <option value="read">Leer un dato</option>
           <option value="list">Listar los últimos datos</option>
           <option value="fields">Definir campos de la colección (opcional)</option>
@@ -449,9 +452,38 @@ function DatosFields({
           />
         </div>
       )}
-      {operation === "save" && (
+      {operation === "add" && (
         <div className="space-y-2">
-          <Label htmlFor="datos-value">Valor</Label>
+          <Label htmlFor="datos-field">Campo numérico</Label>
+          <Input disabled={disabled} id="datos-field" onChange={(e) => onUpdateConfig("field", e.target.value)} placeholder="stock" value={(config?.field as string) || ""} />
+          <Label htmlFor="datos-amount">Cantidad a sumar (negativa para restar)</Label>
+          <Input disabled={disabled} id="datos-amount" onChange={(e) => onUpdateConfig("amount", e.target.value)} placeholder="-1" value={(config?.amount as string) || ""} />
+          <Label htmlFor="datos-min">Mínimo permitido (opcional)</Label>
+          <Input disabled={disabled} id="datos-min" onChange={(e) => onUpdateConfig("min", e.target.value)} placeholder="0" value={(config?.min as string) || ""} />
+          <Label htmlFor="datos-max">Máximo permitido (opcional)</Label>
+          <Input disabled={disabled} id="datos-max" onChange={(e) => onUpdateConfig("max", e.target.value)} placeholder="" value={(config?.max as string) || ""} />
+          <label className="flex items-center gap-2 text-sm" htmlFor="datos-start-zero">
+            <input checked={config?.startAtZero === "true" || config?.startAtZero === true} disabled={disabled} id="datos-start-zero" onChange={(e) => onUpdateConfig("startAtZero", e.target.checked ? "true" : "false")} type="checkbox" />
+            Si el campo no existe, empezar en 0
+          </label>
+          <p className="text-muted-foreground text-xs">
+            Suma en un solo paso, sin pisar cambios simultáneos. Si el resultado queda fuera del mínimo/máximo, no se cambia nada y el nodo devuelve aplicado = falso con el motivo.
+            Si el nodo se reintenta, vuelve a sumar: para evitar duplicados, antes usá &quot;Guardar solo si no existe&quot; con una clave única por evento y sumá solo si creado = verdadero.
+          </p>
+        </div>
+      )}
+      {operation === "updateIfMatches" && (
+        <div className="space-y-2">
+          <Label htmlFor="datos-expected">Valor esperado actual</Label>
+          <Input disabled={disabled} id="datos-expected" onChange={(e) => onUpdateConfig("expected", e.target.value)} placeholder='{"estado": "pendiente"}' value={(config?.expected as string) || ""} />
+          <p className="text-muted-foreground text-xs">
+            Solo cambia si el dato guardado es igual a este valor (1 y 1.0 son iguales). Si no coincide o no existe, no cambia nada y devuelve actualizado = falso con el motivo.
+          </p>
+        </div>
+      )}
+      {(operation === "save" || operation === "saveIfAbsent" || operation === "updateIfMatches") && (
+        <div className="space-y-2">
+          <Label htmlFor="datos-value">{operation === "updateIfMatches" ? "Valor nuevo" : "Valor"}</Label>
           <Input
             disabled={disabled}
             id="datos-value"
@@ -459,7 +491,10 @@ function DatosFields({
             placeholder='{"stock": 3}'
             value={(config?.value as string) || ""}
           />
-          <p className="text-muted-foreground text-xs">Texto o JSON, hasta 16 KB.</p>
+          <p className="text-muted-foreground text-xs">
+            Texto o JSON, hasta 16 KB.
+            {operation === "saveIfAbsent" ? " Si la clave ya existe, no se cambia y se devuelve el dato existente (creado = falso)." : ""}
+          </p>
         </div>
       )}
       {operation === "fields" && (

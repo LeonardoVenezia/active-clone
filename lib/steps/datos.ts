@@ -6,7 +6,7 @@
  */
 import "server-only";
 
-import { datosDefineFields, datosList, datosRead, datosSave } from "../datos/core";
+import { datosAdd, datosDefineFields, datosList, datosRead, datosSave, datosSaveIfAbsent, datosUpdateIfMatches } from "../datos/core";
 import { pgDatosRepo } from "../datos/repo";
 import { type StepInput, withStepLogging } from "./step-handler";
 
@@ -17,6 +17,12 @@ export type DatosInput = StepInput & {
   value?: unknown;
   limit?: unknown;
   fields?: unknown;
+  expected?: unknown;
+  field?: unknown;
+  amount?: unknown;
+  startAtZero?: unknown;
+  min?: unknown;
+  max?: unknown;
   _dataOrganizationId?: string;
   _dataCanDefineFields?: boolean;
 };
@@ -27,6 +33,9 @@ async function stepHandler(input: DatosInput) {
   try {
     switch (input.operation) {
       case "save": return await datosSave(pgDatosRepo, org, { collection, key: input.key, value: input.value });
+      case "saveIfAbsent": return await datosSaveIfAbsent(pgDatosRepo, org, { collection, key: input.key, value: input.value });
+      case "updateIfMatches": return await datosUpdateIfMatches(pgDatosRepo, org, { collection, key: input.key, expected: input.expected, value: input.value });
+      case "add": return await datosAdd(pgDatosRepo, org, { collection, key: input.key, field: input.field, amount: input.amount, startAtZero: input.startAtZero, min: input.min, max: input.max });
       case "read": return await datosRead(pgDatosRepo, org, { collection, key: input.key });
       case "list": return await datosList(pgDatosRepo, org, { collection, limit: input.limit });
       case "fields":
