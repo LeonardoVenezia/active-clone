@@ -80,6 +80,16 @@ ok(exactSum(Number.MAX_SAFE_INTEGER, 1) === null && exactSum(0.1234567890123456,
   ok(!r1.aplicado && !r2.aplicado && r2.repetido && (await r.get(O, "sku", "rj")).value.n === 50, "R5 rejected result is stored: replay after the state changed does NOT apply (no branch flip, no double effect)");
 }
 async function add2(r: any, key: string, id: string, amount: number, extra: any) { return datosAdd(r, O, { ...C, key, field: "n", amount, operationId: id, ...extra }, true) as any; }
+// Replay returns the FULL stored output, record included (not the current data)
+{ const r = memoryRepo(); await datosSave(r, O, { ...C, key: "f", value: { n: 1, tag: "x" } }, true);
+  const a1: any = await datosAdd(r, O, { ...C, key: "f", field: "n", amount: 1, operationId: "f1" }, true); await datosSave(r, O, { ...C, key: "f", value: { n: 99, tag: "changed" } }, true);
+  const a2: any = await datosAdd(r, O, { ...C, key: "f", field: "n", amount: 1, operationId: "f1" }, true);
+  ok(a2.repetido && JSON.stringify(a2.record) === JSON.stringify(a1.record) && a2.valor === 2 && a2.record.value.tag === "x", "R12 replay output (record, valor) is the stored snapshot of the first run, not the current data");
+  const s1: any = await datosSaveIfAbsent(r, O, { ...C, key: "g", value: { v: 1 }, operationId: "g1" }, true); await datosSave(r, O, { ...C, key: "g", value: { v: 2 } }, true); const s2: any = await datosSaveIfAbsent(r, O, { ...C, key: "g", value: { v: 1 }, operationId: "g1" }, true);
+  ok(JSON.stringify(s2.record) === JSON.stringify(s1.record) && s2.record.value.v === 1, "R13 saveIfAbsent replay record is the first-run snapshot");
+  const big = { a: "x".repeat(16000) }; await datosSave(r, O, { ...C, key: "h", value: big }, true);
+  const c1: any = await datosUpdateIfMatches(r, O, { ...C, key: "h", expected: big, value: { a: "y".repeat(16000) }, operationId: "h1" }, true);
+  ok(c1.actualizado && (await r.get(O, "sku", "h")).value.a[0] === "y", "R14 near-16KB values still fit with their snapshot"); }
 // saveIfAbsent replay keeps creado=true (branch stable)
 { const r = memoryRepo(); const s1: any = await datosSaveIfAbsent(r, O, { ...C, key: "u", value: 1, operationId: "a1" }, true); const s2: any = await datosSaveIfAbsent(r, O, { ...C, key: "u", value: 1, operationId: "a1" }, true);
   const s3: any = await datosSaveIfAbsent(r, O, { ...C, key: "u", value: 1, operationId: "a2" }, true); const s4: any = await datosSaveIfAbsent(r, O, { ...C, key: "u", value: 2, operationId: "a1" }, true);

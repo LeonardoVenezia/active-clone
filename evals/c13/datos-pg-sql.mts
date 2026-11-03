@@ -65,3 +65,8 @@ console.log(fails ? `\n${fails} FAILED` : "\nALL PASS"); process.exit(fails ? 1 
   ok(!full.success && /5000 operaciones protegidas/.test(full.error) && rep.aplicado && rep.repetido, "S33 cap 5000 per company: new op refused with clear error; stored op still replays (SQL)");
   const other = await datosAdd(repo, "o2", { collection: C, key: "rp", field: "n", amount: 1, operationId: "capNew" }, true); ok(other.success && /no existe/.test(other.motivo), "S34 cap is per company (other company not blocked by it)");
 }
+{ await repo.put(O, C, "sn", { n: 1, tag: "x" }); const a1 = await datosAdd(repo, O, { collection: C, key: "sn", field: "n", amount: 1, operationId: "sn1" }, true); await repo.put(O, C, "sn", { n: 50, tag: "changed" });
+  const a2 = await datosAdd(repo, O, { collection: C, key: "sn", field: "n", amount: 1, operationId: "sn1" }, true);
+  ok(a2.repetido && JSON.stringify(a2.record) === JSON.stringify(a1.record) && a2.valor === 2 && a2.record.value.tag === "x", "S35 replay returns the stored full output snapshot (record + valor of the first run), not current data (SQL)");
+  const bg = { a: "x".repeat(16000) }; await repo.put(O, C, "bg", bg); const b1 = await datosUpdateIfMatches(repo, O, { collection: C, key: "bg", expected: bg, value: { a: "y".repeat(16000) }, operationId: "bg1" }, true); const b2 = await datosUpdateIfMatches(repo, O, { collection: C, key: "bg", expected: bg, value: { a: "y".repeat(16000) }, operationId: "bg1" }, true);
+  ok(b1.actualizado && b2.actualizado && b2.repetido, "S36 ~16 KB value + snapshot stored and replayed (SQL)"); }
