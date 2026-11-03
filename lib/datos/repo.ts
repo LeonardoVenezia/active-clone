@@ -23,10 +23,10 @@ const getRow = async (x: Exec, o: string, c: string, key: string): Promise<Datos
  * runs the operation and stores its terminal result in the same transaction. No rows are ever deleted.
  */
 class SnapshotTooLarge extends Error {}
-async function withLedger<T extends { record: DatosRecord | null }>(o: string, c: string, key: string, op: OpIdentity | undefined, run: (x: Exec) => Promise<T>, signal: { conflict: () => any; full: () => any; tooLarge: () => any }): Promise<T & { replayed?: boolean }> {
+async function withLedger<T extends { record: DatosRecord | null }>(o: string, c: string, key: string, op: OpIdentity | undefined, run: (x: Exec) => Promise<T>, signal: { conflict: () => any; tooLarge: () => any }): Promise<T & { replayed?: boolean }> {
   try { return await withLedgerTx(o, c, key, op, run, signal); } catch (e) { if (e instanceof SnapshotTooLarge) return signal.tooLarge(); throw e; }
 }
-async function withLedgerTx<T extends { record: DatosRecord | null }>(o: string, c: string, key: string, op: OpIdentity | undefined, run: (x: Exec) => Promise<T>, signal: { conflict: () => any; full: () => any; tooLarge: () => any }): Promise<T & { replayed?: boolean }> {
+async function withLedgerTx<T extends { record: DatosRecord | null }>(o: string, c: string, key: string, op: OpIdentity | undefined, run: (x: Exec) => Promise<T>, signal: { conflict: () => any; tooLarge: () => any }): Promise<T & { replayed?: boolean }> {
   return db.transaction(async (tx) => {
     let rowKey = "";
     if (op) {
@@ -38,9 +38,6 @@ async function withLedgerTx<T extends { record: DatosRecord | null }>(o: string,
         if (v.fp !== op.fp) return signal.conflict();
         return { ...(v.r as object), replayed: true } as T & { replayed?: boolean }; // full stored output, record included: nothing is read from the current data
       }
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`datos:${o}:${OPS_COLLECTION}`}))`);
-      const [n] = await tx.select({ n: count() }).from(dataRecords).where(scope(o, OPS_COLLECTION));
-      if (Number(n?.n ?? 0) >= DATOS_LIMITS.maxProtectedOps) return signal.full();
     }
     const r = await run(tx);
     if (op) {
@@ -81,7 +78,7 @@ export const pgDatosRepo: DatosRepo = {
       if (Number(n?.n ?? 0) >= maxRecords) return { status: "full" as const, record: null };
       const [row] = await x.insert(dataRecords).values({ organizationId: o, collection: c, key, value: value as never }).returning();
       return { status: "created" as const, record: toRecord(row) };
-    }, { conflict: () => ({ status: "conflict" as const, record: null }), full: () => ({ status: "ledger_full" as const, record: null }), tooLarge: () => ({ status: "snapshot_too_large" as const, record: null }) });
+    }, { conflict: () => ({ status: "conflict" as const, record: null }), tooLarge: () => ({ status: "snapshot_too_large" as const, record: null }) });
   },
   async compareAndSet(o, c, key, expected, next, op) {
     return withLedger(o, c, key, op, async (x) => {
@@ -91,7 +88,7 @@ export const pgDatosRepo: DatosRepo = {
       const row = rowsOf<{ collection: string; key: string; value: unknown; updated_at: Date | string }>(rows)[0];
       if (row) return { updated: true, record: { collection: row.collection, key: row.key, value: row.value, updatedAt: new Date(row.updated_at).toISOString() } };
       return { updated: false, record: await getRow(x, o, c, key) };
-    }, { conflict: () => ({ updated: false, conflict: true, record: null }), full: () => ({ updated: false, ledgerFull: true, record: null }), tooLarge: () => ({ updated: false, tooLarge: true, record: null }) });
+    }, { conflict: () => ({ updated: false, conflict: true, record: null }), tooLarge: () => ({ updated: false, tooLarge: true, record: null }) });
   },
   async putWithQuota(o, c, key, value, maxRecords) {
     return db.transaction(async (tx) => {
@@ -149,6 +146,6 @@ export const pgDatosRepo: DatosRepo = {
         else reason = JSON.stringify(v).length + 40 > DATOS_LIMITS.maxValueBytes ? "too_large" : "retry";
       }
       return { applied: false, reason, valor: typeof v?.[field] === "number" ? (v[field] as number) : null, record: cur };
-    }, { conflict: () => ({ applied: false, reason: "conflict" as IncrementReason, record: null }), full: () => ({ applied: false, reason: "ledger_full" as IncrementReason, record: null }), tooLarge: () => ({ applied: false, reason: "snapshot_too_large" as IncrementReason, record: null }) });
+    }, { conflict: () => ({ applied: false, reason: "conflict" as IncrementReason, record: null }), tooLarge: () => ({ applied: false, reason: "snapshot_too_large" as IncrementReason, record: null }) });
   },
 };

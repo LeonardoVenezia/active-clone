@@ -101,14 +101,11 @@ async function add2(r: any, key: string, id: string, amount: number, extra: any)
   ok(x1.actualizado && x3.actualizado && x3.repetido && (await r.get(O, "sku", "c")).value === "A", "R7 CAS A->B->A then replay of the first: returns the stored result and does NOT re-apply (value stays A)");
   const miss = await u("c9", "Z", "Q"); await datosSave(r, O, { ...C, key: "c", value: "Z" }, true); const miss2 = await u("c9", "Z", "Q");
   ok(!miss.actualizado && !miss2.actualizado && miss2.repetido && (await r.get(O, "sku", "c")).value === "Z", "R8 CAS that did not match stays 'no match' on replay even if the value now matches"); }
-// Pilot cap on protected operations
+// No cap on protected operations: 5001+ distinct ops all apply; old replays still return the stored result
 { const r = memoryRepo(); await datosSave(r, O, { ...C, key: "k", value: { n: 0 } }, true);
-  for (let i = 0; i < 5000; i++) await datosAdd(r, O, { ...C, key: "k", field: "n", amount: 1, operationId: `p${i}` }, true);
-  const over: any = await datosAdd(r, O, { ...C, key: "k", field: "n", amount: 1, operationId: "p5000" }, true); const old: any = await datosAdd(r, O, { ...C, key: "k", field: "n", amount: 1, operationId: "p0" }, true);
-  const pl: any = await datosAdd(r, O, { ...C, key: "k", field: "n", amount: 1 }, true);
-  ok(!over.success && /5000 operaciones protegidas/.test(over.error), "R9 op 5001 is refused with a clear error, nothing applied");
-  ok(old.aplicado && old.repetido, "R10 replay of an already stored op still works at the cap (no new row needed)");
-  ok(pl.aplicado && (await r.get(O, "sku", "k")).value.n === 5001, "R11 unprotected call (no id) is unaffected by the cap"); }
+  for (let i = 0; i < 5100; i++) await datosAdd(r, O, { ...C, key: "k", field: "n", amount: 1, operationId: `p${i}` }, true);
+  const old: any = await datosAdd(r, O, { ...C, key: "k", field: "n", amount: 1, operationId: "p0" }, true);
+  ok((await r.get(O, "sku", "k")).value.n === 5100 && old.aplicado && old.repetido && old.valor === 1, "R9 no cap: 5100 protected ops applied, replay of the first still returns its stored result"); }
 // Internal collections are unreachable from user ops
 { const r = memoryRepo(); for (const col of ["$ops", "$schemas", "$x"]) {
   const a: any[] = [await datosSave(r, O, { collection: col, key: "k", value: 1 }, true), await datosRead(r, O, { collection: col, key: "k" }, true), await datosSaveIfAbsent(r, O, { collection: col, key: "k", value: 1 }, true), await datosUpdateIfMatches(r, O, { collection: col, key: "k", expected: 1, value: 2 }, true), await datosAdd(r, O, { collection: col, key: "k", field: "n", amount: 1 }, true), await datosDefineFields(r, O, { collection: col, fields: "a:texto" }, true)];

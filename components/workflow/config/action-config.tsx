@@ -472,7 +472,6 @@ function DatosFields({
               <summary className="cursor-pointer font-medium">Más detalles</summary>
               <p className="mt-1">Si este mismo paso se reintenta dentro de la misma ejecución, no suma dos veces y devuelve el mismo resultado que la primera vez (con repetido = verdadero). Una ejecución nueva sí suma: si el mismo evento puede llegar repetido (por ejemplo un aviso de venta duplicado), antes usá &quot;Guardar solo si no existe&quot; con una clave única por evento y sumá solo si creado = verdadero.</p>
             </details>
-            <p className="font-medium text-foreground/80">Piloto: límite de 5000 operaciones protegidas por empresa (no son ventas: una venta puede usar varias). No se borran solas; al llegar, la operación no se hace y el flujo muestra el error.</p>
           </div>
         </div>
       )}
@@ -486,7 +485,6 @@ function DatosFields({
               <summary className="cursor-pointer font-medium">Más detalles</summary>
               <p className="mt-1">Si este mismo paso se reintenta dentro de la misma ejecución, devuelve el mismo resultado que la primera vez (con repetido = verdadero) y no vuelve a aplicar el cambio, aunque el dato haya cambiado en el medio.</p>
             </details>
-            <p className="font-medium text-foreground/80">Piloto: límite de 5000 operaciones protegidas por empresa (no son ventas: una venta puede usar varias). No se borran solas; al llegar, la operación no se hace y el flujo muestra el error.</p>
           </div>
         </div>
       )}
@@ -504,11 +502,6 @@ function DatosFields({
             Texto o JSON, hasta 16 KB.
             {operation === "saveIfAbsent" ? " Si la clave ya existe, no se cambia y se devuelve el dato existente (creado = falso)." : ""}
           </p>
-          {operation === "saveIfAbsent" && (
-            <p className="font-medium text-foreground/80 text-sm">
-              Piloto: límite de 5000 operaciones protegidas por empresa (no son ventas). No se borran solas; al llegar, la operación no se hace y el flujo muestra el error. Un reintento del mismo paso devuelve el mismo resultado (repetido = verdadero).
-            </p>
-          )}
         </div>
       )}
       {operation === "fields" && (

@@ -60,10 +60,9 @@ console.log(fails ? `\n${fails} FAILED` : "\nALL PASS"); process.exit(fails ? 1 
   const t1 = await sa("so1", 1), t2 = await sa("so1", 1), t3 = await sa("so2", 1), t4 = await sa("so1", 2);
   ok(t1.creado && t2.creado && t2.repetido && !t3.creado && !t4.success, "S32 saveIfAbsent replay keeps creado=true; other id exists; other payload conflict (SQL)");
   const rows = (await client.query("select count(*)::int c from data_records where collection='$ops'")).rows[0].c;
-  await client.query(`INSERT INTO data_records(organization_id,collection,key,value) SELECT 'o1','$ops','fill'||g,'{"fp":"x","r":{}}' FROM generate_series(1,${5000 - rows}) g`);
-  const full = await datosAdd(repo, O, { collection: C, key: "rp", field: "n", amount: 1, operationId: "capNew" }, true); const rep = await datosAdd(repo, O, { collection: C, key: "a", field: "n", amount: 10, operationId: "e1|n1" }, true);
-  ok(!full.success && /5000 operaciones protegidas/.test(full.error) && rep.aplicado && rep.repetido, "S33 cap 5000 per company: new op refused with clear error; stored op still replays (SQL)");
-  const other = await datosAdd(repo, "o2", { collection: C, key: "rp", field: "n", amount: 1, operationId: "capNew" }, true); ok(other.success && /no existe/.test(other.motivo), "S34 cap is per company (other company not blocked by it)");
+  await client.query(`INSERT INTO data_records(organization_id,collection,key,value) SELECT 'o1','$ops','fill'||g,'{"fp":"x","r":{}}' FROM generate_series(1,${5000 - rows + 5}) g`);
+  const more = await datosAdd(repo, O, { collection: C, key: "rp", field: "n", amount: 1, operationId: "capNew" }, true); const rep = await datosAdd(repo, O, { collection: C, key: "a", field: "n", amount: 10, operationId: "e1|n1" }, true);
+  ok(more.aplicado && rep.aplicado && rep.repetido, "S33 no cap: with >5000 ledger rows for the company a new op still applies and a stored op still replays (SQL)");
 }
 { await repo.put(O, C, "sn", { n: 1, tag: "x" }); const a1 = await datosAdd(repo, O, { collection: C, key: "sn", field: "n", amount: 1, operationId: "sn1" }, true); await repo.put(O, C, "sn", { n: 50, tag: "changed" });
   const a2 = await datosAdd(repo, O, { collection: C, key: "sn", field: "n", amount: 1, operationId: "sn1" }, true);

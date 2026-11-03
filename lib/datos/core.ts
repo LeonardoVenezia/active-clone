@@ -22,8 +22,6 @@ export const DATOS_LIMITS = {
   maxKeyLength: 120,
   maxValueBytes: 16_384,
   maxRecordsPerCollection: 5000,
-  /** Pilot limit: protected operations (rows in $ops) per company. Never deleted automatically. */
-  maxProtectedOps: 5000,
   /** Max size of a stored operation snapshot (output incl. record + fingerprint). */
   maxSnapshotBytes: 40_000,
   maxListLimit: 200,
@@ -40,9 +38,9 @@ export interface DatosRepo {
   /** Atomic upsert: the 5000-record check and the write run under the same per-collection lock as insertIfAbsent. */
   putWithQuota(orgId: string, collection: string, key: string, value: unknown, maxRecords: number): Promise<{ status: "saved" | "full"; record: DatosRecord | null }>;
   /** Atomic: creates only if the key is absent (quota checked under a per-collection lock). */
-  insertIfAbsent(orgId: string, collection: string, key: string, value: unknown, maxRecords: number, op?: OpIdentity): Promise<{ status: "created" | "exists" | "full" | "conflict" | "ledger_full" | "snapshot_too_large"; record: DatosRecord | null; replayed?: boolean }>;
+  insertIfAbsent(orgId: string, collection: string, key: string, value: unknown, maxRecords: number, op?: OpIdentity): Promise<{ status: "created" | "exists" | "full" | "conflict" | "snapshot_too_large"; record: DatosRecord | null; replayed?: boolean }>;
   /** Atomic: replaces the value only if the current value is jsonb-equal to `expected`. */
-  compareAndSet(orgId: string, collection: string, key: string, expected: unknown, next: unknown, op?: OpIdentity): Promise<{ updated: boolean; conflict?: boolean; ledgerFull?: boolean; tooLarge?: boolean; record: DatosRecord | null; replayed?: boolean }>;
+  compareAndSet(orgId: string, collection: string, key: string, expected: unknown, next: unknown, op?: OpIdentity): Promise<{ updated: boolean; conflict?: boolean; tooLarge?: boolean; record: DatosRecord | null; replayed?: boolean }>;
   /** Atomic: adds `amount` to a numeric field in one statement. Never converts text. */
   increment(orgId: string, collection: string, key: string, field: string, amount: number, opts: IncrementOpts, op?: OpIdentity): Promise<{ applied: boolean; reason?: IncrementReason; record: DatosRecord | null; valor?: number | null; replayed?: boolean }>;
 }
@@ -55,13 +53,12 @@ export interface DatosRepo {
 export type OpIdentity = { id: string; fp: string };
 const sha = (x: unknown) => createHash("sha256").update(JSON.stringify(x)).digest("hex");
 export type IncrementOpts = { startAtZero: boolean; min?: number; max?: number };
-export type IncrementReason = "conflict" | "duplicate" | "precision" | "missing" | "not_object" | "field_missing" | "not_number" | "below_min" | "above_max" | "out_of_range" | "too_large" | "retry" | "ledger_full" | "snapshot_too_large";
+export type IncrementReason = "conflict" | "duplicate" | "precision" | "missing" | "not_object" | "field_missing" | "not_number" | "below_min" | "above_max" | "out_of_range" | "too_large" | "retry" | "snapshot_too_large";
 export const MAX_SAFE = Number.MAX_SAFE_INTEGER;
 /** Internal collection (like $schemas): one row per applied operation id. Its name contains "$", so no user collection can read, list, write or define fields for it. */
 export const OPS_COLLECTION = "$ops";
 /** Fingerprint of what an operation asked for; the same operation id with a different fingerprint is a conflict, not a replay. */
 export const opFingerprint = (field: string, amount: number, o: IncrementOpts): string => JSON.stringify(["add", field, String(amount), o.startAtZero, o.min ?? null, o.max ?? null]);
-export const LEDGER_FULL_MSG = "Se llegó al límite piloto de 5000 operaciones protegidas de esta empresa: no se hizo nada. Esos registros no se borran solos.";
 const SNAP_MSG = "El resultado es demasiado grande para registrarlo de forma protegida: no se hizo nada.";
 const CONFLICT_MSG = "Ya se ejecutó esta misma operación con datos distintos: no se hizo nada.";
 
@@ -192,7 +189,6 @@ export async function datosSaveIfAbsent(repo: DatosRepo, orgId: unknown, args: {
   const opId = typeof args.operationId === "string" && args.operationId.length > 0 ? args.operationId : undefined;
   const r = await repo.insertIfAbsent(org, col, key, toStore, DATOS_LIMITS.maxRecordsPerCollection, opId ? { id: opId, fp: sha(["saveIfAbsent", toStore]) } : undefined);
   if (r.status === "conflict") return { success: false, error: CONFLICT_MSG };
-  if (r.status === "ledger_full") return { success: false, error: LEDGER_FULL_MSG };
   if (r.status === "snapshot_too_large") return { success: false, error: SNAP_MSG };
   if (r.status === "full") return { success: false, error: "La colección llegó al máximo de 5000 registros." };
   return { success: true, creado: r.status === "created", ...(r.replayed ? { repetido: true } : {}), record: r.record };
@@ -217,7 +213,6 @@ export async function datosUpdateIfMatches(repo: DatosRepo, orgId: unknown, args
   const opId = typeof args.operationId === "string" && args.operationId.length > 0 ? args.operationId : undefined;
   const r = await repo.compareAndSet(org, col, key, exp.value, toStore, opId ? { id: opId, fp: sha(["updateIfMatches", exp.value, toStore]) } : undefined);
   if (r.conflict) return { success: false, error: CONFLICT_MSG };
-  if (r.ledgerFull) return { success: false, error: LEDGER_FULL_MSG };
   if (r.tooLarge) return { success: false, error: SNAP_MSG };
   if (r.updated) return { success: true, actualizado: true, ...(r.replayed ? { repetido: true } : {}), record: r.record };
   return { success: true, actualizado: false, ...(r.replayed ? { repetido: true } : {}), motivo: r.record ? "El valor actual es distinto del esperado: no se cambió nada." : "El dato no existe: no se cambió nada.", record: r.record };
@@ -251,11 +246,9 @@ export async function datosAdd(repo: DatosRepo, orgId: unknown, args: { collecti
   const valor = r.replayed ? (r.valor ?? null) : r.record && typeof (r.record.value as Record<string, unknown> | null)?.[field] === "number" ? ((r.record.value as Record<string, unknown>)[field] as number) : null;
   if (r.applied) return { success: true, aplicado: true, ...(r.replayed ? { repetido: true } : {}), valor, record: r.record };
   if (r.reason === "conflict") return { success: false, error: CONFLICT_MSG };
-  if (r.reason === "ledger_full") return { success: false, error: LEDGER_FULL_MSG };
   if (r.reason === "snapshot_too_large") return { success: false, error: SNAP_MSG };
   const why: Record<IncrementReason, string> = {
     conflict: "",
-    ledger_full: "",
     snapshot_too_large: "",
     duplicate: "Esta operación ya se aplicó antes (reintento o reentrega): no se sumó otra vez.",
     precision: "El resultado no se puede guardar sin perder precisión decimal: no se sumó nada.",
@@ -294,12 +287,11 @@ export function memoryRepo(): DatosRepo {
   const k = (o: string, c: string, key: string) => JSON.stringify([o, c, key]);
   let tick = 0;
   // Same contract as the SQL repo: stored terminal result first, then cap, then run + store.
-  const ledger = <T extends { record: DatosRecord | null }>(o: string, c: string, key: string, op: OpIdentity | undefined, run: () => T, conflict: any, full: any, tooLarge: any): any => {
+  const ledger = <T extends { record: DatosRecord | null }>(o: string, c: string, key: string, op: OpIdentity | undefined, run: () => T, conflict: any, tooLarge: any): any => {
     if (!op) return run();
     const row = k(o, OPS_COLLECTION, sha([op.id, c, key]));
     const seen = m.get(row);
     if (seen) { const v = seen.value as { fp: string; r: object }; return v.fp !== op.fp ? conflict : { ...(v.r as T), replayed: true }; }
-    if ([...m.keys()].filter((id) => { const [oo, cc] = JSON.parse(id); return oo === o && cc === OPS_COLLECTION; }).length >= DATOS_LIMITS.maxProtectedOps) return full;
     const rk = k(o, c, key), prev = m.get(rk);
     const r = run();
     const stored = { fp: op.fp, r };
@@ -321,14 +313,14 @@ export function memoryRepo(): DatosRepo {
         const cur = m.get(k(o, c, key)); if (cur) return { status: "exists", record: cur };
         if ([...m.keys()].filter((id) => { const [oo, cc] = JSON.parse(id); return oo === o && cc === c; }).length >= max) return { status: "full", record: null };
         const r = { collection: c, key, value, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r); return { status: "created", record: r };
-      }, { status: "conflict", record: null }, { status: "ledger_full", record: null }, { status: "snapshot_too_large", record: null });
+      }, { status: "conflict", record: null }, { status: "snapshot_too_large", record: null });
     },
     async compareAndSet(o, c, key, expected, next, op) {
       return ledger(o, c, key, op, () => {
         const cur = m.get(k(o, c, key)); if (!cur) return { updated: false, record: null };
         if (!jsonEqual(cur.value, expected)) return { updated: false, record: cur };
         const r = { collection: c, key, value: next, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r); return { updated: true, record: r };
-      }, { updated: false, conflict: true, record: null }, { updated: false, ledgerFull: true, record: null }, { updated: false, tooLarge: true, record: null });
+      }, { updated: false, conflict: true, record: null }, { updated: false, tooLarge: true, record: null });
     },
     async increment(o, c, key, field, amount, opts, op) {
       return ledger(o, c, key, op, () => {
@@ -347,7 +339,7 @@ export function memoryRepo(): DatosRepo {
         if (new TextEncoder().encode(JSON.stringify(next)).length > DATOS_LIMITS.maxValueBytes) return { applied: false, reason: "too_large" as IncrementReason, valor: typeof v?.[field] === "number" ? (v[field] as number) : null, record: cur };
         const r = { collection: c, key, value: next, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r);
         return { applied: true, valor: res, record: r };
-      }, { applied: false, reason: "conflict" as IncrementReason, record: null }, { applied: false, reason: "ledger_full" as IncrementReason, record: null }, { applied: false, reason: "snapshot_too_large" as IncrementReason, record: null });
+      }, { applied: false, reason: "conflict" as IncrementReason, record: null }, { applied: false, reason: "snapshot_too_large" as IncrementReason, record: null });
     },
   };
 }
