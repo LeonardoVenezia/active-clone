@@ -466,20 +466,28 @@ function DatosFields({
             <input checked={config?.startAtZero === "true" || config?.startAtZero === true} disabled={disabled} id="datos-start-zero" onChange={(e) => onUpdateConfig("startAtZero", e.target.checked ? "true" : "false")} type="checkbox" />
             Si el campo no existe, empezar en 0
           </label>
-          <p className="text-muted-foreground text-xs">
-            Suma en un solo paso, sin pisar cambios simultáneos. Si el resultado queda fuera del mínimo/máximo, no se cambia nada y el nodo devuelve aplicado = falso con el motivo (el flujo sigue igual: agregá un nodo Condición sobre aplicado si los pasos siguientes dependen de que la suma se hizo).
-            Si este mismo paso se reintenta dentro de la misma ejecución, no suma dos veces y devuelve el mismo resultado que la primera vez (se guarda un registro interno por cada operación, con su resultado).
-            Una ejecución nueva sí suma: si el mismo evento puede llegar repetido (por ejemplo un aviso de venta duplicado), antes usá &quot;Guardar solo si no existe&quot; con una clave única por evento y sumá solo si creado = verdadero. Piloto: el límite es de 5000 operaciones por empresa y no se borran solas. Al llegar al límite, la operación no se hace y el flujo muestra el error.
-          </p>
+          <div className="space-y-1 text-sm">
+            <p className="text-foreground/80">Suma o resta en un solo paso, sin pisar cambios simultáneos. Si queda fuera del mínimo/máximo no cambia nada y devuelve aplicado = falso: usá un nodo Condición sobre aplicado.</p>
+            <details className="text-foreground/70">
+              <summary className="cursor-pointer font-medium">Más detalles</summary>
+              <p className="mt-1">Si este mismo paso se reintenta dentro de la misma ejecución, no suma dos veces y devuelve el mismo resultado que la primera vez (con repetido = verdadero). Una ejecución nueva sí suma: si el mismo evento puede llegar repetido (por ejemplo un aviso de venta duplicado), antes usá &quot;Guardar solo si no existe&quot; con una clave única por evento y sumá solo si creado = verdadero.</p>
+            </details>
+            <p className="font-medium text-foreground/80">Piloto: límite de 5000 operaciones protegidas por empresa (no son ventas: una venta puede usar varias). No se borran solas; al llegar, la operación no se hace y el flujo muestra el error.</p>
+          </div>
         </div>
       )}
       {operation === "updateIfMatches" && (
         <div className="space-y-2">
           <Label htmlFor="datos-expected">Valor esperado actual</Label>
           <Input disabled={disabled} id="datos-expected" onChange={(e) => onUpdateConfig("expected", e.target.value)} placeholder='{"estado": "pendiente"}' value={(config?.expected as string) || ""} />
-          <p className="text-muted-foreground text-xs">
-            Solo cambia si el dato guardado es igual a este valor (1 y 1.0 son iguales). Si no coincide o no existe, no cambia nada y devuelve actualizado = falso con el motivo (el flujo sigue igual: usá un nodo Condición sobre actualizado antes de seguir).
-          </p>
+          <div className="space-y-1 text-sm">
+            <p className="text-foreground/80">Cambia el dato solo si es igual a este valor (1 y 1.0 son iguales). Si no coincide o no existe, no cambia nada y devuelve actualizado = falso: usá un nodo Condición sobre actualizado.</p>
+            <details className="text-foreground/70">
+              <summary className="cursor-pointer font-medium">Más detalles</summary>
+              <p className="mt-1">Si este mismo paso se reintenta dentro de la misma ejecución, devuelve el mismo resultado que la primera vez (con repetido = verdadero) y no vuelve a aplicar el cambio, aunque el dato haya cambiado en el medio.</p>
+            </details>
+            <p className="font-medium text-foreground/80">Piloto: límite de 5000 operaciones protegidas por empresa (no son ventas: una venta puede usar varias). No se borran solas; al llegar, la operación no se hace y el flujo muestra el error.</p>
+          </div>
         </div>
       )}
       {(operation === "save" || operation === "saveIfAbsent" || operation === "updateIfMatches") && (
@@ -496,6 +504,11 @@ function DatosFields({
             Texto o JSON, hasta 16 KB.
             {operation === "saveIfAbsent" ? " Si la clave ya existe, no se cambia y se devuelve el dato existente (creado = falso)." : ""}
           </p>
+          {operation === "saveIfAbsent" && (
+            <p className="font-medium text-foreground/80 text-sm">
+              Piloto: límite de 5000 operaciones protegidas por empresa (no son ventas). No se borran solas; al llegar, la operación no se hace y el flujo muestra el error. Un reintento del mismo paso devuelve el mismo resultado (repetido = verdadero).
+            </p>
+          )}
         </div>
       )}
       {operation === "fields" && (
