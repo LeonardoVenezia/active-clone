@@ -1,7 +1,7 @@
 // @ts-nocheck
 // Offline contract tests for the 3 atomic Datos ops with the in-memory repo.
 // These prove validation and contract only. They do NOT prove atomicity (see the real concurrency test).
-const m: any = await import("../../lib/datos/core"); const { datosSaveIfAbsent, datosUpdateIfMatches, datosAdd, datosSave, datosDefineFields, memoryRepo, DATOS_LIMITS } = m.default ?? m;
+const m: any = await import("../../lib/datos/core"); const { exactSum, datosSaveIfAbsent, datosUpdateIfMatches, datosAdd, datosSave, datosDefineFields, memoryRepo, DATOS_LIMITS } = m.default ?? m;
 let fails = 0; const ok = (c: boolean, msg: string) => { console.log(`${c ? "PASS" : "FAIL"} ${msg}`); if (!c) fails++; };
 const O = "orgA", C = { collection: "sku" };
 { const r = memoryRepo();
@@ -52,6 +52,26 @@ const O = "orgA", C = { collection: "sku" };
   await datosDefineFields(r, O, { collection: "typed2", fields: "n:numero\nt:texto" }, true); await datosSave(r, O, { collection: "typed2", key: "k", value: { n: 1 } }, true);
   x = await datosAdd(r, O, { collection: "typed2", key: "k", field: "t", amount: 1 }, true); ok(!x.success, "C17 defined collection: field must be a numero field");
   x = await datosAdd(r, O, { collection: "typed2", key: "k", field: "n", amount: 1 }, true); ok(x.aplicado && x.valor === 2, "C18 defined numeric field works");
+}
+// Precision contract: exact decimal sums; anything that would lose digits when read back as a double is rejected.
+ok(exactSum(0.1, 0.2) === 0.3 && exactSum(1.1, 2.2) === 3.3 && exactSum(-0.3, 0.1) === -0.2 && exactSum(1e-7, 2e-7) === 3e-7, "P1 exact decimal sums (0.1+0.2 = 0.3, not 0.30000000000000004)");
+ok(exactSum(Number.MAX_SAFE_INTEGER, 1) === null && exactSum(0.1234567890123456, 1) === null && exactSum(9007199254740991, -1) === 9007199254740990, "P2 beyond-precision results rejected (null)");
+{ const r = memoryRepo(); await datosSave(r, O, { ...C, key: "p", value: { price: 0.1, big: 0.1234567890123456 } }, true);
+  let x: any = await datosAdd(r, O, { ...C, key: "p", field: "price", amount: 0.2 }, true); ok(x.aplicado && x.valor === 0.3, "P3 Sumar 0.1 + 0.2 stores 0.3");
+  x = await datosAdd(r, O, { ...C, key: "p", field: "big", amount: 1 }, true); ok(!x.aplicado && /precisión/.test(x.motivo) && (await r.get(O, "sku", "p")).value.big === 0.1234567890123456, "P4 digits that would be lost: rejected, record unchanged");
+}
+// Quota: Guardar (save) also respects 5000 via the same locked path
+{ const r = memoryRepo(); for (let i = 0; i < 5000; i++) await r.put(O, "full2", `k${i}`, i);
+  const f: any = await datosSave(r, O, { collection: "full2", key: "new", value: 1 }, true); ok(!f.success && (await r.count(O, "full2")) === 5000, "Q1 Guardar at 5000: clear error");
+  ok((await datosSave(r, O, { collection: "full2", key: "k1", value: 7 }, true)).success, "Q2 Guardar at 5000 can still overwrite an existing key");
+}
+// Replay by operation id (same executionId|nodeId delivered twice)
+{ const r = memoryRepo(); await datosSave(r, O, { ...C, key: "o", value: { n: 10 } }, true);
+  const add = (id: any) => datosAdd(r, O, { ...C, key: "o", field: "n", amount: -1, operationId: id }, true) as any;
+  const a = await add("exec1|node1"), b = await add("exec1|node1"), c = await add("exec1|node2"), d = await add(undefined), e = await add(undefined);
+  ok(a.aplicado && !b.aplicado && b.repetido && /ya se aplicó/.test(b.motivo) && c.aplicado && d.aplicado && e.aplicado && (await r.get(O, "sku", "o")).value.n === 6, "R2 same operation id applies once; distinct ids apply; no id = no dedupe");
+  for (let i = 0; i < 60; i++) await add(`x${i}`);
+  ok((await add("exec1|node1")).aplicado, "R3 dedupe window is the last 50 operations per record (documented limit)");
 }
 // Replay contract: gate Sumar with Guardar si no existe using a per-event key.
 { const r = memoryRepo(); await datosSave(r, O, { collection: "stock", key: "p1", value: { n: 10 } }, true);

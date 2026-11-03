@@ -32,17 +32,45 @@ export interface DatosRepo {
   get(orgId: string, collection: string, key: string): Promise<DatosRecord | null>;
   list(orgId: string, collection: string, limit: number): Promise<DatosRecord[]>;
   count(orgId: string, collection: string): Promise<number>;
+  /** Atomic upsert: the 5000-record check and the write run under the same per-collection lock as insertIfAbsent. */
+  putWithQuota(orgId: string, collection: string, key: string, value: unknown, maxRecords: number): Promise<{ status: "saved" | "full"; record: DatosRecord | null }>;
   /** Atomic: creates only if the key is absent (quota checked under a per-collection lock). */
   insertIfAbsent(orgId: string, collection: string, key: string, value: unknown, maxRecords: number): Promise<{ status: "created" | "exists" | "full"; record: DatosRecord | null }>;
   /** Atomic: replaces the value only if the current value is jsonb-equal to `expected`. */
   compareAndSet(orgId: string, collection: string, key: string, expected: unknown, next: unknown): Promise<{ updated: boolean; record: DatosRecord | null }>;
   /** Atomic: adds `amount` to a numeric field in one statement. Never converts text. */
-  increment(orgId: string, collection: string, key: string, field: string, amount: number, opts: IncrementOpts): Promise<{ applied: boolean; reason?: IncrementReason; record: DatosRecord | null }>;
+  increment(orgId: string, collection: string, key: string, field: string, amount: number, opts: IncrementOpts, opId?: string): Promise<{ applied: boolean; reason?: IncrementReason; record: DatosRecord | null }>;
 }
 
 export type IncrementOpts = { startAtZero: boolean; min?: number; max?: number };
-export type IncrementReason = "missing" | "not_object" | "field_missing" | "not_number" | "below_min" | "above_max" | "out_of_range" | "too_large" | "retry";
+export type IncrementReason = "duplicate" | "precision" | "missing" | "not_object" | "field_missing" | "not_number" | "below_min" | "above_max" | "out_of_range" | "too_large" | "retry";
 export const MAX_SAFE = Number.MAX_SAFE_INTEGER;
+/** Internal collection (like $schemas) with the last operation ids applied to each counter record. */
+export const OPS_COLLECTION = "$ops";
+export const OPS_WINDOW = 50;
+
+/** Decimal parts of a finite number: its shortest JS representation as scaled BigInt. */
+function toDec(n: number): { i: bigint; s: number } {
+  const str = String(n);
+  const m = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/.exec(str);
+  if (!m) throw new Error("bad number");
+  let digits = m[2] + (m[3] ?? ""), scale = (m[3] ?? "").length - Number(m[4] ?? 0);
+  if (scale < 0) { digits += "0".repeat(-scale); scale = 0; }
+  return { i: BigInt(m[1] + digits), s: scale };
+}
+/**
+ * Exact decimal sum of two JS numbers (0.1 + 0.2 = 0.3). Returns null when the exact result is not the
+ * shortest representation of a JS number (it would lose digits when read back as a double), or is beyond ±MAX_SAFE_INTEGER.
+ */
+export function exactSum(a: number, b: number): number | null {
+  const x = toDec(a), y = toDec(b), sc = Math.max(x.s, y.s);
+  const canon = (i: bigint, s: number) => { while (s > 0 && i % BigInt(10) === BigInt(0)) { i /= BigInt(10); s--; } return `${i}e${-s}`; };
+  const t = x.i * BigInt(10) ** BigInt(sc - x.s) + y.i * BigInt(10) ** BigInt(sc - y.s);
+  const n = Number(`${t}e${-sc}`);
+  if (!Number.isFinite(n) || Math.abs(n) > MAX_SAFE) return null;
+  const back = toDec(n);
+  return canon(back.i, back.s) === canon(t, sc) ? n : null;
+}
 
 export type DatosResult<T> = ({ success: true } & T) | { success: false; error: string };
 
@@ -108,10 +136,9 @@ export async function datosSave(repo: DatosRepo, orgId: unknown, args: { collect
     if (!v.ok) return { success: false, error: v.error };
     toStore = v.value;
   }
-  const exists = await repo.get(org, col, key);
-  if (!exists && (await repo.count(org, col)) >= DATOS_LIMITS.maxRecordsPerCollection)
-    return { success: false, error: "La colección llegó al máximo de 5000 registros." };
-  return { success: true, record: await repo.put(org, col, key, toStore) };
+  const w = await repo.putWithQuota(org, col, key, toStore, DATOS_LIMITS.maxRecordsPerCollection);
+  if (w.status === "full" || !w.record) return { success: false, error: "La colección llegó al máximo de 5000 registros." };
+  return { success: true, record: w.record };
 }
 
 function parseAmount(v: unknown, label: string): { ok: true; n: number } | { ok: false; error: string } {
@@ -173,7 +200,7 @@ export async function datosUpdateIfMatches(repo: DatosRepo, orgId: unknown, args
 }
 
 /** Sumar: adds an amount to a numeric field of a single record, atomically. */
-export async function datosAdd(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; field: unknown; amount: unknown; startAtZero?: unknown; min?: unknown; max?: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ aplicado: boolean; motivo?: string; valor: number | null; record: DatosRecord | null }>> {
+export async function datosAdd(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; field: unknown; amount: unknown; startAtZero?: unknown; min?: unknown; max?: unknown; operationId?: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ aplicado: boolean; repetido?: boolean; motivo?: string; valor: number | null; record: DatosRecord | null }>> {
   const g = guard(orgId, enabled) ?? checkNames(args.collection, args.key);
   if (g) return { success: false, error: g };
   const field = args.field;
@@ -195,10 +222,13 @@ export async function datosAdd(repo: DatosRepo, orgId: unknown, args: { collecti
     const def = fields.find((f) => f.name === field);
     if (!def || def.type !== "numero") return { success: false, error: `"${field}" no es un campo numérico definido en esta colección.` };
   }
-  const r = await repo.increment(org, col, key, field, amt.n, opts);
+  const opId = typeof args.operationId === "string" && args.operationId.length > 0 ? args.operationId : undefined;
+  const r = await repo.increment(org, col, key, field, amt.n, opts, opId);
   const valor = r.record && typeof (r.record.value as Record<string, unknown> | null)?.[field] === "number" ? ((r.record.value as Record<string, unknown>)[field] as number) : null;
   if (r.applied) return { success: true, aplicado: true, valor, record: r.record };
   const why: Record<IncrementReason, string> = {
+    duplicate: "Esta operación ya se aplicó antes (reintento o reentrega): no se sumó otra vez.",
+    precision: "El resultado no se puede guardar sin perder precisión decimal: no se sumó nada.",
     missing: "El dato no existe: no se sumó nada.",
     not_object: "El dato no es un objeto con campos: no se sumó nada.",
     field_missing: `El campo "${field}" no existe en el dato (activá "Si no existe, empezar en 0"): no se sumó nada.`,
@@ -209,7 +239,7 @@ export async function datosAdd(repo: DatosRepo, orgId: unknown, args: { collecti
     too_large: "El resultado supera el máximo de 16 KB: no se sumó nada.",
     retry: "No se pudo aplicar por un cambio simultáneo: no se sumó nada. Probá de nuevo.",
   };
-  return { success: true, aplicado: false, motivo: why[r.reason ?? "retry"], valor, record: r.record };
+  return { success: true, aplicado: false, ...(r.reason === "duplicate" ? { repetido: true } : {}), motivo: why[r.reason ?? "retry"], valor, record: r.record };
 }
 
 export async function datosRead(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ found: boolean; record: DatosRecord | null }>> {
@@ -238,6 +268,10 @@ export function memoryRepo(): DatosRepo {
     async get(o, c, key) { return m.get(k(o, c, key)) ?? null; },
     async list(o, c, limit) { return [...m.entries()].filter(([id]) => { const [oo, cc] = JSON.parse(id); return oo === o && cc === c; }).map(([, r]) => r).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)).slice(0, limit); },
     async count(o, c) { return [...m.keys()].filter((id) => { const [oo, cc] = JSON.parse(id); return oo === o && cc === c; }).length; },
+    async putWithQuota(o, c, key, value, max) {
+      if (!m.has(k(o, c, key)) && [...m.keys()].filter((id) => { const [oo, cc] = JSON.parse(id); return oo === o && cc === c; }).length >= max) return { status: "full", record: null };
+      const r = { collection: c, key, value, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r); return { status: "saved", record: r };
+    },
     async insertIfAbsent(o, c, key, value, max) {
       const cur = m.get(k(o, c, key)); if (cur) return { status: "exists", record: cur };
       if ([...m.keys()].filter((id) => { const [oo, cc] = JSON.parse(id); return oo === o && cc === c; }).length >= max) return { status: "full", record: null };
@@ -248,21 +282,25 @@ export function memoryRepo(): DatosRepo {
       if (!jsonEqual(cur.value, expected)) return { updated: false, record: cur };
       const r = { collection: c, key, value: next, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r); return { updated: true, record: r };
     },
-    async increment(o, c, key, field, amount, opts) {
+    async increment(o, c, key, field, amount, opts, opId) {
       const cur = m.get(k(o, c, key)); if (!cur) return { applied: false, reason: "missing", record: null };
+      const led = m.get(k(o, OPS_COLLECTION, `${c}:${key}`)); const ids: string[] = (led?.value as { ids?: string[] } | undefined)?.ids ?? [];
+      if (opId && ids.includes(opId)) return { applied: false, reason: "duplicate", record: cur };
       const v = cur.value as Record<string, unknown> | null;
       if (typeof v !== "object" || v === null || Array.isArray(v)) return { applied: false, reason: "not_object", record: cur };
       let base: number;
       if (!(field in v)) { if (!opts.startAtZero) return { applied: false, reason: "field_missing", record: cur }; base = 0; }
       else if (typeof v[field] !== "number") return { applied: false, reason: "not_number", record: cur };
       else base = v[field] as number;
-      const res = base + amount;
-      if (Math.abs(res) > MAX_SAFE) return { applied: false, reason: "out_of_range", record: cur };
+      const res = exactSum(base, amount);
+      if (res === null) return { applied: false, reason: Math.abs(base + amount) > MAX_SAFE ? "out_of_range" : "precision", record: cur };
       if (opts.min !== undefined && res < opts.min) return { applied: false, reason: "below_min", record: cur };
       if (opts.max !== undefined && res > opts.max) return { applied: false, reason: "above_max", record: cur };
       const next = { ...v, [field]: res };
       if (new TextEncoder().encode(JSON.stringify(next)).length > DATOS_LIMITS.maxValueBytes) return { applied: false, reason: "too_large", record: cur };
-      const r = { collection: c, key, value: next, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r); return { applied: true, record: r };
+      const r = { collection: c, key, value: next, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r);
+      if (opId) m.set(k(o, OPS_COLLECTION, `${c}:${key}`), { collection: OPS_COLLECTION, key: `${c}:${key}`, value: { ids: [...ids, opId].slice(-OPS_WINDOW) }, updatedAt: r.updatedAt });
+      return { applied: true, record: r };
     },
   };
 }
