@@ -45,9 +45,8 @@ export interface DatosRepo {
 export type IncrementOpts = { startAtZero: boolean; min?: number; max?: number };
 export type IncrementReason = "duplicate" | "precision" | "missing" | "not_object" | "field_missing" | "not_number" | "below_min" | "above_max" | "out_of_range" | "too_large" | "retry";
 export const MAX_SAFE = Number.MAX_SAFE_INTEGER;
-/** Internal collection (like $schemas) with the last operation ids applied to each counter record. */
+/** Internal collection (like $schemas): one row per applied operation id. Its name contains "$", so no user collection can read, list, write or define fields for it. */
 export const OPS_COLLECTION = "$ops";
-export const OPS_WINDOW = 50;
 
 /** Decimal parts of a finite number: its shortest JS representation as scaled BigInt. */
 function toDec(n: number): { i: bigint; s: number } {
@@ -237,7 +236,7 @@ export async function datosAdd(repo: DatosRepo, orgId: unknown, args: { collecti
     above_max: "El resultado quedaría por encima del máximo: no se sumó nada.",
     out_of_range: `El resultado supera el rango seguro (±${MAX_SAFE}): no se sumó nada.`,
     too_large: "El resultado supera el máximo de 16 KB: no se sumó nada.",
-    retry: "No se pudo aplicar por un cambio simultáneo: no se sumó nada. Probá de nuevo.",
+    retry: "No se pudo aplicar: hubo un cambio simultáneo o el dato guardado tiene más decimales de los que se pueden sumar sin perder precisión. No se sumó nada.",
   };
   return { success: true, aplicado: false, ...(r.reason === "duplicate" ? { repetido: true } : {}), motivo: why[r.reason ?? "retry"], valor, record: r.record };
 }
@@ -284,8 +283,8 @@ export function memoryRepo(): DatosRepo {
     },
     async increment(o, c, key, field, amount, opts, opId) {
       const cur = m.get(k(o, c, key)); if (!cur) return { applied: false, reason: "missing", record: null };
-      const led = m.get(k(o, OPS_COLLECTION, `${c}:${key}`)); const ids: string[] = (led?.value as { ids?: string[] } | undefined)?.ids ?? [];
-      if (opId && ids.includes(opId)) return { applied: false, reason: "duplicate", record: cur };
+      const opRow = opId ? k(o, OPS_COLLECTION, JSON.stringify([opId, c, key])) : "";
+      if (opId && m.has(opRow)) return { applied: false, reason: "duplicate", record: cur };
       const v = cur.value as Record<string, unknown> | null;
       if (typeof v !== "object" || v === null || Array.isArray(v)) return { applied: false, reason: "not_object", record: cur };
       let base: number;
@@ -299,7 +298,7 @@ export function memoryRepo(): DatosRepo {
       const next = { ...v, [field]: res };
       if (new TextEncoder().encode(JSON.stringify(next)).length > DATOS_LIMITS.maxValueBytes) return { applied: false, reason: "too_large", record: cur };
       const r = { collection: c, key, value: next, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r);
-      if (opId) m.set(k(o, OPS_COLLECTION, `${c}:${key}`), { collection: OPS_COLLECTION, key: `${c}:${key}`, value: { ids: [...ids, opId].slice(-OPS_WINDOW) }, updatedAt: r.updatedAt });
+      if (opId) m.set(opRow, { collection: OPS_COLLECTION, key: opRow, value: { at: r.updatedAt }, updatedAt: r.updatedAt });
       return { applied: true, record: r };
     },
   };

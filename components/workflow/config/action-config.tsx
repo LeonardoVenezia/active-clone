@@ -468,7 +468,7 @@ function DatosFields({
           </label>
           <p className="text-muted-foreground text-xs">
             Suma en un solo paso, sin pisar cambios simultáneos. Si el resultado queda fuera del mínimo/máximo, no se cambia nada y el nodo devuelve aplicado = falso con el motivo.
-            Si este mismo paso se reintenta dentro de la misma ejecución, no suma dos veces (se recuerdan las últimas 50 sumas de ese dato).
+            Si este mismo paso se reintenta dentro de la misma ejecución, no suma dos veces (se guarda un registro interno por cada suma aplicada).
             Una ejecución nueva sí suma: si el mismo evento puede llegar repetido (por ejemplo un aviso de venta duplicado), antes usá &quot;Guardar solo si no existe&quot; con una clave única por evento y sumá solo si creado = verdadero.
           </p>
         </div>

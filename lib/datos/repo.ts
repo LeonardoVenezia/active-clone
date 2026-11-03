@@ -3,11 +3,11 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { DATOS_LIMITS, exactSum, OPS_COLLECTION, OPS_WINDOW, type DatosRecord, type DatosRepo, type IncrementReason, MAX_SAFE } from "./core";
+import { DATOS_LIMITS, exactSum, OPS_COLLECTION, type DatosRecord, type DatosRepo, type IncrementReason, MAX_SAFE } from "./core";
 import { dataRecords } from "./schema";
 
 const toRecord = (r: typeof dataRecords.$inferSelect): DatosRecord => ({ collection: r.collection, key: r.key, value: r.value, updatedAt: r.updatedAt.toISOString() });
-const ledgerKey = (c: string, key: string) => createHash("sha256").update(`${c}\u0000${key}`).digest("hex").slice(0, 40);
+const opRowKey = (opId: string, c: string, key: string) => createHash("sha256").update(`${opId}\u0000${c}\u0000${key}`).digest("hex").slice(0, 40);
 // postgres-js returns an array; other drivers (tests) return { rows }.
 const rowsOf = <T,>(res: unknown): T[] => (Array.isArray(res) ? (res as T[]) : ((res as { rows?: T[] })?.rows ?? []));
 const scope = (o: string, c: string) => and(eq(dataRecords.organizationId, o), eq(dataRecords.collection, c));
@@ -73,12 +73,11 @@ export const pgDatosRepo: DatosRepo = {
       const locked = rowsOf<unknown>(await tx.execute(sql`SELECT 1 AS x FROM data_records WHERE organization_id = ${o} AND collection = ${c} AND key = ${key} FOR UPDATE`));
       const getCur = async () => { const [r] = await tx.select().from(dataRecords).where(and(scope(o, c), eq(dataRecords.key, key))).limit(1); return r ? toRecord(r) : null; };
       if (locked.length === 0) return { applied: false, reason: "missing" as IncrementReason, record: null };
-      const opHash = opId ? createHash("sha256").update(opId).digest("hex").slice(0, 24) : "";
-      let ids: string[] = [];
+      // One durable row per applied operation (no window, no deletion). Checked under the record lock.
+      const opRow = opId ? opRowKey(opId, c, key) : "";
       if (opId) {
-        const [led] = await tx.select().from(dataRecords).where(and(eq(dataRecords.organizationId, o), eq(dataRecords.collection, OPS_COLLECTION), eq(dataRecords.key, ledgerKey(c, key)))).limit(1);
-        ids = ((led?.value as { ids?: string[] } | undefined)?.ids ?? []).filter((x) => typeof x === "string");
-        if (ids.includes(opHash)) return { applied: false, reason: "duplicate" as IncrementReason, record: await getCur() };
+        const [seen] = await tx.select().from(dataRecords).where(and(eq(dataRecords.organizationId, o), eq(dataRecords.collection, OPS_COLLECTION), eq(dataRecords.key, opRow))).limit(1);
+        if (seen) return { applied: false, reason: "duplicate" as IncrementReason, record: await getCur() };
       }
       // One statement checks and writes. jsonb numbers are exact decimals; text is never cast. The result must
       // survive a round trip through a double (what JS reads back), or nothing is written.
@@ -98,11 +97,7 @@ export const pgDatosRepo: DatosRepo = {
         RETURNING d.collection, d.key, d.value, d.updated_at`);
       const row = rowsOf<{ collection: string; key: string; value: unknown; updated_at: Date | string }>(rows)[0];
       if (row) {
-        if (opId) {
-          const next = { ids: [...ids, opHash].slice(-OPS_WINDOW) };
-          await tx.insert(dataRecords).values({ organizationId: o, collection: OPS_COLLECTION, key: ledgerKey(c, key), value: next as never })
-            .onConflictDoUpdate({ target: [dataRecords.organizationId, dataRecords.collection, dataRecords.key], set: { value: next as never, updatedAt: new Date() } });
-        }
+        if (opId) await tx.insert(dataRecords).values({ organizationId: o, collection: OPS_COLLECTION, key: opRow, value: { at: new Date().toISOString() } as never });
         return { applied: true, record: { collection: row.collection, key: row.key, value: row.value, updatedAt: new Date(row.updated_at).toISOString() } };
       }
       // Nothing changed: classify why from the current record (message only; data was not touched).

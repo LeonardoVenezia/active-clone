@@ -1,7 +1,7 @@
 // @ts-nocheck
 // Offline contract tests for the 3 atomic Datos ops with the in-memory repo.
 // These prove validation and contract only. They do NOT prove atomicity (see the real concurrency test).
-const m: any = await import("../../lib/datos/core"); const { exactSum, datosSaveIfAbsent, datosUpdateIfMatches, datosAdd, datosSave, datosDefineFields, memoryRepo, DATOS_LIMITS } = m.default ?? m;
+const m: any = await import("../../lib/datos/core"); const { datosRead, exactSum, datosSaveIfAbsent, datosUpdateIfMatches, datosAdd, datosSave, datosDefineFields, memoryRepo, DATOS_LIMITS } = m.default ?? m;
 let fails = 0; const ok = (c: boolean, msg: string) => { console.log(`${c ? "PASS" : "FAIL"} ${msg}`); if (!c) fails++; };
 const O = "orgA", C = { collection: "sku" };
 { const r = memoryRepo();
@@ -71,8 +71,12 @@ ok(exactSum(Number.MAX_SAFE_INTEGER, 1) === null && exactSum(0.1234567890123456,
   const a = await add("exec1|node1"), b = await add("exec1|node1"), c = await add("exec1|node2"), d = await add(undefined), e = await add(undefined);
   ok(a.aplicado && !b.aplicado && b.repetido && /ya se aplicó/.test(b.motivo) && c.aplicado && d.aplicado && e.aplicado && (await r.get(O, "sku", "o")).value.n === 6, "R2 same operation id applies once; distinct ids apply; no id = no dedupe");
   for (let i = 0; i < 60; i++) await add(`x${i}`);
-  ok((await add("exec1|node1")).aplicado, "R3 dedupe window is the last 50 operations per record (documented limit)");
+  ok(!(await add("exec1|node1")).aplicado, "R3 durable: replay after 60 other operations on the same record is still ignored (no window)");
 }
+// Internal collections are unreachable from user ops
+{ const r = memoryRepo(); for (const col of ["$ops", "$schemas", "$x"]) {
+  const a: any[] = [await datosSave(r, O, { collection: col, key: "k", value: 1 }, true), await datosRead(r, O, { collection: col, key: "k" }, true), await datosSaveIfAbsent(r, O, { collection: col, key: "k", value: 1 }, true), await datosUpdateIfMatches(r, O, { collection: col, key: "k", expected: 1, value: 2 }, true), await datosAdd(r, O, { collection: col, key: "k", field: "n", amount: 1 }, true), await datosDefineFields(r, O, { collection: col, fields: "a:texto" }, true)];
+  ok(a.every((x) => !x.success), `I1 collection ${col} rejected by every op`); } }
 // Replay contract: gate Sumar with Guardar si no existe using a per-event key.
 { const r = memoryRepo(); await datosSave(r, O, { collection: "stock", key: "p1", value: { n: 10 } }, true);
   const deliver = async (ev: string) => { const g: any = await datosSaveIfAbsent(r, O, { collection: "eventos", key: ev, value: { ok: true } }, true); if (!g.creado) return "repetido"; await datosAdd(r, O, { collection: "stock", key: "p1", field: "n", amount: -1 }, true); return "aplicado"; };

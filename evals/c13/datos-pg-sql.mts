@@ -37,8 +37,12 @@ await repo.put(O, C, "arr", [1]); x = await datosAdd(repo, O, { collection: C, k
 const ad = (id: any) => datosAdd(repo, O, { collection: C, key: "a", field: "n", amount: 10, operationId: id }, true);
 const before = (await repo.get(O, C, "a")).value.n; const p1 = await ad("e1|n1"), p2 = await ad("e1|n1"), p3 = await ad("e1|n2");
 ok(p1.aplicado && !p2.aplicado && p2.repetido && p3.aplicado && (await repo.get(O, C, "a")).value.n === before + 20, "S19 same operation id applies once (ledger), another id applies");
-const led = (await client.query("select collection,key,value from data_records where collection='$ops'")).rows; ok(led.length === 1 && led[0].value.ids.length === 2, "S20 one ledger row per record, bounded ids");
-for (let i = 0; i < 60; i++) await ad(`w${i}`); const led2 = (await client.query("select value from data_records where collection='$ops'")).rows; ok(led2.length === 1 && led2[0].value.ids.length === 50, "S21 ledger window capped at 50");
+const led = (await client.query("select count(*)::int c from data_records where collection='$ops'")).rows; ok(led[0].c === 2, "S20 one durable row per applied operation");
+for (let i = 0; i < 60; i++) await ad(`w${i}`); const again = await ad("e1|n1"); ok(!again.aplicado && again.repetido, "S21 durable: replay after 60 other operations still ignored");
+const nv = (await repo.get(O, C, "a")).value.n; const failed = await datosAdd(repo, O, { collection: C, key: "a", field: "n", amount: -100000, min: 0, operationId: "rej1" }, true); const cnt = (await client.query("select count(*)::int c from data_records where collection='$ops'")).rows[0].c;
+ok(!failed.aplicado && (await repo.get(O, C, "a")).value.n === nv && cnt === 62, "S21b rejected op leaves no ledger row and no change");
+await client.query(`INSERT INTO data_records(organization_id,collection,key,value) VALUES ('o1','c1','hp','{"n": 0.12345678901234567890}')`); const hp = await datosAdd(repo, O, { collection: C, key: "hp", field: "n", amount: 0 }, true);
+ok(!hp.aplicado && /precisión/.test(hp.motivo), `S21c stored decimal with more digits than a double: rejected before any conversion (${hp.motivo})`);
 x = await repo.insertIfAbsent(O, "q", "k1", 1, 2); x = await repo.insertIfAbsent(O, "q", "k2", 1, 2); const f = await repo.insertIfAbsent(O, "q", "k3", 1, 2); ok(f.status === "full" && (await repo.count(O, "q")) === 2, "S22 quota (limit 2): third insert refused");
 const f2 = await repo.putWithQuota(O, "q", "k4", 1, 2); const f3 = await repo.putWithQuota(O, "q", "k1", 5, 2); ok(f2.status === "full" && f3.status === "saved", "S23 putWithQuota shares the quota; overwrite at limit allowed");
 ok((await repo.count("o2", C)) === 0 && (await repo.get("o2", C, "a")) === null, "S24 organization isolation");
