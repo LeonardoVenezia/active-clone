@@ -47,7 +47,6 @@ ok(!hp.aplicado && /precisión/.test(hp.motivo), `S21c stored decimal with more 
 x = await repo.insertIfAbsent(O, "q", "k1", 1, 2); x = await repo.insertIfAbsent(O, "q", "k2", 1, 2); const f = await repo.insertIfAbsent(O, "q", "k3", 1, 2); ok(f.status === "full" && (await repo.count(O, "q")) === 2, "S22 quota (limit 2): third insert refused");
 const f2 = await repo.putWithQuota(O, "q", "k4", 1, 2); const f3 = await repo.putWithQuota(O, "q", "k1", 5, 2); ok(f2.status === "full" && f3.status === "saved", "S23 putWithQuota shares the quota; overwrite at limit allowed");
 ok((await repo.count("o2", C)) === 0 && (await repo.get("o2", C, "a")) === null, "S24 organization isolation");
-console.log(fails ? `\n${fails} FAILED` : "\nALL PASS"); process.exit(fails ? 1 : 0);
 
 // ---- replay contract in real SQL
 { await repo.put(O, C, "rp", { n: 0 }); const m1 = await datosAdd(repo, O, { collection: C, key: "rp", field: "n", amount: -1, min: 0, operationId: "rpA" }, true);
@@ -66,6 +65,8 @@ console.log(fails ? `\n${fails} FAILED` : "\nALL PASS"); process.exit(fails ? 1 
 }
 { await repo.put(O, C, "sn", { n: 1, tag: "x" }); const a1 = await datosAdd(repo, O, { collection: C, key: "sn", field: "n", amount: 1, operationId: "sn1" }, true); await repo.put(O, C, "sn", { n: 50, tag: "changed" });
   const a2 = await datosAdd(repo, O, { collection: C, key: "sn", field: "n", amount: 1, operationId: "sn1" }, true);
-  ok(a2.repetido && JSON.stringify(a2.record) === JSON.stringify(a1.record) && a2.valor === 2 && a2.record.value.tag === "x", "S35 replay returns the stored full output snapshot (record + valor of the first run), not current data (SQL)");
+  ok(a2.repetido && a2.record.updatedAt === a1.record.updatedAt && a2.record.key === a1.record.key && JSON.stringify(a2.record.value) === JSON.stringify(a1.record.value) && a2.valor === 2 && a2.record.value.tag === "x", "S35 replay returns the stored full output snapshot (record + valor of the first run), not current data (SQL)");
   const bg = { a: "x".repeat(16000) }; await repo.put(O, C, "bg", bg); const b1 = await datosUpdateIfMatches(repo, O, { collection: C, key: "bg", expected: bg, value: { a: "y".repeat(16000) }, operationId: "bg1" }, true); const b2 = await datosUpdateIfMatches(repo, O, { collection: C, key: "bg", expected: bg, value: { a: "y".repeat(16000) }, operationId: "bg1" }, true);
   ok(b1.actualizado && b2.actualizado && b2.repetido, "S36 ~16 KB value + snapshot stored and replayed (SQL)"); }
+
+console.log(fails ? `\n${fails} FAILED` : "\nALL PASS"); process.exit(fails ? 1 : 0);
