@@ -65,22 +65,10 @@ async function stepHandler(input: DatosInput, stepId?: string) {
   }
 }
 
-const QA_ORG = "a1KA93cnx2VXKTupkAlUsZW0rxxOzDWE";
-function qaRetryHook(input: DatosInput): boolean {
-  if (process.env.VERCEL_ENV !== "preview" || process.env.VERCEL_GIT_COMMIT_REF !== "datos-atomic-ops") return false;
-  if (input._dataOrganizationId !== QA_ORG || input.collection !== "qa_atomic" || input.key !== "qa_ctr" || input.operation !== "add") return false;
-  try { return getStepMetadata().attempt === 1; } catch { return false; }
-}
-
 export async function datosStep(input: DatosInput) {
   "use step";
 
   const stepId = currentStepId();
-  return withStepLogging(input, async () => {
-    const out = await stepHandler(input, stepId);
-    // QA-RETRY-HOOK (temporary, Preview only): after the data was committed, fail attempt 1 so the SDK retries the step.
-    if (qaRetryHook(input)) throw new Error("qa-retry-hook: simulated failure after commit");
-    return out;
-  });
+  return withStepLogging(input, () => stepHandler(input, stepId));
 }
-datosStep.maxRetries = 2; // QA-RETRY-HOOK temporary (restore to 0)
+datosStep.maxRetries = 0;
