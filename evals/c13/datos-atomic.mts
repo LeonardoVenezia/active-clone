@@ -65,15 +65,40 @@ ok(exactSum(Number.MAX_SAFE_INTEGER, 1) === null && exactSum(0.1234567890123456,
   const f: any = await datosSave(r, O, { collection: "full2", key: "new", value: 1 }, true); ok(!f.success && (await r.count(O, "full2")) === 5000, "Q1 Guardar at 5000: clear error");
   ok((await datosSave(r, O, { collection: "full2", key: "k1", value: 7 }, true)).success, "Q2 Guardar at 5000 can still overwrite an existing key");
 }
-// Replay by operation id (same executionId|nodeId delivered twice)
+// Replay by operation id (stored terminal result is returned, applied or rejected)
 { const r = memoryRepo(); await datosSave(r, O, { ...C, key: "o", value: { n: 10 } }, true);
-  const add = (id: any) => datosAdd(r, O, { ...C, key: "o", field: "n", amount: -1, operationId: id }, true) as any;
-  const a = await add("exec1|node1"), b = await add("exec1|node1"), c = await add("exec1|node2"), d = await add(undefined), e = await add(undefined);
-  ok(a.aplicado && !b.aplicado && b.repetido && /ya se aplicó/.test(b.motivo) && c.aplicado && d.aplicado && e.aplicado && (await r.get(O, "sku", "o")).value.n === 6, "R2 same operation id applies once; distinct ids apply; no id = no dedupe");
+  const add = (id: any, amount = -1, extra: any = {}) => datosAdd(r, O, { ...C, key: "o", field: "n", amount, operationId: id, ...extra }, true) as any;
+  const a = await add("s1"), b = await add("s1"), c = await add("s2"), d = await add(undefined), e = await add(undefined);
+  ok(a.aplicado && !a.repetido && b.aplicado && b.repetido && c.aplicado && d.aplicado && e.aplicado && (await r.get(O, "sku", "o")).value.n === 6, "R2 replay returns the stored result (aplicado, repetido) and does not add again; distinct ids apply; no id = no protection");
   for (let i = 0; i < 60; i++) await add(`x${i}`);
-  ok(!(await add("exec1|node1")).aplicado, "R3 durable: replay after 60 other operations on the same record is still ignored (no window)");
-  const cf: any = await datosAdd(r, O, { ...C, key: "o", field: "n", amount: -5, operationId: "exec1|node1" }, true); ok(!cf.success && /datos distintos/.test(cf.error), "R4 same operation id with a different amount is a conflict (error), not ignored");
+  const b2 = await add("s1"); ok(b2.aplicado && b2.repetido && b2.valor === a.valor, "R3 durable: replay after 60 other ops returns the SAME stored result (valor of the first run)");
+  const cf: any = await add("s1", -5); ok(!cf.success && /datos distintos/.test(cf.error), "R4 same id with a different amount is a conflict (error)");
+  // rejected op: the rejection is stored and replayed even if the state later changes
+  await datosSave(r, O, { ...C, key: "rj", value: { n: 0 } }, true);
+  const r1 = await add2(r, "rj", "rejA", -1, { min: 0 }); await datosSave(r, O, { ...C, key: "rj", value: { n: 50 } }, true);
+  const r2 = await add2(r, "rj", "rejA", -1, { min: 0 });
+  ok(!r1.aplicado && !r2.aplicado && r2.repetido && (await r.get(O, "sku", "rj")).value.n === 50, "R5 rejected result is stored: replay after the state changed does NOT apply (no branch flip, no double effect)");
 }
+async function add2(r: any, key: string, id: string, amount: number, extra: any) { return datosAdd(r, O, { ...C, key, field: "n", amount, operationId: id, ...extra }, true) as any; }
+// saveIfAbsent replay keeps creado=true (branch stable)
+{ const r = memoryRepo(); const s1: any = await datosSaveIfAbsent(r, O, { ...C, key: "u", value: 1, operationId: "a1" }, true); const s2: any = await datosSaveIfAbsent(r, O, { ...C, key: "u", value: 1, operationId: "a1" }, true);
+  const s3: any = await datosSaveIfAbsent(r, O, { ...C, key: "u", value: 1, operationId: "a2" }, true); const s4: any = await datosSaveIfAbsent(r, O, { ...C, key: "u", value: 2, operationId: "a1" }, true);
+  ok(s1.creado && s2.creado && s2.repetido && !s3.creado && !s4.success, "R6 saveIfAbsent replay returns creado=true (stored), a new id sees it exists, other payload = conflict"); }
+// CAS ABA: replay does not re-apply
+{ const r = memoryRepo(); await datosSave(r, O, { ...C, key: "c", value: "A" }, true);
+  const u = (id: string, e: any, v: any) => datosUpdateIfMatches(r, O, { ...C, key: "c", expected: e, value: v, operationId: id }, true) as any;
+  const x1 = await u("c1", "A", "B"); await u("c2", "B", "A"); const x3 = await u("c1", "A", "B");
+  ok(x1.actualizado && x3.actualizado && x3.repetido && (await r.get(O, "sku", "c")).value === "A", "R7 CAS A->B->A then replay of the first: returns the stored result and does NOT re-apply (value stays A)");
+  const miss = await u("c9", "Z", "Q"); await datosSave(r, O, { ...C, key: "c", value: "Z" }, true); const miss2 = await u("c9", "Z", "Q");
+  ok(!miss.actualizado && !miss2.actualizado && miss2.repetido && (await r.get(O, "sku", "c")).value === "Z", "R8 CAS that did not match stays 'no match' on replay even if the value now matches"); }
+// Pilot cap on protected operations
+{ const r = memoryRepo(); await datosSave(r, O, { ...C, key: "k", value: { n: 0 } }, true);
+  for (let i = 0; i < 5000; i++) await datosAdd(r, O, { ...C, key: "k", field: "n", amount: 1, operationId: `p${i}` }, true);
+  const over: any = await datosAdd(r, O, { ...C, key: "k", field: "n", amount: 1, operationId: "p5000" }, true); const old: any = await datosAdd(r, O, { ...C, key: "k", field: "n", amount: 1, operationId: "p0" }, true);
+  const pl: any = await datosAdd(r, O, { ...C, key: "k", field: "n", amount: 1 }, true);
+  ok(!over.success && /5000 operaciones protegidas/.test(over.error), "R9 op 5001 is refused with a clear error, nothing applied");
+  ok(old.aplicado && old.repetido, "R10 replay of an already stored op still works at the cap (no new row needed)");
+  ok(pl.aplicado && (await r.get(O, "sku", "k")).value.n === 5001, "R11 unprotected call (no id) is unaffected by the cap"); }
 // Internal collections are unreachable from user ops
 { const r = memoryRepo(); for (const col of ["$ops", "$schemas", "$x"]) {
   const a: any[] = [await datosSave(r, O, { collection: col, key: "k", value: 1 }, true), await datosRead(r, O, { collection: col, key: "k" }, true), await datosSaveIfAbsent(r, O, { collection: col, key: "k", value: 1 }, true), await datosUpdateIfMatches(r, O, { collection: col, key: "k", expected: 1, value: 2 }, true), await datosAdd(r, O, { collection: col, key: "k", field: "n", amount: 1 }, true), await datosDefineFields(r, O, { collection: col, fields: "a:texto" }, true)];

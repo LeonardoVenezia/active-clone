@@ -6,6 +6,8 @@
  */
 import "server-only";
 
+import { getStepMetadata } from "workflow";
+
 import { datosAdd, datosDefineFields, datosList, datosRead, datosSave, datosSaveIfAbsent, datosUpdateIfMatches } from "../datos/core";
 import { pgDatosRepo } from "../datos/repo";
 import { type StepInput, withStepLogging } from "./step-handler";
@@ -27,18 +29,28 @@ export type DatosInput = StepInput & {
   _dataCanDefineFields?: boolean;
 };
 
-async function stepHandler(input: DatosInput) {
+const NO_ID = "No se pudo identificar esta operación, así que no se hizo nada (para evitar repetirla en un reintento).";
+/** Stable id of this step call: the SDK gives the same stepId on every retry/replay of it, unique per call. */
+function currentStepId(): string | undefined {
+  try { const id = getStepMetadata().stepId; return typeof id === "string" && id.length > 0 ? id : undefined; } catch { return undefined; }
+}
+
+async function stepHandler(input: DatosInput, stepId?: string) {
   const org = input._dataOrganizationId;
   const collection = input.collection;
   try {
     switch (input.operation) {
       case "save": return await datosSave(pgDatosRepo, org, { collection, key: input.key, value: input.value });
-      case "saveIfAbsent": return await datosSaveIfAbsent(pgDatosRepo, org, { collection, key: input.key, value: input.value });
-      case "updateIfMatches": return await datosUpdateIfMatches(pgDatosRepo, org, { collection, key: input.key, expected: input.expected, value: input.value });
+      case "saveIfAbsent":
+        if (!stepId) return { success: false as const, error: NO_ID };
+        return await datosSaveIfAbsent(pgDatosRepo, org, { collection, key: input.key, value: input.value, operationId: stepId });
+      case "updateIfMatches":
+        if (!stepId) return { success: false as const, error: NO_ID };
+        return await datosUpdateIfMatches(pgDatosRepo, org, { collection, key: input.key, expected: input.expected, value: input.value, operationId: stepId });
       case "add":
         // Fail closed: without a stable operation identity a retry could add twice.
-        if (!input._context?.executionId || !input._context?.nodeId) return { success: false as const, error: "No se pudo identificar esta operación, así que no se sumó nada (para evitar sumar dos veces en un reintento)." };
-        return await datosAdd(pgDatosRepo, org, { collection, key: input.key, field: input.field, amount: input.amount, startAtZero: input.startAtZero, min: input.min, max: input.max, operationId: input._context?.executionId ? `${input._context.executionId}|${input._context.nodeId}` : undefined });
+        if (!stepId) return { success: false as const, error: NO_ID };
+        return await datosAdd(pgDatosRepo, org, { collection, key: input.key, field: input.field, amount: input.amount, startAtZero: input.startAtZero, min: input.min, max: input.max, operationId: stepId });
       case "read": return await datosRead(pgDatosRepo, org, { collection, key: input.key });
       case "list": return await datosList(pgDatosRepo, org, { collection, limit: input.limit });
       case "fields":
@@ -56,6 +68,7 @@ async function stepHandler(input: DatosInput) {
 export async function datosStep(input: DatosInput) {
   "use step";
 
-  return withStepLogging(input, () => stepHandler(input));
+  const stepId = currentStepId();
+  return withStepLogging(input, () => stepHandler(input, stepId));
 }
 datosStep.maxRetries = 0;

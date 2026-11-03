@@ -7,6 +7,7 @@
  * organizationId, or the session's verified membership).
  */
 
+import { createHash } from "node:crypto";
 import { type FieldDef, isValidFieldList, parseFieldSpec, validateAgainstFields } from "./fields";
 
 /**
@@ -21,6 +22,8 @@ export const DATOS_LIMITS = {
   maxKeyLength: 120,
   maxValueBytes: 16_384,
   maxRecordsPerCollection: 5000,
+  /** Pilot limit: protected operations (rows in $ops) per company. Never deleted automatically. */
+  maxProtectedOps: 5000,
   maxListLimit: 200,
   defaultListLimit: 50,
 } as const;
@@ -35,20 +38,29 @@ export interface DatosRepo {
   /** Atomic upsert: the 5000-record check and the write run under the same per-collection lock as insertIfAbsent. */
   putWithQuota(orgId: string, collection: string, key: string, value: unknown, maxRecords: number): Promise<{ status: "saved" | "full"; record: DatosRecord | null }>;
   /** Atomic: creates only if the key is absent (quota checked under a per-collection lock). */
-  insertIfAbsent(orgId: string, collection: string, key: string, value: unknown, maxRecords: number): Promise<{ status: "created" | "exists" | "full"; record: DatosRecord | null }>;
+  insertIfAbsent(orgId: string, collection: string, key: string, value: unknown, maxRecords: number, op?: OpIdentity): Promise<{ status: "created" | "exists" | "full" | "conflict" | "ledger_full"; record: DatosRecord | null; replayed?: boolean }>;
   /** Atomic: replaces the value only if the current value is jsonb-equal to `expected`. */
-  compareAndSet(orgId: string, collection: string, key: string, expected: unknown, next: unknown): Promise<{ updated: boolean; record: DatosRecord | null }>;
+  compareAndSet(orgId: string, collection: string, key: string, expected: unknown, next: unknown, op?: OpIdentity): Promise<{ updated: boolean; conflict?: boolean; ledgerFull?: boolean; record: DatosRecord | null; replayed?: boolean }>;
   /** Atomic: adds `amount` to a numeric field in one statement. Never converts text. */
-  increment(orgId: string, collection: string, key: string, field: string, amount: number, opts: IncrementOpts, opId?: string): Promise<{ applied: boolean; reason?: IncrementReason; record: DatosRecord | null }>;
+  increment(orgId: string, collection: string, key: string, field: string, amount: number, opts: IncrementOpts, op?: OpIdentity): Promise<{ applied: boolean; reason?: IncrementReason; record: DatosRecord | null; valor?: number | null; replayed?: boolean }>;
 }
 
+/**
+ * Identity of one protected operation: the workflow step id (same on every retry/replay of that step call) and a
+ * fingerprint of what it asked for. The first terminal result (applied or rejected) is stored under it and returned
+ * unchanged on any replay, before anything is evaluated, even if the data has changed since.
+ */
+export type OpIdentity = { id: string; fp: string };
+const sha = (x: unknown) => createHash("sha256").update(JSON.stringify(x)).digest("hex");
 export type IncrementOpts = { startAtZero: boolean; min?: number; max?: number };
-export type IncrementReason = "conflict" | "duplicate" | "precision" | "missing" | "not_object" | "field_missing" | "not_number" | "below_min" | "above_max" | "out_of_range" | "too_large" | "retry";
+export type IncrementReason = "conflict" | "duplicate" | "precision" | "missing" | "not_object" | "field_missing" | "not_number" | "below_min" | "above_max" | "out_of_range" | "too_large" | "retry" | "ledger_full";
 export const MAX_SAFE = Number.MAX_SAFE_INTEGER;
 /** Internal collection (like $schemas): one row per applied operation id. Its name contains "$", so no user collection can read, list, write or define fields for it. */
 export const OPS_COLLECTION = "$ops";
 /** Fingerprint of what an operation asked for; the same operation id with a different fingerprint is a conflict, not a replay. */
-export const opFingerprint = (field: string, amount: number, o: IncrementOpts): string => JSON.stringify([field, String(amount), o.startAtZero, o.min ?? null, o.max ?? null]);
+export const opFingerprint = (field: string, amount: number, o: IncrementOpts): string => JSON.stringify(["add", field, String(amount), o.startAtZero, o.min ?? null, o.max ?? null]);
+export const LEDGER_FULL_MSG = "Se llegó al límite piloto de 5000 operaciones protegidas de esta empresa: no se hizo nada. Esos registros no se borran solos.";
+const CONFLICT_MSG = "Ya se ejecutó esta misma operación con datos distintos: no se hizo nada.";
 
 /** Decimal parts of a finite number: its shortest JS representation as scaled BigInt. */
 function toDec(n: number): { i: bigint; s: number } {
@@ -161,7 +173,7 @@ function jsonEqual(a: unknown, b: unknown): boolean {
 export { jsonEqual };
 
 /** Guardar si no existe: creates only when the key is absent; otherwise returns the existing record untouched. */
-export async function datosSaveIfAbsent(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; value: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ creado: boolean; record: DatosRecord | null }>> {
+export async function datosSaveIfAbsent(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; value: unknown; operationId?: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ creado: boolean; repetido?: boolean; record: DatosRecord | null }>> {
   const g = guard(orgId, enabled) ?? checkNames(args.collection, args.key);
   if (g) return { success: false, error: g };
   const parsed = parseValue(args.value);
@@ -174,13 +186,16 @@ export async function datosSaveIfAbsent(repo: DatosRepo, orgId: unknown, args: {
     if (!v.ok) return { success: false, error: v.error };
     toStore = v.value;
   }
-  const r = await repo.insertIfAbsent(org, col, key, toStore, DATOS_LIMITS.maxRecordsPerCollection);
+  const opId = typeof args.operationId === "string" && args.operationId.length > 0 ? args.operationId : undefined;
+  const r = await repo.insertIfAbsent(org, col, key, toStore, DATOS_LIMITS.maxRecordsPerCollection, opId ? { id: opId, fp: sha(["saveIfAbsent", toStore]) } : undefined);
+  if (r.status === "conflict") return { success: false, error: CONFLICT_MSG };
+  if (r.status === "ledger_full") return { success: false, error: LEDGER_FULL_MSG };
   if (r.status === "full") return { success: false, error: "La colección llegó al máximo de 5000 registros." };
-  return { success: true, creado: r.status === "created", record: r.record };
+  return { success: true, creado: r.status === "created", ...(r.replayed ? { repetido: true } : {}), record: r.record };
 }
 
 /** Actualizar si coincide: replaces the value only if the current one equals `expected` (jsonb semantic equality: 1 equals 1.0). */
-export async function datosUpdateIfMatches(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; expected: unknown; value: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ actualizado: boolean; motivo?: string; record: DatosRecord | null }>> {
+export async function datosUpdateIfMatches(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; expected: unknown; value: unknown; operationId?: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ actualizado: boolean; repetido?: boolean; motivo?: string; record: DatosRecord | null }>> {
   const g = guard(orgId, enabled) ?? checkNames(args.collection, args.key);
   if (g) return { success: false, error: g };
   const exp = parseValue(args.expected);
@@ -195,9 +210,12 @@ export async function datosUpdateIfMatches(repo: DatosRepo, orgId: unknown, args
     if (!v.ok) return { success: false, error: v.error };
     toStore = v.value;
   }
-  const r = await repo.compareAndSet(org, col, key, exp.value, toStore);
-  if (r.updated) return { success: true, actualizado: true, record: r.record };
-  return { success: true, actualizado: false, motivo: r.record ? "El valor actual es distinto del esperado: no se cambió nada." : "El dato no existe: no se cambió nada.", record: r.record };
+  const opId = typeof args.operationId === "string" && args.operationId.length > 0 ? args.operationId : undefined;
+  const r = await repo.compareAndSet(org, col, key, exp.value, toStore, opId ? { id: opId, fp: sha(["updateIfMatches", exp.value, toStore]) } : undefined);
+  if (r.conflict) return { success: false, error: CONFLICT_MSG };
+  if (r.ledgerFull) return { success: false, error: LEDGER_FULL_MSG };
+  if (r.updated) return { success: true, actualizado: true, ...(r.replayed ? { repetido: true } : {}), record: r.record };
+  return { success: true, actualizado: false, ...(r.replayed ? { repetido: true } : {}), motivo: r.record ? "El valor actual es distinto del esperado: no se cambió nada." : "El dato no existe: no se cambió nada.", record: r.record };
 }
 
 /** Sumar: adds an amount to a numeric field of a single record, atomically. */
@@ -224,12 +242,14 @@ export async function datosAdd(repo: DatosRepo, orgId: unknown, args: { collecti
     if (!def || def.type !== "numero") return { success: false, error: `"${field}" no es un campo numérico definido en esta colección.` };
   }
   const opId = typeof args.operationId === "string" && args.operationId.length > 0 ? args.operationId : undefined;
-  const r = await repo.increment(org, col, key, field, amt.n, opts, opId);
-  const valor = r.record && typeof (r.record.value as Record<string, unknown> | null)?.[field] === "number" ? ((r.record.value as Record<string, unknown>)[field] as number) : null;
-  if (r.applied) return { success: true, aplicado: true, valor, record: r.record };
-  if (r.reason === "conflict") return { success: false, error: "Ya se aplicó una operación con este mismo identificador pero con datos distintos (campo, cantidad o límites): no se hizo nada." };
+  const r = await repo.increment(org, col, key, field, amt.n, opts, opId ? { id: opId, fp: opFingerprint(field, amt.n, opts) } : undefined);
+  const valor = r.replayed ? (r.valor ?? null) : r.record && typeof (r.record.value as Record<string, unknown> | null)?.[field] === "number" ? ((r.record.value as Record<string, unknown>)[field] as number) : null;
+  if (r.applied) return { success: true, aplicado: true, ...(r.replayed ? { repetido: true } : {}), valor, record: r.record };
+  if (r.reason === "conflict") return { success: false, error: CONFLICT_MSG };
+  if (r.reason === "ledger_full") return { success: false, error: LEDGER_FULL_MSG };
   const why: Record<IncrementReason, string> = {
     conflict: "",
+    ledger_full: "",
     duplicate: "Esta operación ya se aplicó antes (reintento o reentrega): no se sumó otra vez.",
     precision: "El resultado no se puede guardar sin perder precisión decimal: no se sumó nada.",
     missing: "El dato no existe: no se sumó nada.",
@@ -242,7 +262,7 @@ export async function datosAdd(repo: DatosRepo, orgId: unknown, args: { collecti
     too_large: "El resultado supera el máximo de 16 KB: no se sumó nada.",
     retry: "No se pudo aplicar: hubo un cambio simultáneo o el dato guardado tiene más decimales de los que se pueden sumar sin perder precisión. No se sumó nada.",
   };
-  return { success: true, aplicado: false, ...(r.reason === "duplicate" ? { repetido: true } : {}), motivo: why[r.reason ?? "retry"], valor, record: r.record };
+  return { success: true, aplicado: false, ...(r.replayed || r.reason === "duplicate" ? { repetido: true } : {}), motivo: why[r.reason ?? "retry"], valor, record: r.record };
 }
 
 export async function datosRead(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ found: boolean; record: DatosRecord | null }>> {
@@ -266,6 +286,18 @@ export function memoryRepo(): DatosRepo {
   const m = new Map<string, DatosRecord>();
   const k = (o: string, c: string, key: string) => JSON.stringify([o, c, key]);
   let tick = 0;
+  // Same contract as the SQL repo: stored terminal result first, then cap, then run + store.
+  const ledger = <T extends { record: DatosRecord | null }>(o: string, c: string, key: string, op: OpIdentity | undefined, run: () => T, conflict: any, full: any): any => {
+    if (!op) return run();
+    const row = k(o, OPS_COLLECTION, sha([op.id, c, key]));
+    const seen = m.get(row);
+    if (seen) { const v = seen.value as { fp: string; r: object }; return v.fp !== op.fp ? conflict : { ...(v.r as T), record: m.get(k(o, c, key)) ?? null, replayed: true }; }
+    if ([...m.keys()].filter((id) => { const [oo, cc] = JSON.parse(id); return oo === o && cc === OPS_COLLECTION; }).length >= DATOS_LIMITS.maxProtectedOps) return full;
+    const r = run();
+    const { record: _r, ...terminal } = r;
+    m.set(row, { collection: OPS_COLLECTION, key: row, value: { fp: op.fp, r: terminal }, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() });
+    return r;
+  };
   return {
     async put(o, c, key, value) { const r = { collection: c, key, value, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r); return r; },
     async get(o, c, key) { return m.get(k(o, c, key)) ?? null; },
@@ -275,36 +307,38 @@ export function memoryRepo(): DatosRepo {
       if (!m.has(k(o, c, key)) && [...m.keys()].filter((id) => { const [oo, cc] = JSON.parse(id); return oo === o && cc === c; }).length >= max) return { status: "full", record: null };
       const r = { collection: c, key, value, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r); return { status: "saved", record: r };
     },
-    async insertIfAbsent(o, c, key, value, max) {
-      const cur = m.get(k(o, c, key)); if (cur) return { status: "exists", record: cur };
-      if ([...m.keys()].filter((id) => { const [oo, cc] = JSON.parse(id); return oo === o && cc === c; }).length >= max) return { status: "full", record: null };
-      const r = { collection: c, key, value, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r); return { status: "created", record: r };
+    async insertIfAbsent(o, c, key, value, max, op) {
+      return ledger(o, c, key, op, () => {
+        const cur = m.get(k(o, c, key)); if (cur) return { status: "exists", record: cur };
+        if ([...m.keys()].filter((id) => { const [oo, cc] = JSON.parse(id); return oo === o && cc === c; }).length >= max) return { status: "full", record: null };
+        const r = { collection: c, key, value, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r); return { status: "created", record: r };
+      }, { status: "conflict", record: null }, { status: "ledger_full", record: null });
     },
-    async compareAndSet(o, c, key, expected, next) {
-      const cur = m.get(k(o, c, key)); if (!cur) return { updated: false, record: null };
-      if (!jsonEqual(cur.value, expected)) return { updated: false, record: cur };
-      const r = { collection: c, key, value: next, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r); return { updated: true, record: r };
+    async compareAndSet(o, c, key, expected, next, op) {
+      return ledger(o, c, key, op, () => {
+        const cur = m.get(k(o, c, key)); if (!cur) return { updated: false, record: null };
+        if (!jsonEqual(cur.value, expected)) return { updated: false, record: cur };
+        const r = { collection: c, key, value: next, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r); return { updated: true, record: r };
+      }, { updated: false, conflict: true, record: null }, { updated: false, ledgerFull: true, record: null });
     },
-    async increment(o, c, key, field, amount, opts, opId) {
-      const cur = m.get(k(o, c, key)); if (!cur) return { applied: false, reason: "missing", record: null };
-      const opRow = opId ? k(o, OPS_COLLECTION, JSON.stringify([opId, c, key])) : "";
-      const fp = opFingerprint(field, amount, opts);
-      if (opId && m.has(opRow)) return { applied: false, reason: (m.get(opRow)!.value as { fp?: string }).fp === fp ? "duplicate" : "conflict", record: cur };
-      const v = cur.value as Record<string, unknown> | null;
-      if (typeof v !== "object" || v === null || Array.isArray(v)) return { applied: false, reason: "not_object", record: cur };
-      let base: number;
-      if (!(field in v)) { if (!opts.startAtZero) return { applied: false, reason: "field_missing", record: cur }; base = 0; }
-      else if (typeof v[field] !== "number") return { applied: false, reason: "not_number", record: cur };
-      else base = v[field] as number;
-      const res = exactSum(base, amount);
-      if (res === null) return { applied: false, reason: Math.abs(base + amount) > MAX_SAFE ? "out_of_range" : "precision", record: cur };
-      if (opts.min !== undefined && res < opts.min) return { applied: false, reason: "below_min", record: cur };
-      if (opts.max !== undefined && res > opts.max) return { applied: false, reason: "above_max", record: cur };
-      const next = { ...v, [field]: res };
-      if (new TextEncoder().encode(JSON.stringify(next)).length > DATOS_LIMITS.maxValueBytes) return { applied: false, reason: "too_large", record: cur };
-      const r = { collection: c, key, value: next, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r);
-      if (opId) m.set(opRow, { collection: OPS_COLLECTION, key: opRow, value: { at: r.updatedAt, fp }, updatedAt: r.updatedAt });
-      return { applied: true, record: r };
+    async increment(o, c, key, field, amount, opts, op) {
+      return ledger(o, c, key, op, () => {
+        const cur = m.get(k(o, c, key)); if (!cur) return { applied: false, reason: "missing" as IncrementReason, valor: null, record: null };
+        const v = cur.value as Record<string, unknown> | null;
+        if (typeof v !== "object" || v === null || Array.isArray(v)) return { applied: false, reason: "not_object" as IncrementReason, valor: typeof v?.[field] === "number" ? (v[field] as number) : null, record: cur };
+        let base: number;
+        if (!(field in v)) { if (!opts.startAtZero) return { applied: false, reason: "field_missing" as IncrementReason, record: cur }; base = 0; }
+        else if (typeof v[field] !== "number") return { applied: false, reason: "not_number" as IncrementReason, valor: typeof v?.[field] === "number" ? (v[field] as number) : null, record: cur };
+        else base = v[field] as number;
+        const res = exactSum(base, amount);
+        if (res === null) return { applied: false, reason: (Math.abs(base + amount) > MAX_SAFE ? "out_of_range" : "precision") as IncrementReason, valor: typeof v?.[field] === "number" ? (v[field] as number) : null, record: cur };
+        if (opts.min !== undefined && res < opts.min) return { applied: false, reason: "below_min" as IncrementReason, valor: typeof v?.[field] === "number" ? (v[field] as number) : null, record: cur };
+        if (opts.max !== undefined && res > opts.max) return { applied: false, reason: "above_max" as IncrementReason, valor: typeof v?.[field] === "number" ? (v[field] as number) : null, record: cur };
+        const next = { ...v, [field]: res };
+        if (new TextEncoder().encode(JSON.stringify(next)).length > DATOS_LIMITS.maxValueBytes) return { applied: false, reason: "too_large" as IncrementReason, valor: typeof v?.[field] === "number" ? (v[field] as number) : null, record: cur };
+        const r = { collection: c, key, value: next, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r);
+        return { applied: true, valor: res, record: r };
+      }, { applied: false, reason: "conflict" as IncrementReason, record: null }, { applied: false, reason: "ledger_full" as IncrementReason, record: null });
     },
   };
 }
