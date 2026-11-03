@@ -467,7 +467,7 @@ function DatosFields({
             Si el campo no existe, empezar en 0
           </label>
           <p className="text-muted-foreground text-xs">
-            Suma en un solo paso, sin pisar cambios simultáneos. Si el resultado queda fuera del mínimo/máximo, no se cambia nada y el nodo devuelve aplicado = falso con el motivo.
+            Suma en un solo paso, sin pisar cambios simultáneos. Si el resultado queda fuera del mínimo/máximo, no se cambia nada y el nodo devuelve aplicado = falso con el motivo (el flujo sigue igual: agregá un nodo Condición sobre aplicado si los pasos siguientes dependen de que la suma se hizo).
             Si este mismo paso se reintenta dentro de la misma ejecución, no suma dos veces (se guarda un registro interno por cada suma aplicada).
             Una ejecución nueva sí suma: si el mismo evento puede llegar repetido (por ejemplo un aviso de venta duplicado), antes usá &quot;Guardar solo si no existe&quot; con una clave única por evento y sumá solo si creado = verdadero.
           </p>
@@ -478,7 +478,7 @@ function DatosFields({
           <Label htmlFor="datos-expected">Valor esperado actual</Label>
           <Input disabled={disabled} id="datos-expected" onChange={(e) => onUpdateConfig("expected", e.target.value)} placeholder='{"estado": "pendiente"}' value={(config?.expected as string) || ""} />
           <p className="text-muted-foreground text-xs">
-            Solo cambia si el dato guardado es igual a este valor (1 y 1.0 son iguales). Si no coincide o no existe, no cambia nada y devuelve actualizado = falso con el motivo.
+            Solo cambia si el dato guardado es igual a este valor (1 y 1.0 son iguales). Si no coincide o no existe, no cambia nada y devuelve actualizado = falso con el motivo (el flujo sigue igual: usá un nodo Condición sobre actualizado antes de seguir).
           </p>
         </div>
       )}

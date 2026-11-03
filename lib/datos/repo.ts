@@ -3,7 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { DATOS_LIMITS, exactSum, OPS_COLLECTION, type DatosRecord, type DatosRepo, type IncrementReason, MAX_SAFE } from "./core";
+import { DATOS_LIMITS, exactSum, OPS_COLLECTION, opFingerprint, type DatosRecord, type DatosRepo, type IncrementReason, MAX_SAFE } from "./core";
 import { dataRecords } from "./schema";
 
 const toRecord = (r: typeof dataRecords.$inferSelect): DatosRecord => ({ collection: r.collection, key: r.key, value: r.value, updatedAt: r.updatedAt.toISOString() });
@@ -77,7 +77,7 @@ export const pgDatosRepo: DatosRepo = {
       const opRow = opId ? opRowKey(opId, c, key) : "";
       if (opId) {
         const [seen] = await tx.select().from(dataRecords).where(and(eq(dataRecords.organizationId, o), eq(dataRecords.collection, OPS_COLLECTION), eq(dataRecords.key, opRow))).limit(1);
-        if (seen) return { applied: false, reason: "duplicate" as IncrementReason, record: await getCur() };
+        if (seen) return { applied: false, reason: ((seen.value as { fp?: string }).fp === opFingerprint(field, amount, opts) ? "duplicate" : "conflict") as IncrementReason, record: await getCur() };
       }
       // One statement checks and writes. jsonb numbers are exact decimals; text is never cast. The result must
       // survive a round trip through a double (what JS reads back), or nothing is written.
@@ -97,7 +97,7 @@ export const pgDatosRepo: DatosRepo = {
         RETURNING d.collection, d.key, d.value, d.updated_at`);
       const row = rowsOf<{ collection: string; key: string; value: unknown; updated_at: Date | string }>(rows)[0];
       if (row) {
-        if (opId) await tx.insert(dataRecords).values({ organizationId: o, collection: OPS_COLLECTION, key: opRow, value: { at: new Date().toISOString() } as never });
+        if (opId) await tx.insert(dataRecords).values({ organizationId: o, collection: OPS_COLLECTION, key: opRow, value: { at: new Date().toISOString(), fp: opFingerprint(field, amount, opts) } as never });
         return { applied: true, record: { collection: row.collection, key: row.key, value: row.value, updatedAt: new Date(row.updated_at).toISOString() } };
       }
       // Nothing changed: classify why from the current record (message only; data was not touched).

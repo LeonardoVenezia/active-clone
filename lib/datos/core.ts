@@ -43,10 +43,12 @@ export interface DatosRepo {
 }
 
 export type IncrementOpts = { startAtZero: boolean; min?: number; max?: number };
-export type IncrementReason = "duplicate" | "precision" | "missing" | "not_object" | "field_missing" | "not_number" | "below_min" | "above_max" | "out_of_range" | "too_large" | "retry";
+export type IncrementReason = "conflict" | "duplicate" | "precision" | "missing" | "not_object" | "field_missing" | "not_number" | "below_min" | "above_max" | "out_of_range" | "too_large" | "retry";
 export const MAX_SAFE = Number.MAX_SAFE_INTEGER;
 /** Internal collection (like $schemas): one row per applied operation id. Its name contains "$", so no user collection can read, list, write or define fields for it. */
 export const OPS_COLLECTION = "$ops";
+/** Fingerprint of what an operation asked for; the same operation id with a different fingerprint is a conflict, not a replay. */
+export const opFingerprint = (field: string, amount: number, o: IncrementOpts): string => JSON.stringify([field, String(amount), o.startAtZero, o.min ?? null, o.max ?? null]);
 
 /** Decimal parts of a finite number: its shortest JS representation as scaled BigInt. */
 function toDec(n: number): { i: bigint; s: number } {
@@ -225,7 +227,9 @@ export async function datosAdd(repo: DatosRepo, orgId: unknown, args: { collecti
   const r = await repo.increment(org, col, key, field, amt.n, opts, opId);
   const valor = r.record && typeof (r.record.value as Record<string, unknown> | null)?.[field] === "number" ? ((r.record.value as Record<string, unknown>)[field] as number) : null;
   if (r.applied) return { success: true, aplicado: true, valor, record: r.record };
+  if (r.reason === "conflict") return { success: false, error: "Ya se aplicó una operación con este mismo identificador pero con datos distintos (campo, cantidad o límites): no se hizo nada." };
   const why: Record<IncrementReason, string> = {
+    conflict: "",
     duplicate: "Esta operación ya se aplicó antes (reintento o reentrega): no se sumó otra vez.",
     precision: "El resultado no se puede guardar sin perder precisión decimal: no se sumó nada.",
     missing: "El dato no existe: no se sumó nada.",
@@ -284,7 +288,8 @@ export function memoryRepo(): DatosRepo {
     async increment(o, c, key, field, amount, opts, opId) {
       const cur = m.get(k(o, c, key)); if (!cur) return { applied: false, reason: "missing", record: null };
       const opRow = opId ? k(o, OPS_COLLECTION, JSON.stringify([opId, c, key])) : "";
-      if (opId && m.has(opRow)) return { applied: false, reason: "duplicate", record: cur };
+      const fp = opFingerprint(field, amount, opts);
+      if (opId && m.has(opRow)) return { applied: false, reason: (m.get(opRow)!.value as { fp?: string }).fp === fp ? "duplicate" : "conflict", record: cur };
       const v = cur.value as Record<string, unknown> | null;
       if (typeof v !== "object" || v === null || Array.isArray(v)) return { applied: false, reason: "not_object", record: cur };
       let base: number;
@@ -298,7 +303,7 @@ export function memoryRepo(): DatosRepo {
       const next = { ...v, [field]: res };
       if (new TextEncoder().encode(JSON.stringify(next)).length > DATOS_LIMITS.maxValueBytes) return { applied: false, reason: "too_large", record: cur };
       const r = { collection: c, key, value: next, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r);
-      if (opId) m.set(opRow, { collection: OPS_COLLECTION, key: opRow, value: { at: r.updatedAt }, updatedAt: r.updatedAt });
+      if (opId) m.set(opRow, { collection: OPS_COLLECTION, key: opRow, value: { at: r.updatedAt, fp }, updatedAt: r.updatedAt });
       return { applied: true, record: r };
     },
   };

@@ -40,6 +40,7 @@ ok(p1.aplicado && !p2.aplicado && p2.repetido && p3.aplicado && (await repo.get(
 const led = (await client.query("select count(*)::int c from data_records where collection='$ops'")).rows; ok(led[0].c === 2, "S20 one durable row per applied operation");
 for (let i = 0; i < 60; i++) await ad(`w${i}`); const again = await ad("e1|n1"); ok(!again.aplicado && again.repetido, "S21 durable: replay after 60 other operations still ignored");
 const nv = (await repo.get(O, C, "a")).value.n; const failed = await datosAdd(repo, O, { collection: C, key: "a", field: "n", amount: -100000, min: 0, operationId: "rej1" }, true); const cnt = (await client.query("select count(*)::int c from data_records where collection='$ops'")).rows[0].c;
+const cfx: any = await datosAdd(repo, O, { collection: C, key: "a", field: "n", amount: 99, operationId: "e1|n1" }, true); ok(!cfx.success && /datos distintos/.test(cfx.error), "S21d same operation id, different payload: conflict error");
 ok(!failed.aplicado && (await repo.get(O, C, "a")).value.n === nv && cnt === 62, "S21b rejected op leaves no ledger row and no change");
 await client.query(`INSERT INTO data_records(organization_id,collection,key,value) VALUES ('o1','c1','hp','{"n": 0.12345678901234567890}')`); const hp = await datosAdd(repo, O, { collection: C, key: "hp", field: "n", amount: 0 }, true);
 ok(!hp.aplicado && /precisión/.test(hp.motivo), `S21c stored decimal with more digits than a double: rejected before any conversion (${hp.motivo})`);

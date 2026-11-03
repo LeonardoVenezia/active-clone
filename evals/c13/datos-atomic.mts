@@ -72,6 +72,7 @@ ok(exactSum(Number.MAX_SAFE_INTEGER, 1) === null && exactSum(0.1234567890123456,
   ok(a.aplicado && !b.aplicado && b.repetido && /ya se aplicó/.test(b.motivo) && c.aplicado && d.aplicado && e.aplicado && (await r.get(O, "sku", "o")).value.n === 6, "R2 same operation id applies once; distinct ids apply; no id = no dedupe");
   for (let i = 0; i < 60; i++) await add(`x${i}`);
   ok(!(await add("exec1|node1")).aplicado, "R3 durable: replay after 60 other operations on the same record is still ignored (no window)");
+  const cf: any = await datosAdd(r, O, { ...C, key: "o", field: "n", amount: -5, operationId: "exec1|node1" }, true); ok(!cf.success && /datos distintos/.test(cf.error), "R4 same operation id with a different amount is a conflict (error), not ignored");
 }
 // Internal collections are unreachable from user ops
 { const r = memoryRepo(); for (const col of ["$ops", "$schemas", "$x"]) {
