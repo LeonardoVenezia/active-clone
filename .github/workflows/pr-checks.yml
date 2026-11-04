@@ -43,7 +43,9 @@ jobs:
         run: pnpm check
 
       - name: Run type check
+        if: success() || failure()
         run: pnpm type-check
 
       - name: Run build
+        if: success() || failure()
         run: pnpm build
