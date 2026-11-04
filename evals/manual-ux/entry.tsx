@@ -2,6 +2,7 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {Provider,createStore} from 'jotai';
 import {ReactFlowProvider} from '@xyflow/react';
+import {WorkflowCanvas} from '../../components/workflow/workflow-canvas';
 import Home from '../../app/new-workflow/page';
 import {PanelInner} from '../../components/workflow/node-config-panel';
 import {OverlayProvider} from '../../components/overlays/overlay-provider';
@@ -19,6 +20,7 @@ store.set(state.isWorkflowOwnerAtom,true);
 store.set(state.canEditWorkflowAtom,true);
 w.qaRouter={replace:(url:string)=>{w.redirects.push(url);},push:()=>{},refresh:()=>{}};
 w.redirects=[];
-w.qa={save:()=>api.workflow.update('qa-local',{nodes:store.get(state.nodesAtom),edges:store.get(state.edgesAtom)}),state:()=>({nodes:store.get(state.nodesAtom),edges:store.get(state.edgesAtom)}),loadConfig:(cfg:any)=>store.set(state.nodesAtom,[{id:'action',type:'action',position:{x:0,y:0},data:{type:'action',label:'',config:cfg}}])};
-const content=<Provider store={store}><ReactFlowProvider><OverlayProvider>{mode==='home'?<Home/>:<PanelInner/>}</OverlayProvider></ReactFlowProvider></Provider>;
+w.qa={selectAction:()=>store.set(state.selectedNodeAtom,'action'),save:()=>api.workflow.update('qa-local',{nodes:store.get(state.nodesAtom),edges:store.get(state.edgesAtom)}),state:()=>({nodes:store.get(state.nodesAtom),edges:store.get(state.edgesAtom)}),loadConfig:(cfg:any)=>store.set(state.nodesAtom,store.get(state.nodesAtom).map(n=>n.id==='action'?{...n,data:{...n.data,config:cfg}}:n))};
+if(mode==='visual'){store.set(state.nodesAtom,[{id:'visual-trigger',type:'trigger',position:{x:0,y:0},data:{type:'trigger',label:'Manual',config:{triggerType:'Manual'}}},{id:'action',type:'action',position:{x:250,y:0},data:{type:'action',label:'Guardar QA',config:{actionType:'Datos',operation:'save',collection:'qa_local',key:'SKU_DEMO',value:'{"stock":5}'}}}]);store.set(state.edgesAtom,[{id:'visual-edge',source:'visual-trigger',target:'action',type:'animated'}]);store.set(state.rightPanelWidthAtom,'384px');}
+const content=<Provider store={store}><ReactFlowProvider><OverlayProvider>{mode==='visual'?<div className="h-screen w-full bg-background text-foreground"><WorkflowCanvas/><aside className="absolute right-0 top-0 h-screen w-96 border-l bg-background"><PanelInner/></aside></div>:mode==='home'?<Home/>:<div className="h-screen w-full bg-background text-foreground"><PanelInner/></div>}</OverlayProvider></ReactFlowProvider></Provider>;
 createRoot(document.getElementById('root')!).render(new URLSearchParams(location.search).has('strict')?<React.StrictMode>{content}</React.StrictMode>:content);
