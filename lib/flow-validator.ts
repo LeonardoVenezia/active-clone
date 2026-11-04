@@ -902,18 +902,29 @@ export function datosShapeError(nodes: FlowNode[]): string | null {
   return null;
 }
 
-// Datos can finish successfully with estado "rechazado": whatever runs after a state-changing Datos step must be gated on its estado.
+// Datos steps finish successfully even when nothing changed (rejected, duplicate, no match). What follows a state-changing step must test
+// the field THAT operation returns; a Condition has only a "true" path. Positive tests (estado === 'aplicado', creado === true, ...) and negative
+// ones (rechazado / false: legitimate "was rejected" flows) are both accepted. Limits: only direct successors are checked, and a node that also has
+// another parent outside the gate still runs (merge semantics) - that is not detected here.
+const DATOS_GATE_FIELD: Record<string, string> = { applyTogether: "estado", saveIfAbsent: "creado", updateIfMatches: "actualizado", add: "aplicado" };
 export function datosGateError(nodes: FlowNode[], edges: FlowEdge[]): string | null {
   const byId = new Map(nodes.map((n) => [n.id, n] as const));
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   for (const n of nodes) {
     if (actionTypeOf(n) !== "Datos") continue;
     const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
-    if (!["applyTogether", "saveIfAbsent", "updateIfMatches", "add"].includes(String(cfg.operation))) continue;
+    const op = String(cfg.operation); const field = DATOS_GATE_FIELD[op];
+    if (!field) continue;
     for (const e of edges) {
       if (e.source !== n.id) continue;
       const t = byId.get(e.target); const c = (t?.data?.config ?? {}) as Record<string, unknown>;
-      const gated = t && actionTypeOf(t) === "Condition" && typeof c.condition === "string" && c.condition.includes(`{{@${n.id}:`) && /\.estado\b/.test(c.condition);
-      if (!gated) return `consistencia: node "${e.target}" runs right after Datos "${n.id}" without a Condition on its estado; a rejected Datos step still finishes successfully, so put a Condition ({{@${n.id}:<label>.estado}} === 'aplicado') before anything that follows`;
+      const cond = typeof c.condition === "string" ? c.condition : "";
+      const ref = `\\{\\{@${esc(n.id)}:[^}]*\\.${field}\\}\\}`;
+      const clause = field === "estado"
+        ? new RegExp(`^\\s*${ref}\\s*(===?|!==?)\\s*['"](aplicado|rechazado)['"]\\s*$`)
+        : new RegExp(`^\\s*(!\\s*)?${ref}(\\s*(===?|!==?)\\s*(true|false))?\\s*$`);
+      const ok = t && actionTypeOf(t) === "Condition" && !cond.includes("||") && cond.split("&&").some((part) => clause.test(part));
+      if (!ok) return `consistencia: node "${e.target}" runs right after Datos "${n.id}" (${op}) without a Condition that tests its result. ${op} finishes successfully even when it changed nothing; it returns "${field}", so put a Condition on {{@${n.id}:<label>.${field}}}${field === "estado" ? " === 'aplicado'" : " === true"} before what follows (a Condition only has a "true" path; do not combine it with || and do not test a different field)`;
     }
   }
   return null;

@@ -381,6 +381,9 @@ const JSON_STRING_CONFIG_KEYS = new Set([
   "responseSchema",
 ]);
 
+// Datos also keeps JSON documents as text in "value" and "expected" (saved as parsed JSON). Scoped to Datos so other actions' plain text is untouched.
+const DATOS_JSON_STRING_CONFIG_KEYS = new Set([...JSON_STRING_CONFIG_KEYS, "value", "expected"]);
+
 function escapeForJsonString(raw: string): string {
   return raw
     .replace(/\\/g, "\\\\")
@@ -401,7 +404,7 @@ function processTemplates(
 
   for (const [key, value] of Object.entries(config)) {
     if (typeof value === "string") {
-      const jsonStringKey = JSON_STRING_CONFIG_KEYS.has(key);
+      const jsonStringKey = (config.actionType === "Datos" ? DATOS_JSON_STRING_CONFIG_KEYS : JSON_STRING_CONFIG_KEYS).has(key);
       // Process template variables like {{@nodeId:Label.field}}
       let processedValue = value;
       const templatePattern = /\{\{@([^:]+):([^}]+)\}\}/g;

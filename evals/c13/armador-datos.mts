@@ -84,7 +84,26 @@ ok(r3.success && r3.estado === "aplicado", "string form of operations is also ac
   const mkn = (id: string, type: string, config: any) => ({ id, type: type === "trigger" ? "trigger" : "action", position: { x: 0, y: 0 }, data: { type, label: id, config } });
   const sh: any = { nodes: [mkn("t", "trigger", { triggerType: "Manual", inputFields: [{ key: "a", label: "A" }] }), mkn("d", "action", { actionType: "Datos", operation: "applyTogether", operations: JSON.stringify([{ operation: "saveIfAbsent", collection: "movimientos", key: "{{@t:t.a}}:{{@g:G.products[0].id}}" }]) }), mkn("n", "action", { actionType: "Datos", operation: "save", collection: "avisos", key: "{{@t:t.a}}", value: "{}" })], edges: [{ id: "e1", source: "t", target: "d" }, { id: "e2", source: "d", target: "n" }] };
   const errs: string[] = computeFlowErrors(sh, { composioCatalogMap: new Map(), sheetContracts: [], userPrompt: "descontá el stock de cada producto del pedido" });
-  ok(errs.some((e) => /without a Condition on its estado/.test(e)), "computeFlowErrors reports the missing estado gate");
+  ok(errs.some((e) => /without a Condition that tests its result/.test(e)), "computeFlowErrors reports the missing estado gate");
   ok(errs.some((e) => /uses one element of a list/.test(e)), "computeFlowErrors reports the dropped-lines risk");
+}
+{
+  const fvg: any = await import("../../lib/flow-validator"); const F = fvg.default ?? fvg;
+  const dn = (id: string, cfg: any) => ({ id, type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: id, config: { actionType: "Datos", ...cfg } } });
+  const cn = (id: string, condition: string) => ({ id, type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: id, config: { actionType: "Condition", condition } } });
+  const nx = dn("n1", { operation: "save", collection: "x", key: "k" });
+  const gate = (op: string, cond: string) => F.datosGateError([dn("d1", { operation: op }), cn("c1", cond), nx], [{ id: "e1", source: "d1", target: "c1" }, { id: "e2", source: "c1", target: "n1" }]);
+  ok(!!gate("saveIfAbsent", "{{@d1:D.estado}} === 'aplicado'"), "gate by op: estado after saveIfAbsent is rejected (that op returns creado)");
+  ok(!gate("saveIfAbsent", "{{@d1:D.creado}} === true"), "gate by op: creado === true after saveIfAbsent passes");
+  ok(!gate("saveIfAbsent", "{{@d1:D.creado}}"), "gate by op: bare creado passes");
+  ok(!gate("updateIfMatches", "{{@d1:D.actualizado}} === true"), "gate by op: actualizado after updateIfMatches passes");
+  ok(!!gate("updateIfMatches", "{{@d1:D.creado}} === true"), "gate by op: wrong field after updateIfMatches rejected");
+  ok(!gate("add", "{{@d1:D.aplicado}} === true"), "gate by op: aplicado after add passes");
+  ok(!gate("applyTogether", "{{@d1:D.estado}} === 'rechazado'"), "gate: legitimate 'was rejected' path is preserved");
+  ok(!!gate("applyTogether", "{{@d1:D.estado}} !== 'cancelado'"), "gate: estado compared with an unrelated value is rejected");
+  ok(!!gate("applyTogether", "{{@d1:D.estado}} === 'aplicado' || true"), "gate: || escape hatch rejected");
+  ok(!gate("applyTogether", "{{@d1:D.estado}} === 'aplicado' && {{@t:T.x}} > 1"), "gate: && with another clause passes");
+  ok(!F.datosGateError([dn("d1", { operation: "read" }), nx], [{ id: "e", source: "d1", target: "n1" }]), "gate: read flows need no Condition");
+  ok(!F.datosGateError([dn("d1", { operation: "save" }), nx], [{ id: "e", source: "d1", target: "n1" }]), "gate: plain save needs no Condition");
 }
 process.exit(fails ? 1 : 0);

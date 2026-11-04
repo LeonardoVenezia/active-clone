@@ -56,4 +56,25 @@ console.log(`INFO unquoted reference with a quote in its data -> JSON.parse ${pa
 ok(!parsed, "unquoted reference with quote data: JSON is invalid (reproduced) and must be rejected, not partially applied");
 const resRaw: any = await datosApplyTogether(memoryRepo(), "org", { operations: cfgRaw.operations, operationId: "y" });
 ok(!(resRaw.success && resRaw.estado === "aplicado"), `unparseable operations are not applied (success=${resRaw.success}, error=${String(resRaw.error).slice(0, 60)})`);
+// 7. top-level value / expected (single operations): same two problems, reproduced and fixed
+const { datosSave } = core.default ?? core;
+const valObj = { nota: "{{@trig:T.nota}}", sku: "{{@trig:T.sku}}" };
+const rawCfgObj: any = processTemplates({ actionType: "Datos", operation: "save", value: valObj }, outputs(2, { nota: 'dice "hola"' }));
+ok(JSON.stringify(rawCfgObj.value).includes("{{@trig:T.nota}}"), "value as object: references stay unresolved if saved as an object (reproduced)");
+const shv: any = { nodes: [], edges: [] };
+shadowApply({ op: "addNode", node: { id: "v", type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: "V", config: { actionType: "Datos", operation: "save", collection: "avisos", key: "k1", value: valObj } } } } as any, shv);
+ok(typeof shv.nodes[0].data.config.value === "string", "builder addNode: Datos value object serialized to a JSON string");
+const cfgV: any = processTemplates(shv.nodes[0].data.config, outputs(2, { nota: 'dice "hola"\nchau' }));
+let pv: any = null; try { pv = JSON.parse(cfgV.value); } catch {}
+ok(pv && pv.nota === 'dice "hola"\nchau' && pv.sku === "S1", `value: quoted reference with quote/newline data resolves to valid JSON (${JSON.stringify(cfgV.value).slice(0, 70)})`);
+const repoV = memoryRepo(); const sv: any = await datosSave(repoV, "org", { collection: "avisos", key: "k1", value: cfgV.value });
+const rv: any = await datosRead(repoV, "org", { collection: "avisos", key: "k1" });
+ok(sv.success && typeof rv.record?.value === "object" && rv.record.value.sku === "S1", `value: saved as an object with the real values (got ${JSON.stringify(rv.record?.value).slice(0, 70)})`);
+// non-Datos actions keep their plain text untouched (the escaping set is scoped to Datos)
+const other: any = processTemplates({ actionType: "slack/send-message", value: 'dijo "{{@trig:T.nota}}"' }, outputs(2, { nota: 'x"y' }));
+ok(other.value === 'dijo "x"y"', "other actions: value text is not JSON-escaped");
+// builder integration: the same model-form op line the route parses (JSONL) and the updateNode path both normalize
+const line = JSON.stringify({ op: "addNode", node: { id: "d9", type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: "D9", config: { actionType: "Datos", operation: "applyTogether", operations: ops } } } });
+const sh9: any = { nodes: [], edges: [] }; const accepted = shadowApply(JSON.parse(line), sh9);
+ok(accepted && typeof sh9.nodes[0].data.config.operations === "string", "builder JSONL addNode line (model form) is normalized in the shadow graph");
 process.exit(fails ? 1 : 0);
