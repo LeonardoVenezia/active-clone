@@ -10,7 +10,8 @@ const a = src.indexOf("const JSON_STRING_CONFIG_KEYS"); const b = src.indexOf("/
 if (a < 0 || b < 0) { console.log("FAIL could not slice processTemplates from the executor"); process.exit(1); }
 const js = ts.transpileModule(src.slice(a, b), { compilerOptions: { target: "ES2022" } }).outputText;
 const { resolveFieldValue } = await import("../../lib/field-path");
-const processTemplates = new Function("resolveFieldValue", js + "\nreturn processTemplates;")(resolveFieldValue);
+const { jsonFormatTag } = await import("../../lib/datos/value-format");
+const processTemplates = new Function("resolveFieldValue", "datosJsonFormatTag", js + "\nreturn processTemplates;")(resolveFieldValue, jsonFormatTag);
 const core: any = await import("../../lib/datos/core"); const { datosApplyTogether, datosRead, memoryRepo } = core.default ?? core;
 const bc: any = await import("../../lib/agent/build-core"); const { shadowApply } = bc.default ?? bc;
 let fails = 0; const ok = (c: boolean, m: string) => { if (!c) fails++; console.log(`${c ? "PASS" : "FAIL"} ${m}`); };
@@ -95,23 +96,36 @@ const ts2 = await typed(u, "str"); ok(typeof ts2 === "string", `unquoted string 
 const rp2 = memoryRepo(); await datosSave(rp2, "org", { collection: "saldos", key: "S9", value: tq.num ? JSON.stringify({ stock: tq.num.f }) : "{}" });
 const bad: any = await core.datosAdd(rp2, "org", { collection: "saldos", key: "S9", field: "stock", amount: -1, operationId: "a1" });
 ok(!(bad.success && bad.aplicado), `add on a text-typed stock is refused (success=${bad.success}, aplicado=${bad.aplicado}, error=${String(bad.error).slice(0, 50)})`);
-// 9. explicit contract: valueFormat "json" (set by the builder when it serializes an object) refuses text that does not parse; legacy steps are unchanged
-const rs = memoryRepo();
-const cfgNull: any = processTemplates({ actionType: "Datos", operation: "save", value: u, valueFormat: "json" }, { trig: { label: "T", data: { v: null } } });
-const strictBad: any = await datosSave(rs, "org", { collection: "c", key: "k1", value: cfgNull.value, valueFormat: cfgNull.valueFormat });
-const afterBad: any = await datosRead(rs, "org", { collection: "c", key: "k1" });
-ok(!strictBad.success && !afterBad.record, `valueFormat json: broken JSON is refused and nothing is written (error=${String(strictBad.error).slice(0, 50)})`);
-const legacy: any = await datosSave(rs, "org", { collection: "c", key: "k2", value: cfgNull.value });
-ok(legacy.success, "no valueFormat: legacy behaviour unchanged (text stored as before)");
-const cfgOk: any = processTemplates({ actionType: "Datos", operation: "save", value: u, valueFormat: "json" }, { trig: { label: "T", data: { v: 5 } } });
-const strictOk: any = await datosSave(rs, "org", { collection: "c", key: "k3", value: cfgOk.value, valueFormat: "json" });
-ok(strictOk.success && strictOk.record.value.f === 5, "valueFormat json: valid JSON saves as typed object");
-const plainText: any = await datosSave(rs, "org", { collection: "c", key: "k4", value: "hola {mundo", valueFormat: undefined });
-ok(plainText.success, "plain text that merely contains a brace is still saved as text without the flag");
+// 9. typed whole-reference substitution + explicit, self-invalidating format tags (value, expected and operations each have their own)
+const T = (text: string) => jsonFormatTag(text);
+const srcOut = (v: unknown) => ({ trig: { label: "T", data: { v, q: 2, name: "ana" } } });
+const typedSave = async (template: string, v: unknown, withTag = true) => {
+  const cfg: any = processTemplates({ actionType: "Datos", operation: "save", value: template, ...(withTag ? { valueFormat: T(template) } : {}) }, srcOut(v));
+  const rp = memoryRepo(); const res: any = await datosSave(rp, "org", { collection: "c", key: "k", value: cfg.value, valueFormat: cfg.valueFormat });
+  const rd: any = await datosRead(rp, "org", { collection: "c", key: "k" }); return { cfg, res, val: rd.record?.value, found: !!rd.record };
+};
+const w = '{"f":"{{@trig:T.v}}","g":"hola {{@trig:T.name}}"}';
+for (const [name, v] of [["number", 5], ["boolean", true], ["false", false], ["null", null], ["text with quote", 'x"y\nz'], ["object", { a: 1 }], ["list", [1, 2]]] as const) {
+  const r = await typedSave(w, v);
+  ok(r.res.success && JSON.stringify(r.val.f) === JSON.stringify(v) && r.val.g === "hola ana", `typed whole ref keeps source ${name} (got ${JSON.stringify(r.val?.f)}), interpolated text stays text`);
+}
+const noTag = await typedSave(w, 5, false); ok(noTag.val?.f === "5", "no tag: legacy behaviour (text) unchanged");
+const staleTag: any = processTemplates({ actionType: "Datos", operation: "save", value: w + " ", valueFormat: T(w) }, srcOut(5));
+ok(staleTag.valueFormat === undefined && JSON.parse(staleTag.value).f === "5", "edited text no longer matches the tag: legacy path and flag dropped");
+const wrongField: any = processTemplates({ actionType: "Datos", operation: "updateIfMatches", value: "texto libre", expected: w, expectedFormat: T(w), valueFormat: T("otro") }, srcOut(5));
+ok(wrongField.valueFormat === undefined && wrongField.expectedFormat === "json" && JSON.parse(wrongField.expected).f === 5 && wrongField.value === "texto libre", "value and expected carry independent flags: plain text value untouched, expected typed");
+const nullDoc = await typedSave("null", null); ok(nullDoc.res.success && nullDoc.found && nullDoc.val === null, "a valid JSON null document is saved as null, not treated as broken");
+const broken = await typedSave('{"f":{{@trig:T.v}}}', null);
+ok(!broken.res.success && !broken.found, `tagged template that is not valid JSON before substitution is refused, nothing written (error=${String(broken.res.error).slice(0, 40)})`);
+const opsT = JSON.stringify([{ operation: "saveIfAbsent", collection: "m", key: "{{@trig:T.name}}:{{@trig:T.q}}", value: { n: "{{@trig:T.q}}", nul: "{{@trig:T.v}}" } }, { operation: "add", collection: "saldos", key: "S1", field: "stock", amount: "-{{@trig:T.q}}", min: "0" }]);
+const cfgOps: any = processTemplates({ actionType: "Datos", operation: "applyTogether", operations: opsT, operationsFormat: T(opsT) }, srcOut(null));
+const parsedOps = JSON.parse(cfgOps.operations);
+ok(parsedOps[0].key === "ana:2" && parsedOps[0].value.n === 2 && parsedOps[0].value.nul === null && parsedOps[1].amount === "-2", "operations: item value keeps source types, key/amount stay text");
+const repoT = memoryRepo(); await repoT.insertIfAbsent("org", "saldos", "S1", { stock: 5 }, 5000);
+const resT: any = await datosApplyTogether(repoT, "org", { operations: cfgOps.operations, operationId: "t1" }); const stT: any = await datosRead(repoT, "org", { collection: "saldos", key: "S1" });
+ok(resT.success && resT.estado === "aplicado" && stT.record.value.stock === 3, "operations with typed item values apply: stock 5 -> 3");
 const shf: any = { nodes: [], edges: [] };
-shadowApply({ op: "addNode", node: { id: "w", type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: "W", config: { actionType: "Datos", operation: "save", collection: "a", key: "k", value: { a: "{{@trig:T.v}}" } } } } } as any, shf);
-ok(shf.nodes[0].data.config.valueFormat === "json" && typeof shf.nodes[0].data.config.value === "string", "builder marks serialized values with valueFormat json");
-const shp: any = { nodes: [], edges: [] };
-shadowApply({ op: "addNode", node: { id: "w", type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: "W", config: { actionType: "Datos", operation: "save", collection: "a", key: "k", value: "texto libre" } } } } as any, shp);
-ok(shp.nodes[0].data.config.valueFormat === undefined, "builder does not mark plain text values");
+shadowApply({ op: "addNode", node: { id: "w", type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: "W", config: { actionType: "Datos", operation: "updateIfMatches", collection: "a", key: "k", value: "texto libre", expected: { estado: "{{@trig:T.v}}" } } } } } as any, shf);
+const c0 = shf.nodes[0].data.config;
+ok(c0.expectedFormat === jsonFormatTag(c0.expected) && c0.valueFormat === undefined && c0.value === "texto libre", "builder tags only the field it serialized (expected), not the plain text value");
 process.exit(fails ? 1 : 0);

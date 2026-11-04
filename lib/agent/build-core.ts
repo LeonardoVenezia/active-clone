@@ -7,6 +7,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { getActionOutputFields, getActionOutputItemFields } from "@/plugins/registry";
 import { repairOutputContracts } from "@/lib/agent/contract-repair";
+import { jsonFormatTag } from "@/lib/datos/value-format";
 import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, cyclicFlowError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, datosMovementKeyError, datosInLoopError, datosShapeError, datosGateError, datosCoverageError, emptyResultGuardError, refOrderRaceError, requestCoverageError, sheetContractError, shipmentDetailError, unwiredReportStepError, userIntentText, validateFlow } from "@/lib/flow-validator";
 
 // Builder core shared by the /api/ai/generate route and the unified chat agent: operations, the validated in-memory graph, the builder rules prompt and valid type sets.
@@ -24,7 +25,7 @@ export function normalizeDatosConfig(cfg: Record<string, unknown> | undefined): 
   // The executor only resolves {{@...}} inside string values, so every JSON document of a Datos step is kept as text: operations, value, expected.
   for (const k of ["operations", "value", "expected"]) {
     const v = cfg[k];
-    if (v !== null && typeof v === "object") { cfg[k] = JSON.stringify(v); if (k !== "operations") cfg.valueFormat = "json"; }
+    if (v !== null && typeof v === "object") { const text = JSON.stringify(v); cfg[k] = text; cfg[`${k}Format`] = jsonFormatTag(text); }
   }
 }
 export function shadowApply(operation: Operation, shadow: Shadow): boolean {

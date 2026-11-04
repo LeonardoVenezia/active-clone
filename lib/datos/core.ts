@@ -225,10 +225,10 @@ export async function datosSaveIfAbsent(repo: DatosRepo, orgId: unknown, args: {
 }
 
 /** Actualizar si coincide: replaces the value only if the current one equals `expected` (jsonb semantic equality: 1 equals 1.0). */
-export async function datosUpdateIfMatches(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; expected: unknown; value: unknown; valueFormat?: unknown; operationId?: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ actualizado: boolean; repetido?: boolean; motivo?: string; record: DatosRecord | null }>> {
+export async function datosUpdateIfMatches(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; expected: unknown; value: unknown; valueFormat?: unknown; expectedFormat?: unknown; operationId?: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ actualizado: boolean; repetido?: boolean; motivo?: string; record: DatosRecord | null }>> {
   const g = guard(orgId, enabled) ?? checkNames(args.collection, args.key);
   if (g) return { success: false, error: g };
-  const exp = parseValue(args.expected, args.valueFormat === "json");
+  const exp = parseValue(args.expected, args.expectedFormat === "json");
   if (!exp.ok) return { success: false, error: exp.error };
   const parsed = parseValue(args.value, args.valueFormat === "json");
   if (!parsed.ok) return { success: false, error: parsed.error };

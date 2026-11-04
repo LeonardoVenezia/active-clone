@@ -15,6 +15,7 @@ import {
   type StepImporter,
 } from "./step-registry";
 import { resolveFieldValue } from "./field-path";
+import { jsonFormatTag as datosJsonFormatTag } from "./datos/value-format";
 import { exposeStepOutput } from "./loop-output";
 import type { StepContext } from "./steps/step-handler";
 import { createHook, sleep } from "workflow";
@@ -396,13 +397,60 @@ function escapeForJsonString(raw: string): string {
     .replace(/[\u0000-\u001f\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 
+const WHOLE_REF = /^\{\{@([^:]+):([^}]+)\}\}$/;
+// Typed substitution for Datos JSON documents the builder serialized (format tag matches the text): parse the template, replace a string that is
+// exactly one reference with the source value itself (number, boolean, null, text, object, list), interpolate any other string as text.
+function typedDatosJson(text: string, outputs: NodeOutputs, only?: string[]): string | null {
+  let doc: unknown;
+  try { doc = JSON.parse(text); } catch { return null; }
+  const lookup = (nodeId: string, rest: string): { found: boolean; value: unknown } => {
+    const output = outputs[nodeId.replace(/[^a-zA-Z0-9]/g, "_")];
+    if (!output) return { found: false, value: undefined };
+    const dot = rest.indexOf(".");
+    if (dot === -1) return { found: true, value: output.data };
+    if (output.data === null || output.data === undefined) return { found: true, value: null };
+    return { found: true, value: resolveFieldValue(output.data, rest.substring(dot + 1)) };
+  };
+  const text1 = (v: unknown) => (v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v));
+  const walk = (node: unknown): unknown => {
+    if (typeof node === "string") {
+      const whole = WHOLE_REF.exec(node);
+      if (whole) { const r = lookup(whole[1], whole[2]); if (!r.found) return node; return r.value === undefined ? "" : r.value; }
+      return node.replace(/\{\{@([^:]+):([^}]+)\}\}/g, (m, id, rest) => { const r = lookup(id, rest); return r.found ? text1(r.value) : m; });
+    }
+    if (Array.isArray(node)) return node.map(walk);
+    if (node && typeof node === "object") return Object.fromEntries(Object.entries(node as Record<string, unknown>).map(([k, v]) => [k, walk(v)]));
+    return node;
+  };
+  if (only && Array.isArray(doc)) {
+    // operations list: only each item's value/expected keep their source type; collection, key, field, amount stay text
+    return JSON.stringify(doc.map((item) => (item && typeof item === "object" ? Object.fromEntries(Object.entries(item as Record<string, unknown>).map(([k, v]) => [k, only.includes(k) ? walk(v) : typeof v === "string" ? (walk(v) === v ? v : text1(walk(v))) : v])) : item)));
+  }
+  return JSON.stringify(walk(doc));
+}
+
 function processTemplates(
   config: Record<string, unknown>,
   outputs: NodeOutputs
 ): Record<string, unknown> {
   const processed: Record<string, unknown> = {};
 
+  // Datos documents the builder serialized: the format tag must match the exact text, otherwise the legacy path applies and the flag is dropped.
+  const isDatos = config.actionType === "Datos";
+  const typedKeys = new Set<string>();
+  if (isDatos) {
+    for (const k of ["value", "expected", "operations"]) {
+      const v = config[k]; const tag = config[`${k}Format`];
+      if (typeof v === "string" && typeof tag === "string" && tag === datosJsonFormatTag(v)) typedKeys.add(k);
+    }
+  }
+
   for (const [key, value] of Object.entries(config)) {
+    if (isDatos && /^(value|expected|operations)Format$/.test(key)) { processed[key] = typedKeys.has(key.replace(/Format$/, "")) ? "json" : undefined; continue; }
+    if (typeof value === "string" && typedKeys.has(key)) {
+      const typed = typedDatosJson(value, outputs, key === "operations" ? ["value", "expected"] : undefined);
+      if (typed !== null) { processed[key] = typed; continue; }
+    }
     if (typeof value === "string") {
       const jsonStringKey = (config.actionType === "Datos" ? DATOS_JSON_STRING_CONFIG_KEYS : JSON_STRING_CONFIG_KEYS).has(key);
       // Process template variables like {{@nodeId:Label.field}}
