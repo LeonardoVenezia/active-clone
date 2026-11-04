@@ -443,7 +443,7 @@ function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onC
       {rows.map((r, i) => (
         <div className="space-y-2 rounded-md border p-3" key={i}>
           <div className="flex items-center justify-between gap-2">
-            <button className="min-w-0 flex-1 truncate text-left text-sm font-medium" onClick={() => setCollapsed((c) => (c.includes(i) ? c.filter((x) => x !== i) : [...c, i]))} type="button">
+            <button className="min-w-0 flex-1 break-words text-left text-sm font-medium" onClick={() => setCollapsed((c) => (c.includes(i) ? c.filter((x) => x !== i) : [...c, i]))} type="button">
               {collapsed.includes(i) ? "▸" : "▾"} Cambio {i + 1}: {TOGETHER_LABEL[r.operation] ?? r.operation}
               {r.collection || r.key ? ` · ${r.collection}${r.key ? ` / ${r.key}` : ""}` : ""}
             </button>
