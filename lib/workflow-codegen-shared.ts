@@ -100,11 +100,11 @@ export function buildEdgeMap(edges: WorkflowEdge[]): Map<string, string[]> {
  */
 export function findTriggerNodes(
   nodes: WorkflowNode[],
-  edges: WorkflowEdge[]
+  edges: WorkflowEdge[],
 ): WorkflowNode[] {
   const nodesWithIncoming = new Set(edges.map((e) => e.target));
   return nodes.filter(
-    (node) => node.data.type === "trigger" && !nodesWithIncoming.has(node.id)
+    (node) => node.data.type === "trigger" && !nodesWithIncoming.has(node.id),
   );
 }
 
@@ -178,10 +178,80 @@ export function escapeForTemplateLiteral(str: string): string {
  * Sanitize a function name
  */
 export function sanitizeFunctionName(name: string): string {
-  return name
+  const result = name
     .replace(/[^a-zA-Z0-9]/g, "_")
     .replace(NUMBER_START_PATTERN, "_$&")
     .replace(/_+/g, "_");
+  if (!result) {
+    return "executeWorkflow";
+  }
+  // A declaration in an async ES module cannot use these binding names.
+  const reserved = new Set([
+    "await",
+    "break",
+    "case",
+    "catch",
+    "class",
+    "const",
+    "continue",
+    "debugger",
+    "default",
+    "delete",
+    "do",
+    "else",
+    "enum",
+    "export",
+    "extends",
+    "false",
+    "finally",
+    "for",
+    "function",
+    "if",
+    "implements",
+    "import",
+    "in",
+    "instanceof",
+    "interface",
+    "let",
+    "new",
+    "null",
+    "package",
+    "private",
+    "protected",
+    "public",
+    "return",
+    "static",
+    "super",
+    "switch",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "typeof",
+    "var",
+    "void",
+    "while",
+    "with",
+    "yield",
+    "eval",
+    "arguments",
+  ]);
+  return reserved.has(result) ? `_${result}` : result;
+}
+
+/** Use the same exported binding in Code previews and download route imports. */
+export function getWorkflowFunctionName(name: string): string {
+  const baseName =
+    name
+      .replace(/[^a-zA-Z0-9\s]/g, "")
+      .split(WHITESPACE_PATTERN)
+      .map((word, index) =>
+        index === 0
+          ? word.toLowerCase()
+          : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
+      )
+      .join("") || "execute";
+  return sanitizeFunctionName(`${baseName}Workflow`);
 }
 
 /**
@@ -302,7 +372,7 @@ const SYSTEM_STEP_INFO: Record<
     functionName: "conditionStep",
     importPath: "./steps/condition-step",
   },
-  "Fórmula": {
+  Fórmula: {
     functionName: "formulaStep",
     importPath: "./steps/formula-step",
   },

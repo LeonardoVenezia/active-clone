@@ -26,6 +26,7 @@ import { api } from "@/lib/api-client";
 import { integrationsAtom } from "@/lib/integrations-store";
 import type { IntegrationType } from "@/lib/types/integration";
 import { generateWorkflowCode } from "@/lib/workflow-codegen";
+import { getWorkflowFunctionName } from "@/lib/workflow-codegen-shared";
 import {
   clearNodeStatusesAtom,
   clearWorkflowAtom,
@@ -58,8 +59,6 @@ const SYSTEM_ACTION_INTEGRATIONS: Record<string, IntegrationType> = {
 };
 
 // Regex constants
-const NON_ALPHANUMERIC_REGEX = /[^a-zA-Z0-9\s]/g;
-const WORD_SPLIT_REGEX = /\s+/;
 
 // Helper to generate code filename based on node type
 function getCodeFilename(node: {
@@ -337,16 +336,7 @@ export function ConfigurationOverlay({ overlayId }: ConfigurationOverlayProps) {
 
   // Generate full workflow code
   const workflowCode = (() => {
-    const baseName = currentWorkflowName
-      .replace(NON_ALPHANUMERIC_REGEX, "")
-      .split(WORD_SPLIT_REGEX)
-      .map((word, index) =>
-        index === 0
-          ? word.toLowerCase()
-          : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-      )
-      .join("");
-    const functionName = `${baseName}Workflow`;
+    const functionName = getWorkflowFunctionName(currentWorkflowName);
     const { code } = generateWorkflowCode(nodes, edges, { functionName });
     return code;
   })();

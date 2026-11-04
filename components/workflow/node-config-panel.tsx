@@ -29,6 +29,7 @@ import { withActionDefaults } from "@/lib/action-config-defaults";
 import { integrationsAtom } from "@/lib/integrations-store";
 import type { IntegrationType } from "@/lib/types/integration";
 import { generateWorkflowCode } from "@/lib/workflow-codegen";
+import { getWorkflowFunctionName } from "@/lib/workflow-codegen-shared";
 import {
   clearNodeStatusesAtom,
   currentWorkflowIdAtom,
@@ -59,8 +60,6 @@ import { generateNodeCode } from "./utils/code-generators";
 import { WorkflowRuns } from "./workflow-runs";
 
 // Regex constants
-const NON_ALPHANUMERIC_REGEX = /[^a-zA-Z0-9\s]/g;
-const WORD_SPLIT_REGEX = /\s+/;
 
 // System actions that need integrations (not in plugin registry)
 const SYSTEM_ACTION_INTEGRATIONS: Record<string, IntegrationType> = {
@@ -270,20 +269,7 @@ export const PanelInner = () => {
 
   // Generate workflow code
   const workflowCode = useMemo(() => {
-    const baseName =
-      currentWorkflowName
-        .replace(NON_ALPHANUMERIC_REGEX, "")
-        .split(WORD_SPLIT_REGEX)
-        .map((word, i) => {
-          if (i === 0) {
-            return word.toLowerCase();
-          }
-          return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-        })
-        .join("") || "execute";
-
-    const functionName = `${baseName}Workflow`;
-
+    const functionName = getWorkflowFunctionName(currentWorkflowName);
     const { code } = generateWorkflowCode(nodes, edges, { functionName });
     return code;
   }, [nodes, edges, currentWorkflowName]);

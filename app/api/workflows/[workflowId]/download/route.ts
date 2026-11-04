@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { workflows } from "@/lib/db/schema";
 import { generateWorkflowModule } from "@/lib/workflow-codegen";
+import { getWorkflowFunctionName } from "@/lib/workflow-codegen-shared";
 import type { WorkflowEdge, WorkflowNode } from "@/lib/workflow-store";
 import { getAllEnvVars, getDependenciesForActions } from "@/plugins";
 
@@ -16,8 +17,6 @@ const BOILERPLATE_PATH = join(process.cwd(), "lib", "next-boilerplate");
 const CODEGEN_TEMPLATES_PATH = join(process.cwd(), "lib", "codegen-templates");
 
 // Regex patterns for code generation
-const NON_ALPHANUMERIC_REGEX = /[^a-zA-Z0-9\s]/g;
-const WHITESPACE_SPLIT_REGEX = /\s+/;
 const TEMPLATE_EXPORT_REGEX = /export default `([\s\S]*)`/;
 
 /**
@@ -59,20 +58,7 @@ function generateWorkflowFiles(workflow: {
 }): Record<string, string> {
   const files: Record<string, string> = {};
 
-  // Generate camelCase function name (same as Code tab)
-  const baseName =
-    workflow.name
-      .replace(NON_ALPHANUMERIC_REGEX, "")
-      .split(WHITESPACE_SPLIT_REGEX)
-      .map((word, i) => {
-        if (i === 0) {
-          return word.toLowerCase();
-        }
-        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-      })
-      .join("") || "execute";
-
-  const functionName = `${baseName}Workflow`;
+  const functionName = getWorkflowFunctionName(workflow.name);
 
   // Generate code for the workflow using the same generator as the Code tab
   const workflowCode = generateWorkflowModule(

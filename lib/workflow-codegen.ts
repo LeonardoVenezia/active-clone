@@ -4,6 +4,7 @@ import {
   buildAccessPath,
   getStepInfo,
   removeInvisibleChars,
+  sanitizeFunctionName,
   TEMPLATE_PATTERN,
   toFriendlyVarName,
   toTypeScriptLiteral,
@@ -37,7 +38,7 @@ export function generateWorkflowCode(
   edges: WorkflowEdge[],
   options: CodeGenOptions = {}
 ): GeneratedCode {
-  const { functionName = "executeWorkflow" } = options;
+  const functionName = sanitizeFunctionName(options.functionName ?? "executeWorkflow");
 
   // Analyze which node outputs are actually used
   const usedNodeOutputs = analyzeNodeUsage(nodes);
