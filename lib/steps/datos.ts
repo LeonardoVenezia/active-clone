@@ -8,7 +8,7 @@ import "server-only";
 
 import { getStepMetadata } from "workflow";
 
-import { datosAdd, datosDefineFields, datosList, datosRead, datosSave, datosSaveIfAbsent, datosUpdateIfMatches } from "../datos/core";
+import { datosAdd, datosApplyTogether, datosDefineFields, datosList, datosRead, datosSave, datosSaveIfAbsent, datosUpdateIfMatches } from "../datos/core";
 import { pgDatosRepo } from "../datos/repo";
 import { type StepInput, withStepLogging } from "./step-handler";
 
@@ -20,6 +20,7 @@ export type DatosInput = StepInput & {
   limit?: unknown;
   fields?: unknown;
   expected?: unknown;
+  operations?: unknown;
   field?: unknown;
   amount?: unknown;
   startAtZero?: unknown;
@@ -51,6 +52,10 @@ async function stepHandler(input: DatosInput, stepId?: string) {
         // Fail closed: without a stable operation identity a retry could add twice.
         if (!stepId) return { success: false as const, error: NO_ID };
         return await datosAdd(pgDatosRepo, org, { collection, key: input.key, field: input.field, amount: input.amount, startAtZero: input.startAtZero, min: input.min, max: input.max, operationId: stepId });
+      case "applyTogether":
+        // Fail closed: without a stable operation identity a retry could apply the list twice.
+        if (!stepId) return { success: false as const, error: NO_ID };
+        return await datosApplyTogether(pgDatosRepo, org, { operations: input.operations, operationId: stepId });
       case "read": return await datosRead(pgDatosRepo, org, { collection, key: input.key });
       case "list": return await datosList(pgDatosRepo, org, { collection, limit: input.limit });
       case "fields":

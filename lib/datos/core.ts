@@ -24,6 +24,8 @@ export const DATOS_LIMITS = {
   maxRecordsPerCollection: 5000,
   /** Max size of a stored operation snapshot (output incl. record + fingerprint). */
   maxSnapshotBytes: 40_000,
+  /** Max operations in one "aplicar cambios juntos" step (technical bound, not a business rule). */
+  maxTogetherOps: 10,
   maxListLimit: 200,
   defaultListLimit: 50,
 } as const;
@@ -43,6 +45,31 @@ export interface DatosRepo {
   compareAndSet(orgId: string, collection: string, key: string, expected: unknown, next: unknown, op?: OpIdentity): Promise<{ updated: boolean; conflict?: boolean; tooLarge?: boolean; record: DatosRecord | null; replayed?: boolean }>;
   /** Atomic: adds `amount` to a numeric field in one statement. Never converts text. */
   increment(orgId: string, collection: string, key: string, field: string, amount: number, opts: IncrementOpts, op?: OpIdentity): Promise<{ applied: boolean; reason?: IncrementReason; record: DatosRecord | null; valor?: number | null; replayed?: boolean }>;
+  /** Atomic: runs every operation in ONE transaction under ONE operation id, or none. Rejection leaves no partial writes. */
+  applyTogether(orgId: string, ops: TogetherOp[], op?: OpIdentity): Promise<TogetherOutcome>;
+}
+
+export type TogetherOp =
+  | { kind: "saveIfAbsent"; collection: string; key: string; value: unknown }
+  | { kind: "updateIfMatches"; collection: string; key: string; expected: unknown; value: unknown }
+  | { kind: "add"; collection: string; key: string; field: string; amount: number; opts: IncrementOpts };
+export type TogetherOutcome =
+  | { status: "applied"; records: (DatosRecord | null)[]; replayed?: boolean }
+  | { status: "rejected"; index: number; reason: string; replayed?: boolean }
+  | { status: "conflict" }
+  | { status: "snapshot_too_large" };
+/** Canonical order for locking: by collection, then key (the same order for every caller, so two batches cannot deadlock). */
+export const togetherLockOrder = (ops: TogetherOp[]) => [...ops.keys()].sort((a, b) => (ops[a].collection === ops[b].collection ? (ops[a].key < ops[b].key ? -1 : ops[a].key > ops[b].key ? 1 : 0) : ops[a].collection < ops[b].collection ? -1 : 1));
+/** Runs the ops in canonical order through the given single-op executors; stops at the first rejection (the caller rolls everything back). */
+export async function runTogether(ops: TogetherOp[], h: { insert(o: Extract<TogetherOp, { kind: "saveIfAbsent" }>): Promise<{ status: string; record: DatosRecord | null }>; cas(o: Extract<TogetherOp, { kind: "updateIfMatches" }>): Promise<{ updated: boolean; record: DatosRecord | null }>; inc(o: Extract<TogetherOp, { kind: "add" }>): Promise<{ applied: boolean; reason?: string; record: DatosRecord | null }> }): Promise<TogetherOutcome> {
+  const records: (DatosRecord | null)[] = new Array(ops.length).fill(null);
+  for (const i of togetherLockOrder(ops)) {
+    const o = ops[i];
+    if (o.kind === "saveIfAbsent") { const r = await h.insert(o); if (r.status !== "created") return { status: "rejected", index: i, reason: r.status === "full" ? "full" : "exists" }; records[i] = r.record; }
+    else if (o.kind === "updateIfMatches") { const r = await h.cas(o); if (!r.updated) return { status: "rejected", index: i, reason: r.record ? "mismatch" : "missing" }; records[i] = r.record; }
+    else { const r = await h.inc(o); if (!r.applied) return { status: "rejected", index: i, reason: r.reason ?? "retry" }; records[i] = r.record; }
+  }
+  return { status: "applied", records };
 }
 
 /**
@@ -265,6 +292,87 @@ export async function datosAdd(repo: DatosRepo, orgId: unknown, args: { collecti
   return { success: true, aplicado: false, ...(r.replayed || r.reason === "duplicate" ? { repetido: true } : {}), motivo: why[r.reason ?? "retry"], valor, record: r.record };
 }
 
+const TOGETHER_WHY: Record<string, string> = {
+  exists: "la clave ya existe",
+  full: "la colección llegó al máximo de 5000 registros",
+  mismatch: "el valor actual es distinto del esperado",
+  missing: "el dato no existe",
+  precision: "el resultado no se puede guardar sin perder precisión decimal",
+  not_object: "el dato no es un objeto con campos",
+  field_missing: "el campo no existe en el dato",
+  not_number: "el campo no es un número",
+  below_min: "el resultado quedaría por debajo del mínimo",
+  above_max: "el resultado quedaría por encima del máximo",
+  out_of_range: `el resultado supera el rango seguro (±${MAX_SAFE})`,
+  too_large: "el resultado supera el máximo de 16 KB",
+  retry: "hubo un cambio simultáneo o el dato tiene demasiados decimales",
+};
+
+/**
+ * Aplicar cambios juntos: a short list of Guardar-si-no-existe / Actualizar-si-coincide / Sumar operations that
+ * are applied all together or not at all, under ONE operation id (replay returns the stored result of the whole list).
+ */
+export async function datosApplyTogether(repo: DatosRepo, orgId: unknown, args: { operations: unknown; operationId?: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ estado: "aplicado" | "rechazado"; repetido?: boolean; motivo?: string; operacion?: number; records?: (DatosRecord | null)[] }>> {
+  const g = guard(orgId, enabled);
+  if (g) return { success: false, error: g };
+  let list = args.operations;
+  if (typeof list === "string") { try { list = JSON.parse(list); } catch { return { success: false, error: "La lista de cambios no es un JSON válido." }; } }
+  if (!Array.isArray(list) || list.length === 0) return { success: false, error: "Indicá al menos un cambio." };
+  if (list.length > DATOS_LIMITS.maxTogetherOps) return { success: false, error: `Se pueden aplicar hasta ${DATOS_LIMITS.maxTogetherOps} cambios juntos.` };
+  const org = orgId as string;
+  const ops: TogetherOp[] = [];
+  const seen = new Set<string>();
+  const fieldsCache = new Map<string, FieldDef[] | null>();
+  for (let i = 0; i < list.length; i++) {
+    const it = list[i] as Record<string, unknown> | null;
+    const at = `Cambio ${i + 1}: `;
+    if (!it || typeof it !== "object" || Array.isArray(it)) return { success: false, error: `${at}formato inválido.` };
+    const bad = checkNames(it.collection, it.key);
+    if (bad) return { success: false, error: at + bad };
+    const col = it.collection as string, key = it.key as string;
+    const id = JSON.stringify([col, key]);
+    if (seen.has(id)) return { success: false, error: `${at}la misma colección y clave aparece dos veces en la lista.` };
+    seen.add(id);
+    if (!fieldsCache.has(col)) fieldsCache.set(col, await datosGetFields(repo, org, col));
+    const fields = fieldsCache.get(col) ?? null;
+    if (it.operation === "saveIfAbsent" || it.operation === "updateIfMatches") {
+      const parsed = parseValue(it.value);
+      if (!parsed.ok) return { success: false, error: at + parsed.error };
+      let toStore = parsed.value;
+      if (fields) { const v = validateAgainstFields(fields, toStore); if (!v.ok) return { success: false, error: at + v.error }; toStore = v.value; }
+      if (it.operation === "saveIfAbsent") ops.push({ kind: "saveIfAbsent", collection: col, key, value: toStore });
+      else {
+        const exp = parseValue(it.expected);
+        if (!exp.ok) return { success: false, error: at + exp.error };
+        ops.push({ kind: "updateIfMatches", collection: col, key, expected: exp.value, value: toStore });
+      }
+    } else if (it.operation === "add") {
+      const field = it.field;
+      if (typeof field !== "string" || !/^[A-Za-z0-9_]{1,40}$/.test(field)) return { success: false, error: `${at}el campo debe usar letras, números y _ (máximo 40).` };
+      const amt = parseAmount(it.amount, "La cantidad a sumar");
+      if (!amt.ok) return { success: false, error: at + amt.error };
+      const opts: IncrementOpts = { startAtZero: it.startAtZero === true || it.startAtZero === "true" };
+      for (const k of ["min", "max"] as const) {
+        const raw = it[k];
+        if (raw === undefined || raw === null || raw === "") continue;
+        const p = parseAmount(raw, k === "min" ? "El mínimo" : "El máximo");
+        if (!p.ok) return { success: false, error: at + p.error };
+        opts[k] = p.n;
+      }
+      if (opts.min !== undefined && opts.max !== undefined && opts.min > opts.max) return { success: false, error: `${at}el mínimo no puede ser mayor que el máximo.` };
+      if (fields) { const def = fields.find((f) => f.name === field); if (!def || def.type !== "numero") return { success: false, error: `${at}"${field}" no es un campo numérico definido en esta colección.` }; }
+      ops.push({ kind: "add", collection: col, key, field, amount: amt.n, opts });
+    } else return { success: false, error: `${at}elegí guardar si no existe, actualizar si coincide o sumar.` };
+  }
+  const opId = typeof args.operationId === "string" && args.operationId.length > 0 ? args.operationId : undefined;
+  const r = await repo.applyTogether(org, ops, opId ? { id: opId, fp: sha(["together", ops]) } : undefined);
+  if (r.status === "conflict") return { success: false, error: CONFLICT_MSG };
+  if (r.status === "snapshot_too_large") return { success: false, error: SNAP_MSG };
+  if (r.status === "applied") return { success: true, estado: "aplicado", ...(r.replayed ? { repetido: true } : {}), records: r.records };
+  const o = ops[r.index];
+  return { success: true, estado: "rechazado", ...(r.replayed ? { repetido: true } : {}), operacion: r.index + 1, motivo: `Cambio ${r.index + 1} (${o.collection} / ${o.key}): ${TOGETHER_WHY[r.reason] ?? r.reason}. No se aplicó ningún cambio.` };
+}
+
 export async function datosRead(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ found: boolean; record: DatosRecord | null }>> {
   const g = guard(orgId, enabled) ?? checkNames(args.collection, args.key);
   if (g) return { success: false, error: g };
@@ -340,6 +448,21 @@ export function memoryRepo(): DatosRepo {
         const r = { collection: c, key, value: next, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() }; m.set(k(o, c, key), r);
         return { applied: true, valor: res, record: r };
       }, { applied: false, reason: "conflict" as IncrementReason, record: null }, { applied: false, reason: "snapshot_too_large" as IncrementReason, record: null });
+    },
+    async applyTogether(o, ops, op) {
+      const self = this as DatosRepo;
+      const row = op ? k(o, OPS_COLLECTION, sha([op.id, "$together", "batch"])) : "";
+      if (op) { const seen = m.get(row); if (seen) { const v = seen.value as { fp: string; r: object }; return v.fp !== op.fp ? { status: "conflict" } : ({ ...(v.r as TogetherOutcome), replayed: true } as TogetherOutcome); } }
+      const backup = new Map(m);
+      const r = await runTogether(ops, { insert: (x) => self.insertIfAbsent(o, x.collection, x.key, x.value, DATOS_LIMITS.maxRecordsPerCollection), cas: (x) => self.compareAndSet(o, x.collection, x.key, x.expected, x.value), inc: (x) => self.increment(o, x.collection, x.key, x.field, x.amount, x.opts) });
+      const rollback = () => { m.clear(); for (const [a, b] of backup) m.set(a, b); };
+      if (r.status === "rejected") rollback();
+      if (op) {
+        const stored = { fp: op.fp, r };
+        if (new TextEncoder().encode(JSON.stringify(stored)).length > DATOS_LIMITS.maxSnapshotBytes) { rollback(); return { status: "snapshot_too_large" }; }
+        m.set(row, { collection: OPS_COLLECTION, key: row, value: stored, updatedAt: new Date(1_700_000_000_000 + ++tick * 1000).toISOString() });
+      }
+      return r;
     },
   };
 }

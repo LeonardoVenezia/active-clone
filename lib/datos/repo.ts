@@ -3,7 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { DATOS_LIMITS, exactSum, type DatosRecord, type DatosRepo, type IncrementReason, MAX_SAFE, OPS_COLLECTION, type OpIdentity } from "./core";
+import { DATOS_LIMITS, exactSum, type DatosRecord, type DatosRepo, type IncrementReason, MAX_SAFE, OPS_COLLECTION, type OpIdentity, type IncrementOpts, type TogetherOp, type TogetherOutcome, runTogether } from "./core";
 import { dataRecords } from "./schema";
 
 const toRecord = (r: typeof dataRecords.$inferSelect): DatosRecord => ({ collection: r.collection, key: r.key, value: r.value, updatedAt: r.updatedAt.toISOString() });
@@ -51,25 +51,9 @@ async function withLedgerTx<T extends { record: DatosRecord | null }>(o: string,
 }
 const scope = (o: string, c: string) => and(eq(dataRecords.organizationId, o), eq(dataRecords.collection, c));
 
-export const pgDatosRepo: DatosRepo = {
-  async put(o, c, key, value) {
-    const [row] = await db.insert(dataRecords).values({ organizationId: o, collection: c, key, value: value as never })
-      .onConflictDoUpdate({ target: [dataRecords.organizationId, dataRecords.collection, dataRecords.key], set: { value: value as never, updatedAt: new Date() } }).returning();
-    return toRecord(row);
-  },
-  async get(o, c, key) {
-    const [row] = await db.select().from(dataRecords).where(and(scope(o, c), eq(dataRecords.key, key))).limit(1);
-    return row ? toRecord(row) : null;
-  },
-  async list(o, c, limit) {
-    return (await db.select().from(dataRecords).where(scope(o, c)).orderBy(desc(dataRecords.updatedAt)).limit(limit)).map(toRecord);
-  },
-  async count(o, c) {
-    const [r] = await db.select({ n: count() }).from(dataRecords).where(scope(o, c));
-    return Number(r?.n ?? 0);
-  },
-  async insertIfAbsent(o, c, key, value, maxRecords, op) {
-    return withLedger(o, c, key, op, async (x) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const insertIfAbsentInner = async (x: Exec, o: string, c: string, key: string, value: unknown, maxRecords: number): Promise<any> => {
+
       // The advisory lock serializes concurrent creators so the 5000-record check and the insert cannot interleave.
       await x.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`datos:${o}:${c}`}))`);
       const cur = await getRow(x, o, c, key);
@@ -78,37 +62,26 @@ export const pgDatosRepo: DatosRepo = {
       if (Number(n?.n ?? 0) >= maxRecords) return { status: "full" as const, record: null };
       const [row] = await x.insert(dataRecords).values({ organizationId: o, collection: c, key, value: value as never }).returning();
       return { status: "created" as const, record: toRecord(row) };
-    }, { conflict: () => ({ status: "conflict" as const, record: null }), tooLarge: () => ({ status: "snapshot_too_large" as const, record: null }) });
-  },
-  async compareAndSet(o, c, key, expected, next, op) {
-    return withLedger(o, c, key, op, async (x) => {
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const compareAndSetInner = async (x: Exec, o: string, c: string, key: string, expected: unknown, next: unknown): Promise<any> => {
+
       const rows = await x.execute(sql`UPDATE data_records SET value = ${JSON.stringify(next)}::jsonb, updated_at = now()
         WHERE organization_id = ${o} AND collection = ${c} AND key = ${key} AND value = ${JSON.stringify(expected)}::jsonb
         RETURNING collection, key, value, updated_at`);
       const row = rowsOf<{ collection: string; key: string; value: unknown; updated_at: Date | string }>(rows)[0];
       if (row) return { updated: true, record: { collection: row.collection, key: row.key, value: row.value, updatedAt: new Date(row.updated_at).toISOString() } };
       return { updated: false, record: await getRow(x, o, c, key) };
-    }, { conflict: () => ({ updated: false, conflict: true, record: null }), tooLarge: () => ({ updated: false, tooLarge: true, record: null }) });
-  },
-  async putWithQuota(o, c, key, value, maxRecords) {
-    return db.transaction(async (tx) => {
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`datos:${o}:${c}`}))`);
-      const [cur] = await tx.select().from(dataRecords).where(and(scope(o, c), eq(dataRecords.key, key))).limit(1);
-      if (!cur) {
-        const [n] = await tx.select({ n: count() }).from(dataRecords).where(scope(o, c));
-        if (Number(n?.n ?? 0) >= maxRecords) return { status: "full" as const, record: null };
-      }
-      const [row] = await tx.insert(dataRecords).values({ organizationId: o, collection: c, key, value: value as never })
-        .onConflictDoUpdate({ target: [dataRecords.organizationId, dataRecords.collection, dataRecords.key], set: { value: value as never, updatedAt: new Date() } }).returning();
-      return { status: "saved" as const, record: toRecord(row) };
-    });
-  },
-  async increment(o, c, key, field, amount, opts, op) {
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const incrementInner = async (x: Exec, o: string, c: string, key: string, field: string, amount: number, opts: IncrementOpts): Promise<any> => {
     const amt = String(amount);
     const min = opts.min === undefined ? null : String(opts.min);
     const max = opts.max === undefined ? null : String(opts.max);
     const MAXS = String(MAX_SAFE);
-    return withLedger(o, c, key, op, async (x) => {
+
       // Lock the record: concurrent adds on it queue here.
       const locked = rowsOf<unknown>(await x.execute(sql`SELECT 1 AS x FROM data_records WHERE organization_id = ${o} AND collection = ${c} AND key = ${key} FOR UPDATE`));
       if (locked.length === 0) return { applied: false, reason: "missing" as IncrementReason, valor: null, record: null };
@@ -146,6 +119,66 @@ export const pgDatosRepo: DatosRepo = {
         else reason = JSON.stringify(v).length + 40 > DATOS_LIMITS.maxValueBytes ? "too_large" : "retry";
       }
       return { applied: false, reason, valor: typeof v?.[field] === "number" ? (v[field] as number) : null, record: cur };
-    }, { conflict: () => ({ applied: false, reason: "conflict" as IncrementReason, record: null }), tooLarge: () => ({ applied: false, reason: "snapshot_too_large" as IncrementReason, record: null }) });
+};
+
+export const pgDatosRepo: DatosRepo = {
+  async put(o, c, key, value) {
+    const [row] = await db.insert(dataRecords).values({ organizationId: o, collection: c, key, value: value as never })
+      .onConflictDoUpdate({ target: [dataRecords.organizationId, dataRecords.collection, dataRecords.key], set: { value: value as never, updatedAt: new Date() } }).returning();
+    return toRecord(row);
+  },
+  async get(o, c, key) {
+    const [row] = await db.select().from(dataRecords).where(and(scope(o, c), eq(dataRecords.key, key))).limit(1);
+    return row ? toRecord(row) : null;
+  },
+  async list(o, c, limit) {
+    return (await db.select().from(dataRecords).where(scope(o, c)).orderBy(desc(dataRecords.updatedAt)).limit(limit)).map(toRecord);
+  },
+  async count(o, c) {
+    const [r] = await db.select({ n: count() }).from(dataRecords).where(scope(o, c));
+    return Number(r?.n ?? 0);
+  },
+  async insertIfAbsent(o, c, key, value, maxRecords, op) {
+    return withLedger(o, c, key, op, (x) => insertIfAbsentInner(x, o, c, key, value, maxRecords), { conflict: () => ({ status: "conflict" as const, record: null }), tooLarge: () => ({ status: "snapshot_too_large" as const, record: null }) });
+  },
+  async compareAndSet(o, c, key, expected, next, op) {
+    return withLedger(o, c, key, op, (x) => compareAndSetInner(x, o, c, key, expected, next), { conflict: () => ({ updated: false, conflict: true, record: null }), tooLarge: () => ({ updated: false, tooLarge: true, record: null }) });
+  },
+  async putWithQuota(o, c, key, value, maxRecords) {
+    return db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`datos:${o}:${c}`}))`);
+      const [cur] = await tx.select().from(dataRecords).where(and(scope(o, c), eq(dataRecords.key, key))).limit(1);
+      if (!cur) {
+        const [n] = await tx.select({ n: count() }).from(dataRecords).where(scope(o, c));
+        if (Number(n?.n ?? 0) >= maxRecords) return { status: "full" as const, record: null };
+      }
+      const [row] = await tx.insert(dataRecords).values({ organizationId: o, collection: c, key, value: value as never })
+        .onConflictDoUpdate({ target: [dataRecords.organizationId, dataRecords.collection, dataRecords.key], set: { value: value as never, updatedAt: new Date() } }).returning();
+      return { status: "saved" as const, record: toRecord(row) };
+    });
+  },
+  async applyTogether(o, ops, op) {
+    class Rejected extends Error { constructor(readonly outcome: TogetherOutcome) { super("rejected"); } }
+    type Row = { collection: string; key: string };
+    // The whole batch is ONE ledger entry (one op id, one stored snapshot). Rejection rolls back the batch only (savepoint); the terminal "rechazado" is still stored.
+    return withLedger(o, "$together", "batch", op, async (x) => {
+      // Lock order, identical for every batch: 1) collection locks (sorted) for creators, 2) row locks (sorted by collection, key). No cycle is possible.
+      const cols = [...new Set(ops.filter((p) => p.kind === "saveIfAbsent").map((p) => p.collection))].sort();
+      for (const c of cols) await x.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`datos:${o}:${c}`}))`);
+      const rows: Row[] = ops.filter((p) => p.kind !== "saveIfAbsent").map((p) => ({ collection: p.collection, key: p.key })).sort((a, b) => (a.collection === b.collection ? (a.key < b.key ? -1 : a.key > b.key ? 1 : 0) : a.collection < b.collection ? -1 : 1));
+      for (const r of rows) await x.execute(sql`SELECT 1 AS x FROM data_records WHERE organization_id = ${o} AND collection = ${r.collection} AND key = ${r.key} FOR UPDATE`);
+      let outcome: TogetherOutcome;
+      try {
+        outcome = await x.transaction(async (sp: Exec) => {
+          const res = await runTogether(ops, { insert: (p) => insertIfAbsentInner(sp, o, p.collection, p.key, p.value, DATOS_LIMITS.maxRecordsPerCollection), cas: (p) => compareAndSetInner(sp, o, p.collection, p.key, p.expected, p.value), inc: (p) => incrementInner(sp, o, p.collection, p.key, p.field, p.amount, p.opts) });
+          if (res.status !== "applied") throw new Rejected(res);
+          return res;
+        });
+      } catch (e) { if (e instanceof Rejected) outcome = e.outcome; else throw e; }
+      return { ...outcome, record: null };
+    }, { conflict: () => ({ status: "conflict" as const, record: null }), tooLarge: () => ({ status: "snapshot_too_large" as const, record: null }) });
+  },
+  async increment(o, c, key, field, amount, opts, op) {
+    return withLedger(o, c, key, op, (x) => incrementInner(x, o, c, key, field, amount, opts), { conflict: () => ({ applied: false, reason: "conflict" as IncrementReason, record: null }), tooLarge: () => ({ applied: false, reason: "snapshot_too_large" as IncrementReason, record: null }) });
   },
 };

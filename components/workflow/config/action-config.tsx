@@ -422,11 +422,13 @@ function DatosFields({
           <option value="saveIfAbsent">Guardar solo si no existe</option>
           <option value="updateIfMatches">Actualizar solo si el valor actual coincide</option>
           <option value="add">Sumar a un número</option>
+          <option value="applyTogether">Aplicar cambios juntos (todos o ninguno)</option>
           <option value="read">Leer un dato</option>
           <option value="list">Listar los últimos datos</option>
           <option value="fields">Definir campos de la colección (opcional)</option>
         </select>
       </div>
+      {operation !== "applyTogether" && (
       <div className="space-y-2">
         <Label htmlFor="datos-collection">Colección</Label>
         <Input
@@ -440,7 +442,8 @@ function DatosFields({
           Minúsculas, números y _ (por ejemplo: productos). Los datos son de tu empresa.
         </p>
       </div>
-      {operation !== "list" && operation !== "fields" && (
+      )}
+      {operation !== "list" && operation !== "fields" && operation !== "applyTogether" && (
         <div className="space-y-2">
           <Label htmlFor="datos-key">Clave</Label>
           <Input
@@ -450,6 +453,20 @@ function DatosFields({
             placeholder="SKU-123"
             value={(config?.key as string) || ""}
           />
+        </div>
+      )}
+      {operation === "applyTogether" && (
+        <div className="space-y-2">
+          <Label htmlFor="datos-operations">Lista de cambios (JSON, hasta 10)</Label>
+          <textarea
+            className="min-h-32 w-full rounded-md border bg-background p-2 font-mono text-xs"
+            disabled={disabled}
+            id="datos-operations"
+            onChange={(e) => onUpdateConfig("operations", e.target.value)}
+            placeholder={'[{"operation":"add","collection":"productos","key":"SKU-1","field":"stock","amount":-1,"min":0},{"operation":"saveIfAbsent","collection":"ventas","key":"V-1","value":{"ok":true}}]'}
+            value={(config?.operations as string) || ""}
+          />
+          <p className="text-foreground/80 text-sm">Cada cambio es guardar si no existe (saveIfAbsent), actualizar si coincide (updateIfMatches) o sumar (add). Se aplican todos juntos o ninguno: si uno no se cumple, no se escribe nada y devuelve estado = rechazado, indicando cuál. Un reintento del mismo paso devuelve el mismo resultado (repetido = verdadero).</p>
         </div>
       )}
       {operation === "add" && (
