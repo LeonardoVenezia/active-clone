@@ -77,4 +77,22 @@ ok(other.value === 'dijo "x"y"', "other actions: value text is not JSON-escaped"
 const line = JSON.stringify({ op: "addNode", node: { id: "d9", type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: "D9", config: { actionType: "Datos", operation: "applyTogether", operations: ops } } } });
 const sh9: any = { nodes: [], edges: [] }; const accepted = shadowApply(JSON.parse(line), sh9);
 ok(accepted && typeof sh9.nodes[0].data.config.operations === "string", "builder JSONL addNode line (model form) is normalized in the shadow graph");
+// 8. Typing of resolved values inside a Datos "value" JSON text (characterization of CURRENT behaviour; not a typed-correctness claim)
+const kinds: Record<string, unknown> = { num: 5, bool: true, nul: null, obj: { a: 1 }, list: [1, 2], str: 'x"y' };
+const typed = async (tpl: string, k: string) => {
+  const cfg: any = processTemplates({ actionType: "Datos", operation: "save", value: tpl }, { trig: { label: "T", data: { v: kinds[k] } } });
+  const rp = memoryRepo(); await datosSave(rp, "org", { collection: "c", key: "k", value: cfg.value }); const rd: any = await datosRead(rp, "org", { collection: "c", key: "k" });
+  return rd.record?.value;
+};
+const q = '{"f":"{{@trig:T.v}}"}', u = '{"f":{{@trig:T.v}}}';
+const tq = { num: await typed(q, "num"), bool: await typed(q, "bool"), obj: await typed(q, "obj") };
+ok(tq.num?.f === "5" && tq.bool?.f === "true" && typeof tq.obj?.f === "string", "quoted reference: number, boolean and object all arrive as TEXT (known limit, not typed)");
+const tu = { num: await typed(u, "num"), bool: await typed(u, "bool"), obj: await typed(u, "obj"), list: await typed(u, "list") };
+ok(tu.num?.f === 5 && tu.bool?.f === true && tu.obj?.f?.a === 1 && Array.isArray(tu.list?.f), "unquoted reference: number, boolean, object and list keep their type");
+const tn = await typed(u, "nul"); ok(typeof tn === "string", `unquoted null becomes "" -> invalid JSON -> stored as TEXT (current core fallback, UNSAFE: ${JSON.stringify(tn)})`);
+const ts2 = await typed(u, "str"); ok(typeof ts2 === "string", `unquoted string with a quote -> invalid JSON -> stored as TEXT (current core fallback, UNSAFE: ${JSON.stringify(ts2)})`);
+// numeric field in a stored value fed to a later add: text is refused, so a quoted numeric seed breaks stock arithmetic
+const rp2 = memoryRepo(); await datosSave(rp2, "org", { collection: "saldos", key: "S9", value: tq.num ? JSON.stringify({ stock: tq.num.f }) : "{}" });
+const bad: any = await core.datosAdd(rp2, "org", { collection: "saldos", key: "S9", field: "stock", amount: -1, operationId: "a1" });
+ok(!(bad.success && bad.aplicado), `add on a text-typed stock is refused (success=${bad.success}, aplicado=${bad.aplicado}, error=${String(bad.error).slice(0, 50)})`);
 process.exit(fails ? 1 : 0);
