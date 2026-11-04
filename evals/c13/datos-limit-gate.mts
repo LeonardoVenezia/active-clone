@@ -12,12 +12,13 @@ let fails = 0; const ok = (c: boolean, m: string) => { if (!c) fails++; console.
 const C21 = "Cuando llegue un pedido pagado de Tiendanube, descontá del saldo de cada producto la cantidad vendida en los datos de la empresa y registrá el movimiento para que no se descuente dos veces. No mandes mensajes ni toques el stock real de la tienda.";
 const C20 = JSON.parse(readFileSync("evals/cases.jsonl", "utf8").split("\n").filter(Boolean).find((l) => l.includes('"C-20"'))).prompt;
 const C22 = JSON.parse(readFileSync("evals/cases.jsonl", "utf8").split("\n").filter(Boolean).find((l) => l.includes('"C-22"'))).prompt;
+const fx = (n: string) => JSON.parse(readFileSync(`evals/c13/fixtures/datos-graphs/${n}.json`, "utf8"));
 const graphOf = (f: string) => { const a = JSON.parse(readFileSync(f, "utf8")); const find = (x: any): any => { if (!x || typeof x !== "object") return null; if (Array.isArray(x.nodes) && x.nodes.some((n: any) => n?.data?.config)) return x; for (const k of Object.keys(x)) { const g = find(x[k]); if (g) return g; } return null; }; return find(a.final); };
 const errs = (g: any, prompt: string) => computeFlowErrors({ nodes: JSON.parse(JSON.stringify(g.nodes)), edges: JSON.parse(JSON.stringify(g.edges)) }, { composioCatalogMap: new Map(), sheetContracts: [], userPrompt: prompt }) as string[];
 const lim = (e: string[]) => e.filter((x) => x.startsWith(F.DATOS_LIMIT_MARK));
-const g21 = graphOf("/tmp/evalruns/2026-11-04T15-09-15-265Z-ddff7be/C-21__current__gemini-flash-lite__1.json");
-const g20 = graphOf("/tmp/evalruns/2026-11-04T15-04-34-288Z-ddff7be/C-20__current__gemini-flash-lite__1.json");
-const g22 = graphOf("/tmp/evalruns/2026-11-04T14-44-05-410Z-32d5395/C-22__current__gemini-flash-lite__1.json");
+const g21 = fx("c21a-loop-slack-filler-no-datos");
+const g20 = fx("c20-applytogether-gate-estado");
+const g22 = fx("c22-saveifabsent-gate-creado");
 // intent
 ok(F.datosBalanceIntent(C21) && F.datosBalanceIntent(C20) && !F.datosBalanceIntent(C22), "intent: C-21 and C-20 yes, C-22 (movement + internal notice, no balance change) no");
 const neg = ["Cuando llegue un pedido, descontá el stock en Tiendanube de cada producto", "Guardá un aviso en los datos de la empresa cuando llegue un pago", "Mandame por Slack el stock actual cada mañana", "Sumá las ventas del día y mandalas por mail", "Registrá en los datos de la empresa el pago recibido"];
@@ -65,7 +66,7 @@ const e4 = await run("Mandame un resumen por Slack cuando llegue un pedido", bad
 ok(e4.fin?.nodes?.find((n: any) => n.id === "sl")?.data?.config?.slackMessage === "editado" && !e4.fin?.unsupportedLimit, `control: with an unrelated request the same scripted edits DO apply (not vacuous): slackMessage=${e4.fin?.nodes?.find((n: any) => n.id === "sl")?.data?.config?.slackMessage}`);
 ok(e3.result?.built === false && /No lo dejé armado/.test(e3.text), "pre-existing canvas: not presented as built, limit text shown");
 // real graph from the single model evaluation @1b3278b (limit gate first version did NOT fire on it: intent was read from the model's plan, not the user's message)
-const g21b = graphOf("/tmp/evalruns/2026-11-04T15-25-00-649Z-1b3278b/C-21__current__gemini-flash-lite__1.json");
+const g21b = fx("c21b-loop-no-steps-no-datos");
 const planOnly = "Cuando llegue un pedido pagado de Tiendanube, por cada producto del pedido se descuenta el stock en la colección de saldos y se registra el movimiento en la colección de movimientos para evitar duplicados, usando la operación applyTogether de Datos.";
 const cE = (g: any, plan: string, cur: string) => computeFlowErrors({ nodes: JSON.parse(JSON.stringify(g.nodes)), edges: JSON.parse(JSON.stringify(g.edges)) }, { composioCatalogMap: new Map(), sheetContracts: [], userPrompt: plan, currentRequest: cur }) as string[];
 ok(lim(cE(g21b, planOnly, "")).length === 1, "real graph from the model evaluation @1b3278b: limit fires from the plan wording (descuenta / colección de saldos)");

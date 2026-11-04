@@ -11,7 +11,7 @@ const js = ts.transpileModule(src.slice(a, b), { compilerOptions: { target: "ES2
 const { resolveFieldValue } = await import("../../lib/field-path"); const { jsonFormatTag } = await import("../../lib/datos/value-format");
 const pt = new Function("resolveFieldValue", "datosJsonFormatTag", js + "\nreturn processTemplates;")(resolveFieldValue, jsonFormatTag);
 const core: any = await import("../../lib/datos/core"); const { datosApplyTogether, datosSave, datosRead, memoryRepo } = core.default ?? core;
-const art = JSON.parse(readFileSync(process.argv[2], "utf8"));
+const art = { final: JSON.parse(readFileSync(process.argv[2] ?? new URL("./fixtures/datos-graphs/c20-applytogether-gate-estado.json", import.meta.url), "utf8")) };
 const graph = art.final?.graph ?? art.final?.workflow ?? art.final; 
 const nodes = (JSON.stringify(graph).length, (function find(x: any): any { if (!x || typeof x !== "object") return null; if (Array.isArray(x.nodes) && x.nodes.some((n: any) => n?.data?.config)) return x.nodes; for (const k of Object.keys(x)) { const f = find(x[k]); if (f) return f; } return null; })(art));
 const cfgOf = (id: string) => nodes.find((n: any) => n.id === id).data.config;
