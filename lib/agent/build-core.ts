@@ -7,7 +7,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { getActionOutputFields, getActionOutputItemFields } from "@/plugins/registry";
 import { repairOutputContracts } from "@/lib/agent/contract-repair";
-import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, cyclicFlowError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, datosMovementKeyError, emptyResultGuardError, refOrderRaceError, requestCoverageError, sheetContractError, shipmentDetailError, unwiredReportStepError, userIntentText, validateFlow } from "@/lib/flow-validator";
+import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, cyclicFlowError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, datosMovementKeyError, datosInLoopError, emptyResultGuardError, refOrderRaceError, requestCoverageError, sheetContractError, shipmentDetailError, unwiredReportStepError, userIntentText, validateFlow } from "@/lib/flow-validator";
 
 // Builder core shared by the /api/ai/generate route and the unified chat agent: operations, the validated in-memory graph, the builder rules prompt and valid type sets.
 export type Operation = {
@@ -372,6 +372,8 @@ export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map
       if (shipment) errs.push(shipment);
       const questions = questionActionError(userPrompt, shadow.nodes);
       if (questions) errs.push(questions);
+      const datosLoop = datosInLoopError(shadow.nodes);
+      if (datosLoop) errs.push(datosLoop);
       const datosKey = datosMovementKeyError(shadow.nodes);
       if (datosKey) errs.push(datosKey);
       const crossing = listCrossingError(userPrompt, shadow.nodes);

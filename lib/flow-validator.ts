@@ -870,6 +870,18 @@ export function datosMovementKeyError(nodes: FlowNode[]): string | null {
   return null;
 }
 
+// Datos fails closed inside a Loop step (the executor refuses it): catch it at build time instead of shipping a flow that cannot run.
+export function datosInLoopError(nodes: FlowNode[]): string | null {
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "Loop") continue;
+    const steps = ((n.data?.config ?? {}) as Record<string, unknown>).steps;
+    if (!Array.isArray(steps)) continue;
+    const bad = steps.find((st) => (st as { config?: { actionType?: unknown } })?.config?.actionType === "Datos");
+    if (bad) return `consistencia: Loop "${n.id}" contains a Datos step; Datos does not run inside a Loop (it fails closed). Do not use a Loop for Datos: one Datos step handles one event. If the request needs several lines, use one applyTogether with up to 10 operations, or tell the user it is not supported yet`;
+  }
+  return null;
+}
+
 const CONDITION_ALLOWED_IDENT = new Set(["true", "false", "null", "undefined", "Math", "JSON", "Number", "String", "Boolean", "parseFloat", "parseInt", "Array", "Object", "Date"]);
 
 function bareIdentifiersInCondition(expression: string): string[] {

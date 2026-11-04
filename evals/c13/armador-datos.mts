@@ -44,4 +44,10 @@ ok(r3.success && r3.estado === "aplicado", "string form of operations is also ac
   ok(!!g(nd2({ operation: "save", collection: "avisos", value: { a: 1 } })), "guard rejects save without key");
   ok(!g(nd2({ operation: "save", collection: "avisos", key: "{{@x:y.z}}", value: { a: 1 } })), "guard accepts save with key");
 }
+{
+  const fvx: any = await import("../../lib/flow-validator"); const gl = fvx.datosInLoopError ?? fvx.default.datosInLoopError;
+  const loop = (st: any[]) => [{ id: "l", type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: "L", config: { actionType: "Loop", steps: st } } }];
+  ok(!!gl(loop([{ id: "a", config: { actionType: "Datos", operation: "add" } }])), "rejects Datos inside a Loop");
+  ok(!gl(loop([{ id: "a", config: { actionType: "Fórmula" } }])), "allows other steps in a Loop");
+}
 process.exit(fails ? 1 : 0);
