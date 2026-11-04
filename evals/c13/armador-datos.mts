@@ -51,4 +51,40 @@ ok(r3.success && r3.estado === "aplicado", "string form of operations is also ac
   ok(!!gl(loop([{ id: "a", actionType: "Datos", config: { operation: "add" } }])), "rejects Datos with step-level actionType (shape the builder emits)");
   ok(!gl(loop([{ id: "a", config: { actionType: "Fórmula" } }])), "allows other steps in a Loop");
 }
+{
+  const fvy: any = await import("../../lib/flow-validator"); const F = fvy.default ?? fvy;
+  const dn = (id: string, cfg: any) => ({ id, type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: id, config: { actionType: "Datos", ...cfg } } });
+  const cn = (id: string, condition: string) => ({ id, type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: id, config: { actionType: "Condition", condition } } });
+  const good = [{ operation: "saveIfAbsent", collection: "m", key: "{{@t:T.a}}" }, { operation: "add", collection: "s", key: "{{@t:T.b}}", field: "stock", amount: "-{{@t:T.c}}" }];
+  // gate by estado
+  const d1 = dn("d1", { operation: "applyTogether", operations: JSON.stringify(good) }); const next = dn("n1", { operation: "save", collection: "x", key: "k" });
+  ok(!!F.datosGateError([d1, next], [{ id: "e", source: "d1", target: "n1" }]), "gate: step right after applyTogether without a Condition is rejected");
+  ok(!!F.datosGateError([d1, cn("c1", "{{@t:T.a}} === 'aplicado'"), next], [{ id: "e1", source: "d1", target: "c1" }, { id: "e2", source: "c1", target: "n1" }]), "gate: Condition on another node is not a gate");
+  ok(!F.datosGateError([d1, cn("c1", "{{@d1:D.estado}} === 'aplicado'"), next], [{ id: "e1", source: "d1", target: "c1" }, { id: "e2", source: "c1", target: "n1" }]), "gate: Condition on estado passes");
+  ok(!F.datosGateError([d1], []), "gate: a lone Datos step needs no gate");
+  // shape
+  const sh = (ops: any) => F.datosShapeError([dn("d", { operation: "applyTogether", operations: ops })]);
+  ok(!!sh(undefined), "shape: applyTogether without operations rejected");
+  ok(!!sh("not json"), "shape: unparseable operations rejected");
+  ok(!!sh("[]"), "shape: empty list rejected");
+  ok(!!sh(JSON.stringify(Array.from({ length: 11 }, (_, i) => ({ operation: "saveIfAbsent", collection: "c", key: "k" + i })))), "shape: more than 10 operations rejected");
+  ok(!!sh(JSON.stringify([{ operation: "add", collection: "c", key: "k" }])), "shape: add without field/amount rejected");
+  ok(!!sh(JSON.stringify([{ operation: "saveIfAbsent", collection: "c" }])), "shape: operation without key rejected");
+  ok(!!sh(JSON.stringify([{ operation: "saveIfAbsent", collection: "c", key: "k" }, { operation: "saveIfAbsent", collection: "c", key: "k" }])), "shape: duplicate collection+key rejected");
+  ok(!sh(JSON.stringify(good)) && !sh(good), "shape: valid list accepted (string and array form)");
+  // coverage: one list element
+  const idx = dn("d", { operation: "applyTogether", operations: JSON.stringify([{ operation: "saveIfAbsent", collection: "m", key: "{{@g:G.products[0].id}}" }]) });
+  ok(!!F.datosCoverageError([idx], "descontá el stock de cada producto del pedido"), "coverage: one list element for a request about every line is rejected");
+  ok(!F.datosCoverageError([idx], "descontá solo la primera línea del pedido"), "coverage: allowed when the request is explicitly about the first line");
+  ok(!F.datosCoverageError([dn("d", { operation: "applyTogether", operations: JSON.stringify(good) })], "cada línea"), "coverage: references without a list index pass");
+}
+{
+  // wired into the builder's own error computation (computeFlowErrors), using the C-21 shape the real model produced
+  const bcz: any = await import("../../lib/agent/build-core"); const { computeFlowErrors } = bcz.default ?? bcz;
+  const mkn = (id: string, type: string, config: any) => ({ id, type: type === "trigger" ? "trigger" : "action", position: { x: 0, y: 0 }, data: { type, label: id, config } });
+  const sh: any = { nodes: [mkn("t", "trigger", { triggerType: "Manual", inputFields: [{ key: "a", label: "A" }] }), mkn("d", "action", { actionType: "Datos", operation: "applyTogether", operations: JSON.stringify([{ operation: "saveIfAbsent", collection: "movimientos", key: "{{@t:t.a}}:{{@g:G.products[0].id}}" }]) }), mkn("n", "action", { actionType: "Datos", operation: "save", collection: "avisos", key: "{{@t:t.a}}", value: "{}" })], edges: [{ id: "e1", source: "t", target: "d" }, { id: "e2", source: "d", target: "n" }] };
+  const errs: string[] = computeFlowErrors(sh, { composioCatalogMap: new Map(), sheetContracts: [], userPrompt: "descontá el stock de cada producto del pedido" });
+  ok(errs.some((e) => /without a Condition on its estado/.test(e)), "computeFlowErrors reports the missing estado gate");
+  ok(errs.some((e) => /uses one element of a list/.test(e)), "computeFlowErrors reports the dropped-lines risk");
+}
 process.exit(fails ? 1 : 0);

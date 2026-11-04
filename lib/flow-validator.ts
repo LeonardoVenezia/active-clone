@@ -870,6 +870,68 @@ export function datosMovementKeyError(nodes: FlowNode[]): string | null {
   return null;
 }
 
+// Datos operations may arrive as a JSON string (editor/executor form) or a real array (model form, normalized by the builder).
+function datosOpsOf(cfg: Record<string, unknown>): { ops: Record<string, unknown>[] | null; raw: boolean } {
+  const v = cfg.operations;
+  if (Array.isArray(v)) return { ops: v as Record<string, unknown>[], raw: false };
+  if (typeof v === "string") { try { const p = JSON.parse(v); return { ops: Array.isArray(p) ? (p as Record<string, unknown>[]) : null, raw: true }; } catch { return { ops: null, raw: true }; } }
+  return { ops: null, raw: false };
+}
+
+// Incomplete or malformed Datos steps are rejected at build time instead of failing (or half-working) at run time.
+export function datosShapeError(nodes: FlowNode[]): string | null {
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "Datos") continue;
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>; const label = n.data?.label ?? n.id;
+    if (cfg.operation === "applyTogether") {
+      const { ops } = datosOpsOf(cfg);
+      if (!ops) return `consistencia: Datos node "${n.id}" (${label}) applyTogether needs "operations" as a JSON list of changes`;
+      if (ops.length === 0 || ops.length > 10) return `consistencia: Datos node "${n.id}" (${label}) applyTogether needs 1 to 10 operations (got ${ops.length}); more changes than 10 are not supported in one step`;
+      const seen = new Set<string>();
+      for (const [i, o] of ops.entries()) {
+        if (!o || typeof o !== "object") return `consistencia: Datos node "${n.id}" (${label}) operation ${i + 1} is not an object`;
+        if (!["saveIfAbsent", "updateIfMatches", "add"].includes(String(o.operation))) return `consistencia: Datos node "${n.id}" (${label}) operation ${i + 1} must be saveIfAbsent, updateIfMatches or add`;
+        if (typeof o.collection !== "string" || !o.collection.trim() || typeof o.key !== "string" || !o.key.trim()) return `consistencia: Datos node "${n.id}" (${label}) operation ${i + 1} needs collection and key`;
+        if (o.operation === "add" && (typeof o.field !== "string" || !o.field.trim() || o.amount === undefined || o.amount === "")) return `consistencia: Datos node "${n.id}" (${label}) operation ${i + 1} (add) needs field and amount`;
+        const id = `${o.collection}\u0000${o.key}`;
+        if (seen.has(id)) return `consistencia: Datos node "${n.id}" (${label}) has two operations on the same collection and key`;
+        seen.add(id);
+      }
+    }
+  }
+  return null;
+}
+
+// Datos can finish successfully with estado "rechazado": whatever runs after a state-changing Datos step must be gated on its estado.
+export function datosGateError(nodes: FlowNode[], edges: FlowEdge[]): string | null {
+  const byId = new Map(nodes.map((n) => [n.id, n] as const));
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "Datos") continue;
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    if (!["applyTogether", "saveIfAbsent", "updateIfMatches", "add"].includes(String(cfg.operation))) continue;
+    for (const e of edges) {
+      if (e.source !== n.id) continue;
+      const t = byId.get(e.target); const c = (t?.data?.config ?? {}) as Record<string, unknown>;
+      const gated = t && actionTypeOf(t) === "Condition" && typeof c.condition === "string" && c.condition.includes(`{{@${n.id}:`) && /\.estado\b/.test(c.condition);
+      if (!gated) return `consistencia: node "${e.target}" runs right after Datos "${n.id}" without a Condition on its estado; a rejected Datos step still finishes successfully, so put a Condition ({{@${n.id}:<label>.estado}} === 'aplicado') before anything that follows`;
+    }
+  }
+  return null;
+}
+
+// A Datos step that reads ONE element of a list (e.g. products[0]) silently drops the other elements. Reject it unless the request itself is about a single/first element.
+export function datosCoverageError(nodes: FlowNode[], promptText: string): string | null {
+  if (/\b(primer[ao]?|first|única|unica|una sola|only one|single)\b/i.test(promptText)) return null;
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "Datos") continue;
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    const text = typeof cfg.operations === "string" ? cfg.operations : JSON.stringify(cfg);
+    const m = /\{\{@[^}]*\[\d+\][^}]*\}\}/.exec(text);
+    if (m) return `consistencia: Datos node "${n.id}" uses one element of a list (${m[0].slice(0, 70)}), so the other elements would be ignored without any notice. Do not build a flow that handles only some lines: Datos cannot run in a Loop and one step handles one event, so say plainly that orders with several lines are not supported yet (or use one applyTogether with an operation per line only when the number of lines is fixed and known)`;
+  }
+  return null;
+}
+
 // Datos fails closed inside a Loop step (the executor refuses it): catch it at build time instead of shipping a flow that cannot run.
 export function datosInLoopError(nodes: FlowNode[]): string | null {
   for (const n of nodes) {
