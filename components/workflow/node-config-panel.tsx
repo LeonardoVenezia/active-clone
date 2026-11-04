@@ -25,6 +25,7 @@ import { CodeEditor } from "@/components/ui/code-editor";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api-client";
+import { withActionDefaults } from "@/lib/action-config-defaults";
 import { integrationsAtom } from "@/lib/integrations-store";
 import type { IntegrationType } from "@/lib/types/integration";
 import { generateWorkflowCode } from "@/lib/workflow-codegen";
@@ -410,7 +411,9 @@ export const PanelInner = () => {
 
   const handleUpdateConfig = (key: string, value: string) => {
     if (selectedNode) {
-      let newConfig = { ...selectedNode.data.config, [key]: value };
+      let newConfig = key === "actionType"
+        ? withActionDefaults(selectedNode.data.config || {}, value)
+        : { ...selectedNode.data.config, [key]: value };
 
       // When action type changes, clear the integrationId since it may not be valid for the new action
       if (key === "actionType" && selectedNode.data.config?.integrationId) {
@@ -900,11 +903,10 @@ export const PanelInner = () => {
                       updateNodeData({
                         id: selectedNode.id,
                         data: {
-                          config: {
+                          config: withActionDefaults({
                             ...selectedNode.data.config,
                             ...extraConfig,
-                            actionType,
-                          },
+                          }, actionType),
                         },
                       });
                     } else {

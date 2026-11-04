@@ -3,7 +3,7 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { nanoid } from "nanoid";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { authClient, useSession } from "@/lib/auth-client";
@@ -14,7 +14,6 @@ import {
   isTransitioningFromHomepageAtom,
   nodesAtom,
 } from "@/lib/workflow-store";
-import { LAST_WORKFLOW_KEY } from "@/lib/last-workflow";
 
 // Helper function to create a default trigger node
 function createDefaultTriggerNode() {
@@ -35,8 +34,6 @@ function createDefaultTriggerNode() {
 const Home = () => {
   const router = useRouter();
   const { data: session, isPending } = useSession();
-  const nodes = useAtomValue(nodesAtom);
-  const edges = useAtomValue(edgesAtom);
   const setNodes = useSetAtom(nodesAtom);
   const setEdges = useSetAtom(edgesAtom);
   const setCurrentWorkflowName = useSetAtom(currentWorkflowNameAtom);
@@ -45,6 +42,7 @@ const Home = () => {
     isTransitioningFromHomepageAtom,
   );
   const hasCreatedWorkflowRef = useRef(false);
+  const [initialNodes, setInitialNodes] = useState<ReturnType<typeof createDefaultTriggerNode>[] | null>(null);
   const currentWorkflowName = useAtomValue(currentWorkflowNameAtom);
 
   // Reset sidebar animation state when on homepage
@@ -67,24 +65,26 @@ const Home = () => {
 
   // Initialize with a ready trigger node so no click is needed to start.
   useEffect(() => {
-    setNodes([createDefaultTriggerNode()]);
+    const freshNodes = [createDefaultTriggerNode()];
+    setNodes(freshNodes);
+    setInitialNodes(freshNodes);
     setEdges([]);
     setCurrentWorkflowName("New Workflow");
     hasCreatedWorkflowRef.current = false;
   }, [setNodes, setEdges, setCurrentWorkflowName]);
 
-  // Create workflow when first real node is added
+  // Create only from this page's fresh snapshot, never the previous editor atoms.
   useEffect(() => {
     const createWorkflowAndRedirect = async () => {
       // Wait for the session to load so we never replace a real login
       // with an anonymous one.
-      if (isPending) {
+      if (isPending || !initialNodes) {
         return;
       }
-      // Filter out the placeholder "add" node
-      const realNodes = nodes.filter((node) => node.type !== "add");
+      // The initial snapshot contains only the fresh trigger.
+      const realNodes = initialNodes;
 
-      // Only create when we have at least one real node and haven't created a workflow yet
+      // Create once per visit, after the session is ready.
       if (realNodes.length === 0 || hasCreatedWorkflowRef.current) {
         return;
       }
@@ -98,7 +98,7 @@ const Home = () => {
           name: "Untitled Workflow",
           description: "",
           nodes: realNodes,
-          edges,
+          edges: [],
           organizationId:
             new URLSearchParams(window.location.search).get("organizationId") ||
             undefined,
@@ -119,8 +119,7 @@ const Home = () => {
 
     createWorkflowAndRedirect();
   }, [
-    nodes,
-    edges,
+    initialNodes,
     router,
     ensureSession,
     setIsTransitioningFromHomepage,
