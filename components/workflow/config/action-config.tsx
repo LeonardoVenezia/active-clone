@@ -426,6 +426,7 @@ function serializeTogether(rows: TogetherRow[]): string {
   }));
 }
 function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled: boolean }) {
+  const [collapsed, setCollapsed] = useState<number[]>([]);
   const rows = parseTogether(value);
   if (rows === null)
     return (
@@ -440,11 +441,16 @@ function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onC
     <div className="space-y-3">
       <p className="text-foreground/80 text-sm">Los cambios se aplican todos juntos o ninguno. Si uno no se cumple, no se guarda nada y el resultado dice estado = rechazado y cuál cambio falló. Si el paso se reintenta, devuelve el mismo resultado (repetido = verdadero). Hasta {TOGETHER_MAX} cambios; cada colección y clave solo una vez.</p>
       {rows.map((r, i) => (
-        <div className="space-y-2 rounded-md border p-3" key={`${i}-${r.operation}`}>
+        <div className="space-y-2 rounded-md border p-3" key={i}>
           <div className="flex items-center justify-between gap-2">
-            <Label htmlFor={`datos-t-${i}-op`}>Cambio {i + 1}</Label>
-            <Button disabled={disabled} onClick={() => onChange(serializeTogether(rows.filter((_, j) => j !== i)))} size="sm" type="button" variant="ghost">Quitar</Button>
+            <button className="min-w-0 flex-1 truncate text-left text-sm font-medium" onClick={() => setCollapsed((c) => (c.includes(i) ? c.filter((x) => x !== i) : [...c, i]))} type="button">
+              {collapsed.includes(i) ? "▸" : "▾"} Cambio {i + 1}: {TOGETHER_LABEL[r.operation] ?? r.operation}
+              {r.collection || r.key ? ` · ${r.collection}${r.key ? ` / ${r.key}` : ""}` : ""}
+            </button>
+            <Button disabled={disabled} onClick={() => { setCollapsed([]); onChange(serializeTogether(rows.filter((_, j) => j !== i))); }} size="sm" type="button" variant="ghost">Quitar</Button>
           </div>
+          {!collapsed.includes(i) && (
+          <>
           <select className="h-9 w-full rounded-md border bg-transparent px-3 text-sm" disabled={disabled} id={`datos-t-${i}-op`} onChange={(e) => set(i, { operation: e.target.value })} value={r.operation}>
             {Object.entries(TOGETHER_LABEL).map(([k, l]) => (<option key={k} value={k}>{l}</option>))}
           </select>
@@ -476,6 +482,8 @@ function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onC
               <Label htmlFor={`datos-t-${i}-val`}>{r.operation === "updateIfMatches" ? "Valor nuevo" : "Valor"}</Label>
               <Input disabled={disabled} id={`datos-t-${i}-val`} onChange={(e) => set(i, { value: e.target.value })} placeholder='{"estado": "pagado"}' value={r.value ?? ""} />
             </>
+          )}
+          </>
           )}
         </div>
       ))}
