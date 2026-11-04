@@ -1,0 +1,1 @@
+export const db={query:{workflows:{findFirst:async()=>({id:'local-numeric',userId:'local-fixture',name:'123 stock',nodes:[{id:'trigger',type:'trigger',position:{x:0,y:0},data:{type:'trigger',label:'Manual',config:{triggerType:'Manual'},status:'idle'}}],edges:[]})}}};
