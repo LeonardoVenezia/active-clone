@@ -135,13 +135,10 @@ function checkNames(collection: unknown, key?: unknown): string | null {
   return null;
 }
 
-// strict = the step declared valueFormat "json" (the builder serializes objects it generates as JSON text): text that does not parse is refused
-// instead of being stored as plain text, because a reference value (null, a quote, a newline) broke the document. Without the flag the legacy
-// behaviour is unchanged: text that does not parse is stored as text.
-function parseValue(value: unknown, strict = false): { ok: true; value: unknown } | { ok: false; error: string } {
+function parseValue(value: unknown): { ok: true; value: unknown } | { ok: false; error: string } {
   let v = value;
   if (typeof v === "string") {
-    try { v = JSON.parse(v); } catch { if (strict) return { ok: false, error: "El valor debía ser JSON válido pero un dato lo rompió (por ejemplo vacío o con comillas): no se guardó nada." }; /* plain text is stored as a string */ }
+    try { v = JSON.parse(v); } catch { /* plain text is stored as a string */ }
   }
   let size = 0;
   try { size = new TextEncoder().encode(JSON.stringify(v ?? null)).length; } catch { return { ok: false, error: "El valor no se puede guardar como JSON." }; }
@@ -166,10 +163,10 @@ export async function datosDefineFields(repo: DatosRepo, orgId: unknown, args: {
   return { success: true, collection: args.collection as string, fields: parsed.fields };
 }
 
-export async function datosSave(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; value: unknown; valueFormat?: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ record: DatosRecord }>> {
+export async function datosSave(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; value: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ record: DatosRecord }>> {
   const g = guard(orgId, enabled) ?? checkNames(args.collection, args.key);
   if (g) return { success: false, error: g };
-  const parsed = parseValue(args.value, args.valueFormat === "json");
+  const parsed = parseValue(args.value);
   if (!parsed.ok) return { success: false, error: parsed.error };
   const org = orgId as string, col = args.collection as string, key = args.key as string;
   let toStore = parsed.value;
@@ -203,10 +200,10 @@ function jsonEqual(a: unknown, b: unknown): boolean {
 export { jsonEqual };
 
 /** Guardar si no existe: creates only when the key is absent; otherwise returns the existing record untouched. */
-export async function datosSaveIfAbsent(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; value: unknown; valueFormat?: unknown; operationId?: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ creado: boolean; repetido?: boolean; record: DatosRecord | null }>> {
+export async function datosSaveIfAbsent(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; value: unknown; operationId?: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ creado: boolean; repetido?: boolean; record: DatosRecord | null }>> {
   const g = guard(orgId, enabled) ?? checkNames(args.collection, args.key);
   if (g) return { success: false, error: g };
-  const parsed = parseValue(args.value, args.valueFormat === "json");
+  const parsed = parseValue(args.value);
   if (!parsed.ok) return { success: false, error: parsed.error };
   const org = orgId as string, col = args.collection as string, key = args.key as string;
   let toStore = parsed.value;
@@ -225,12 +222,12 @@ export async function datosSaveIfAbsent(repo: DatosRepo, orgId: unknown, args: {
 }
 
 /** Actualizar si coincide: replaces the value only if the current one equals `expected` (jsonb semantic equality: 1 equals 1.0). */
-export async function datosUpdateIfMatches(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; expected: unknown; value: unknown; valueFormat?: unknown; expectedFormat?: unknown; operationId?: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ actualizado: boolean; repetido?: boolean; motivo?: string; record: DatosRecord | null }>> {
+export async function datosUpdateIfMatches(repo: DatosRepo, orgId: unknown, args: { collection: unknown; key: unknown; expected: unknown; value: unknown; operationId?: unknown }, enabled = datosEnabled()): Promise<DatosResult<{ actualizado: boolean; repetido?: boolean; motivo?: string; record: DatosRecord | null }>> {
   const g = guard(orgId, enabled) ?? checkNames(args.collection, args.key);
   if (g) return { success: false, error: g };
-  const exp = parseValue(args.expected, args.expectedFormat === "json");
+  const exp = parseValue(args.expected);
   if (!exp.ok) return { success: false, error: exp.error };
-  const parsed = parseValue(args.value, args.valueFormat === "json");
+  const parsed = parseValue(args.value);
   if (!parsed.ok) return { success: false, error: parsed.error };
   const org = orgId as string, col = args.collection as string, key = args.key as string;
   let toStore = parsed.value;
