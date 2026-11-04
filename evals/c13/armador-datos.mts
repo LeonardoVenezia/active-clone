@@ -1,0 +1,31 @@
+// @ts-nocheck
+// Offline, no model calls. (1) the builder accepts Datos as an action type, (2) the applyTogether example in its prompt parses, validates and applies on the in-memory repo, (3) a string-in-string "operations" is still accepted by the executor (raw API form) but is NOT what the prompt asks for.
+import Module from "node:module"; import { createRequire } from "node:module"; import { readFileSync } from "node:fs";
+const r = createRequire(import.meta.url);
+const o = (Module as any)._resolveFilename; (Module as any)._resolveFilename = function (q: string, ...a: any[]) { if (/^server-only$/.test(q)) return r.resolve("../../evals/semantic/stubs/server-only.ts"); return o.call(this, q, ...a); };
+process.env.DATOS_STORAGE_ENABLED = "true";
+const bc: any = await import("../../lib/agent/build-core"); const { getValidActionTypes } = bc.default ?? bc;
+const fv: any = await import("../../lib/flow-validator"); const { validateFlow } = fv.default ?? fv;
+const core: any = await import("../../lib/datos/core"); const { datosApplyTogether, memoryRepo } = core.default ?? core;
+let fails = 0; const ok = (c: boolean, m: string) => { if (!c) fails++; console.log(`${c ? "PASS" : "FAIL"} ${m}`); };
+ok(getValidActionTypes().has("Datos"), "builder valid action types include Datos");
+const src = readFileSync(new URL("../../lib/agent/build-core.ts", import.meta.url), "utf8");
+const m = src.match(/"operations": (\[.*?\])\}/s); ok(!!m, "prompt contains an applyTogether example");
+const ops = JSON.parse(m![1]);
+ok(Array.isArray(ops) && ops.length === 2, "example operations is a real array of 2 objects");
+const t = { id: "t", type: "trigger", position: { x: 0, y: 0 }, data: { type: "trigger", label: "T", config: { triggerType: "Manual" } } };
+const mk = (id: string, label: string, config: any) => ({ id, type: "action", position: { x: 0, y: 0 }, data: { type: "action", label, config } });
+const nodes = [t, mk("evt", "Evento", { actionType: "Fórmula", input: '{"x": 1}', expression: '{"plataforma":"tn","pedido":"1","linea":"L1","tipo":"venta","sku":"S1","cantidad":-2}' }), mk("d1", "Aplicar", { actionType: "Datos", operation: "applyTogether", operations: ops }), mk("c1", "Se aplicó", { actionType: "Condition", condition: "{{@d1:Aplicar.estado}} === 'aplicado'" })];
+const edges = [{ id: "a", source: "t", target: "evt" }, { id: "b", source: "evt", target: "d1" }, { id: "c", source: "d1", target: "c1" }];
+const errs = validateFlow(nodes, edges, {}, getValidActionTypes()); console.log(JSON.stringify(errs).slice(0, 300));
+ok(!errs.some((e: string) => /Datos|actionType|estado/.test(e)), "validator accepts the Datos flow with the estado condition");
+const repo = memoryRepo(); await repo.insertIfAbsent("org", "saldos", "S1", { stock: 5 }, 5000);
+const concrete = JSON.parse(JSON.stringify(ops).replace(/\{\{@evt:Evento\.result\.(\w+)\}\}/g, (_: string, k: string) => ({ plataforma: "tn", pedido: "1", linea: "L1", tipo: "venta", sku: "S1", cantidad: "-2" } as any)[k]));
+const r1: any = await datosApplyTogether(repo, "org", { operations: concrete, operationId: "x1" });
+ok(r1.success && r1.estado === "aplicado", "example applies: " + JSON.stringify(r1).slice(0, 120));
+const r2: any = await datosApplyTogether(repo, "org", { operations: concrete, operationId: "x2" });
+ok(r2.success && r2.estado === "rechazado", "repeat is rejected with success=true and estado=rechazado");
+const s: any = await core.datosRead(repo, "org", { collection: "saldos", key: "S1" }); ok(s.record?.value?.stock === 3, "stock 5 -> 3, not 1");
+const r3: any = await datosApplyTogether(repo, "org", { operations: JSON.stringify(concrete.map((x: any, i: number) => i ? { ...x, key: "S1" } : { ...x, key: "tn:1:L2:venta" })), operationId: "x3" });
+ok(r3.success && r3.estado === "aplicado", "string form of operations is also accepted by the executor (raw form)");
+process.exit(fails ? 1 : 0);
