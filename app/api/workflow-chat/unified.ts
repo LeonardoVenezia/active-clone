@@ -200,7 +200,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               const request = planText || i.text; let errs: string[] = [];
               for (let round = 0; round < 3; round++) {
                 fixFormulaRefsIn(shadow); await resolveObjective(route);
-                errs = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest, skipDeliverables: skipKinds });
+                errs = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest, currentRequest: i.text, skipDeliverables: skipKinds });
                 { const cur = new Set(errs); const cat = catCounts(errs); const pv = prevErrs; rounds.push({ round, errors: errs.length, cat, ...(pv ? { resolved: [...pv].filter(e => !cur.has(e)).length, persistent: [...pv].filter(e => cur.has(e)).length, fresh: [...cur].filter(e => !pv.has(e)).length } : {}) }); prevErrs = cur; }
                 if (!errs.length) { closeReason = "clean"; break; }
                 if (errs.some((e) => e.startsWith(DATOS_LIMIT_MARK))) { closeReason = "unsupported-limit"; break; } // no corrective rounds: retrying only invites stand-in steps
@@ -214,7 +214,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               }
               if (closeReason === "no-build") closeReason = "rounds-exhausted";
               await resolveObjective(route);
-              fixFormulaRefsIn(shadow); validationLeft = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest, skipDeliverables: skipKinds });
+              fixFormulaRefsIn(shadow); validationLeft = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest, currentRequest: i.text, skipDeliverables: skipKinds });
               timedOut = abort.signal.aborted;
               if (closeReason === "rounds-exhausted" && !validationLeft.length) closeReason = "clean-after-last-round";
               if (startedEmpty && shadow.nodes.length) { const pos = layoutPositions(shadow.nodes, shadow.edges); for (const n of shadow.nodes) { const p = pos.get(n.id); if (p) { (n as { position?: unknown }).position = p; } } }

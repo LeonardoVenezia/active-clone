@@ -64,4 +64,11 @@ ok(e3.fin?.unsupportedLimit === true && JSON.stringify(e3.fin.nodes) === JSON.st
 const e4 = await run("Mandame un resumen por Slack cuando llegue un pedido", badEdit, JSON.parse(JSON.stringify(pre)));
 ok(e4.fin?.nodes?.find((n: any) => n.id === "sl")?.data?.config?.slackMessage === "editado" && !e4.fin?.unsupportedLimit, `control: with an unrelated request the same scripted edits DO apply (not vacuous): slackMessage=${e4.fin?.nodes?.find((n: any) => n.id === "sl")?.data?.config?.slackMessage}`);
 ok(e3.result?.built === false && /No lo dejé armado/.test(e3.text), "pre-existing canvas: not presented as built, limit text shown");
+// real graph from the single model evaluation @1b3278b (limit gate first version did NOT fire on it: intent was read from the model's plan, not the user's message)
+const g21b = graphOf("/tmp/evalruns/2026-11-04T15-25-00-649Z-1b3278b/C-21__current__gemini-flash-lite__1.json");
+const planOnly = "Cuando llegue un pedido pagado de Tiendanube, por cada producto del pedido se descuenta el stock en la colección de saldos y se registra el movimiento en la colección de movimientos para evitar duplicados, usando la operación applyTogether de Datos.";
+const cE = (g: any, plan: string, cur: string) => computeFlowErrors({ nodes: JSON.parse(JSON.stringify(g.nodes)), edges: JSON.parse(JSON.stringify(g.edges)) }, { composioCatalogMap: new Map(), sheetContracts: [], userPrompt: plan, currentRequest: cur }) as string[];
+ok(lim(cE(g21b, planOnly, "")).length === 1, "real graph from the model evaluation @1b3278b: limit fires from the plan wording (descuenta / colección de saldos)");
+ok(lim(cE(g21b, "Armar flujo de pedidos", C21)).length === 1, "same graph, vague plan but the user's current message states the request: limit fires");
+ok(lim(cE(g21b, "Armar flujo de pedidos", "Mandame un resumen por mail")).length === 0, "same graph, vague plan, unrelated current message: no limit");
 console.log(fails ? `\n${fails} FAILED` : "\nALL PASS"); process.exit(fails ? 1 : 0);

@@ -368,7 +368,7 @@ export function wireDanglingRefs(shadow: Shadow): number {
   return wired;
 }
 
-export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map<string, string[]>; sheetContracts: SheetColumnsContract[]; userPrompt: string; userRequest?: string; skipDeliverables?: Set<string> }): string[] {
+export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map<string, string[]>; sheetContracts: SheetColumnsContract[]; userPrompt: string; userRequest?: string; currentRequest?: string; skipDeliverables?: Set<string> }): string[] {
   const { composioCatalogMap, sheetContracts, userPrompt } = ctx;
   repairOutputContracts(shadow.nodes); // exact contract-path repairs only (see contract-repair.ts); never invents fields
   wireDanglingRefs(shadow); // exact edge repair only; ambiguous dangling steps stay flagged by validateFlow
@@ -386,7 +386,7 @@ export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map
       const questions = questionActionError(userPrompt, shadow.nodes);
       if (questions) errs.push(questions);
       for (const dErr of [datosShapeError(shadow.nodes), datosGateError(shadow.nodes, shadow.edges), datosCoverageError(shadow.nodes, userIntentText(userPrompt))]) if (dErr) errs.push(dErr);
-      const datosLimit = datosLimitError(userIntentText(userPrompt), shadow.nodes);
+      const datosLimit = datosLimitError(`${ctx.currentRequest ?? ""}\n${userIntentText(userPrompt)}`, shadow.nodes);
       if (datosLimit) errs.push(datosLimit);
       const datosLoop = datosInLoopError(shadow.nodes);
       if (datosLoop) errs.push(datosLoop);

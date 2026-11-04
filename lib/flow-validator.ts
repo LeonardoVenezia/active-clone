@@ -883,8 +883,8 @@ function datosOpsOf(cfg: Record<string, unknown>): { ops: Record<string, unknown
 export const DATOS_LIMIT_MARK = "LIMITE-DATOS:";
 export function datosBalanceIntent(promptText: string): boolean {
   const t = promptText.toLowerCase();
-  const changesBalance = /(descont|rest[aá]|sum[aá]|baj[aá]|reduc|disminu|ajust|actualiz|increment|decrement|mov[eé])\w*[^.\n]{0,80}\b(saldos?|stock|inventario|existencias)\b/.test(t) || /\b(saldos?|stock|inventario|existencias)\b[^.\n]{0,40}(descont|rest[aá]|sum[aá]|baj[aá]|reduc|disminu|ajust|actualiz)/.test(t);
-  const ownData = /datos de la empresa|datos internos|datos propios|(saldos?|stock) (de la empresa|internos?|propios?)|saldos? interno|en los datos|nodo datos/.test(t);
+  const changesBalance = /(desc(o|ue)nt|rest[aá]|sum[aá]|baj[aá]|reduc|disminu|ajust|actualiz|increment|decrement|mov[eé])\w*[^.\n]{0,80}\b(saldos?|stock|inventario|existencias)\b/.test(t) || /\b(saldos?|stock|inventario|existencias)\b[^.\n]{0,40}(desc(o|ue)nt|rest[aá]|sum[aá]|baj[aá]|reduc|disminu|ajust|actualiz)/.test(t);
+  const ownData = /datos de la empresa|datos internos|datos propios|(saldos?|stock) (de la empresa|internos?|propios?)|saldos? interno|en los datos|nodo datos|colecci[oó]n de (saldos|movimientos)/.test(t);
   const recordsMovement = /registr\w+ (el|los|cada) movimiento|no se descuente dos veces|sin duplicar|idempoten/.test(t);
   return (changesBalance && ownData) || (recordsMovement && changesBalance);
 }
