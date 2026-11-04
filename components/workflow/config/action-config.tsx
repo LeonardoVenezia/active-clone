@@ -28,7 +28,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { parseTogether, serializeTogether, TOGETHER_LABEL, TOGETHER_MAX, type TogetherRow, validateTogether } from "@/lib/datos/together-config";
+import { parseTogether, sameValueText, serializeTogether, TOGETHER_LABEL, TOGETHER_MAX, type TogetherRow, validateTogether, valueKindHint } from "@/lib/datos/together-config";
 import { aiGatewayStatusAtom } from "@/lib/ai-gateway/state";
 import {
   integrationsAtom,
@@ -400,6 +400,8 @@ function FrontendFields({
 // Datos "Aplicar cambios juntos": editable list of changes (stored as a JSON string in config.operations).
 function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled: boolean }) {
   const [collapsed, setCollapsed] = useState<number[]>([]);
+  // Text the user is typing: kept as typed (no reformatting) while it still means the same as what is stored.
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const rows = parseTogether(value);
   if (rows === null)
     return (
@@ -410,6 +412,8 @@ function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onC
       </div>
     );
   const set = (i: number, patch: Partial<TogetherRow>) => onChange(serializeTogether(rows.map((r, j) => (j === i ? { ...r, ...patch } : r))));
+  const setText = (i: number, k: "value" | "expected", text: string) => { setDrafts((d) => ({ ...d, [`${i}:${k}`]: text })); set(i, { [k]: text }); };
+  const shown = (i: number, k: "value" | "expected", stored: string | undefined) => { const d = drafts[`${i}:${k}`]; return d !== undefined && sameValueText(d, stored ?? "") ? d : (stored ?? ""); };
   const check = validateTogether(rows);
   return (
     <div className="space-y-3">
@@ -421,7 +425,7 @@ function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onC
               {collapsed.includes(i) ? "▸" : "▾"} Cambio {i + 1}: {TOGETHER_LABEL[r.operation] ?? r.operation}
               {r.collection || r.key ? ` · ${r.collection}${r.key ? ` / ${r.key}` : ""}` : ""}
             </button>
-            <Button disabled={disabled} onClick={() => { setCollapsed([]); onChange(serializeTogether(rows.filter((_, j) => j !== i))); }} size="sm" type="button" variant="ghost">Quitar</Button>
+            <Button disabled={disabled} onClick={() => { setCollapsed([]); setDrafts({}); onChange(serializeTogether(rows.filter((_, j) => j !== i))); }} size="sm" type="button" variant="ghost">Quitar</Button>
           </div>
           {check.errors[i].length > 0 && (
             <ul className="space-y-1 text-destructive text-xs" role="alert">
@@ -453,13 +457,15 @@ function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onC
           {r.operation === "updateIfMatches" && (
             <>
               <Label htmlFor={`datos-t-${i}-exp`}>Valor esperado actual</Label>
-              <Input disabled={disabled} id={`datos-t-${i}-exp`} onChange={(e) => set(i, { expected: e.target.value })} placeholder='{"estado": "pendiente"}' value={r.expected ?? ""} />
+              <Input disabled={disabled} id={`datos-t-${i}-exp`} onChange={(e) => setText(i, "expected", e.target.value)} placeholder='{"estado": "pendiente"}' value={shown(i, "expected", r.expected)} />
+              {valueKindHint(r.expected) && <p className="text-muted-foreground text-xs">{valueKindHint(r.expected)}</p>}
             </>
           )}
           {(r.operation === "saveIfAbsent" || r.operation === "updateIfMatches") && (
             <>
               <Label htmlFor={`datos-t-${i}-val`}>{r.operation === "updateIfMatches" ? "Valor nuevo" : "Valor"}</Label>
-              <Input disabled={disabled} id={`datos-t-${i}-val`} onChange={(e) => set(i, { value: e.target.value })} placeholder='{"estado": "pagado"}' value={r.value ?? ""} />
+              <Input disabled={disabled} id={`datos-t-${i}-val`} onChange={(e) => setText(i, "value", e.target.value)} placeholder='{"estado": "pagado"}' value={shown(i, "value", r.value)} />
+              {valueKindHint(r.value) && <p className="text-muted-foreground text-xs">{valueKindHint(r.value)}</p>}
             </>
           )}
           </>

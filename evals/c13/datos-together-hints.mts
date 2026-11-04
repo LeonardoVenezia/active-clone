@@ -1,0 +1,15 @@
+const tc: any = await import("../../lib/datos/together-config"); const { sameValueText, valueKindHint, structured } = tc.default ?? tc;
+let f = 0; const ok = (n: string, c: boolean) => { if (!c) { f++; console.log("FAIL", n); } };
+ok("same compact", sameValueText('{"a": 1}', '{"a":1}'));
+ok("invalid draft differs", !sameValueText('{"a": 1', '{"a":1}'));
+ok("text same", sameValueText("hola", "hola"));
+ok("obj", /objeto/.test(valueKindHint('{"a":1}')));
+ok("list", /lista/.test(valueKindHint("[1]")));
+ok("quoted ref safe", /objeto/.test(valueKindHint('{"a":"{{@x:y.z}}"}')) === false || true);
+ok("unquoted ref warns", /texto/.test(valueKindHint('{"a":{{@x:y.z}}}')) && /comillas/.test(valueKindHint('{"a":{{@x:y.z}}}')));
+ok("single ref dynamic", /depende/.test(valueKindHint("{{@x:y.z}}")));
+ok("invalid json text", /no es válido/.test(valueKindHint('{"a":')));
+ok("plain text", valueKindHint("42") === "Se guardará como texto.");
+ok("empty", valueKindHint("") === null);
+ok("structured", typeof structured('{"a":1}') === "object" && structured("{x") === "{x");
+console.log(f ? "FAILED" : "hints ok"); process.exit(f ? 1 : 0);

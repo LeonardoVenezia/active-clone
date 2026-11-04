@@ -18,7 +18,7 @@ export function parseTogether(value: string): TogetherRow[] | null {
   } catch { return null; }
 }
 /** Text that is a valid JSON object/array becomes that structure; anything else stays text. */
-function structured(text: string): unknown {
+export function structured(text: string): unknown {
   const t = text.trim();
   if (!(t.startsWith("{") || t.startsWith("["))) return text;
   try { const v = JSON.parse(t); return v !== null && typeof v === "object" ? v : text; } catch { return text; }
@@ -81,4 +81,24 @@ export function validateTogether(rows: TogetherRow[]): { errors: string[][]; gen
     return e;
   });
   return { errors, general };
+}
+
+/** True when the editor draft text and the stored row text mean the same thing (so the draft can keep its own spacing). */
+export function sameValueText(draft: string, stored: string): boolean {
+  return JSON.stringify(structured(draft)) === JSON.stringify(structured(stored));
+}
+
+/** What will be saved for a Valor / Valor esperado text. Honest about what is only known at run time. */
+export function valueKindHint(text: string | undefined): string | null {
+  const t = (text ?? "").trim();
+  if (!t) return null;
+  const ref = /\{\{@[^}]+\}\}/.test(t);
+  if (/^\{\{@[^}]+\}\}$/.test(t)) return "Con una sola referencia, el tipo depende de lo que traiga: un objeto, una lista o un JSON válido se guarda como tal; cualquier otro dato, como texto.";
+  if (t.startsWith("{") || t.startsWith("[")) {
+    try { JSON.parse(t); return t.startsWith("[") ? "Se guardará como lista." : "Se guardará como objeto."; } catch { /* below */ }
+    if (ref) return "Se guardará como objeto o lista solo si, con las referencias ya reemplazadas, el texto es JSON válido; si no, se guarda como texto. Para que sea seguro, poné las referencias de texto entre comillas dentro del JSON.";
+    return "Se guardaría como texto: el JSON no es válido.";
+  }
+  if (ref) return "Las referencias se reemplazan al ejecutar. Si el resultado es un número, verdadero/falso, null, un objeto o una lista, se guarda con ese tipo; si no, como texto.";
+  return "Se guardará como texto.";
 }
