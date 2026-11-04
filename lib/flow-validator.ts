@@ -847,6 +847,26 @@ export function questionActionError(promptText: string, nodes: FlowNode[]): stri
   return null;
 }
 
+// Datos movement keys must identify the order LINE. A positional reference ([0], .0.) or an invented placeholder is not an identity:
+// when the source has no line id the builder must stop and ask the user instead of guessing.
+export function datosMovementKeyError(nodes: FlowNode[]): string | null {
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "Datos") continue;
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    let ops: unknown = cfg.operations;
+    if (typeof ops === "string") { try { ops = JSON.parse(ops); } catch { ops = []; } }
+    const keys: unknown[] = [cfg.key, ...(Array.isArray(ops) ? ops.map((o) => (o as Record<string, unknown> | null)?.key) : [])];
+    for (const k of keys) {
+      if (typeof k !== "string") continue;
+      if (/\[\d+\]|\.\d+\./.test(k) || /ITEM-|PLACEHOLDER|EXAMPLE/i.test(k)) {
+        const label = n.data?.label ?? n.id;
+        return `consistencia: Datos node "${n.id}" (${label}) builds a key from an array position or a made-up value ("${k.slice(0, 80)}"); the key must use the order LINE id from the source. If the source does not provide a line id, do not guess: remove the Datos step and ask the user for it`;
+      }
+    }
+  }
+  return null;
+}
+
 const CONDITION_ALLOWED_IDENT = new Set(["true", "false", "null", "undefined", "Math", "JSON", "Number", "String", "Boolean", "parseFloat", "parseInt", "Array", "Object", "Date"]);
 
 function bareIdentifiersInCondition(expression: string): string[] {

@@ -28,4 +28,12 @@ ok(r2.success && r2.estado === "rechazado", "repeat is rejected with success=tru
 const s: any = await core.datosRead(repo, "org", { collection: "saldos", key: "S1" }); ok(s.record?.value?.stock === 3, "stock 5 -> 3, not 1");
 const r3: any = await datosApplyTogether(repo, "org", { operations: JSON.stringify(concrete.map((x: any, i: number) => i ? { ...x, key: "S1" } : { ...x, key: "tn:1:L2:venta" })), operationId: "x3" });
 ok(r3.success && r3.estado === "aplicado", "string form of operations is also accepted by the executor (raw form)");
+// key guard: positional / invented keys are rejected, line-id keys pass
+{
+  const fv2: any = await import("../../lib/flow-validator"); const g = (fv2.default ?? fv2).datosMovementKeyError;
+  const nd = (cfg: any) => [{ id: "d", type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: "D", config: { actionType: "Datos", ...cfg } } }];
+  ok(!!g(nd({ operation: "applyTogether", operations: [{ operation: "saveIfAbsent", key: "tn:{{@evt:E.result.products[0].id}}:venta" }] })), "guard rejects array-index key");
+  ok(!!g(nd({ operation: "applyTogether", operations: JSON.stringify([{ key: "ITEM-STOCK" }]) })), "guard rejects invented key (string form)");
+  ok(!g(nd({ operation: "applyTogether", operations: [{ key: "{{@evt:E.result.plataforma}}:{{@evt:E.result.pedido}}:{{@evt:E.result.linea}}:venta" }] })), "guard accepts line-id key");
+}
 process.exit(fails ? 1 : 0);
