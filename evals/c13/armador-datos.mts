@@ -48,6 +48,7 @@ ok(r3.success && r3.estado === "aplicado", "string form of operations is also ac
   const fvx: any = await import("../../lib/flow-validator"); const gl = fvx.datosInLoopError ?? fvx.default.datosInLoopError;
   const loop = (st: any[]) => [{ id: "l", type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: "L", config: { actionType: "Loop", steps: st } } }];
   ok(!!gl(loop([{ id: "a", config: { actionType: "Datos", operation: "add" } }])), "rejects Datos inside a Loop");
+  ok(!!gl(loop([{ id: "a", actionType: "Datos", config: { operation: "add" } }])), "rejects Datos with step-level actionType (shape the builder emits)");
   ok(!gl(loop([{ id: "a", config: { actionType: "Fórmula" } }])), "allows other steps in a Loop");
 }
 process.exit(fails ? 1 : 0);

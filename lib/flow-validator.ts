@@ -876,7 +876,7 @@ export function datosInLoopError(nodes: FlowNode[]): string | null {
     if (actionTypeOf(n) !== "Loop") continue;
     const steps = ((n.data?.config ?? {}) as Record<string, unknown>).steps;
     if (!Array.isArray(steps)) continue;
-    const bad = steps.find((st) => (st as { config?: { actionType?: unknown } })?.config?.actionType === "Datos");
+    const bad = steps.find((st) => (() => { const x = st as { actionType?: unknown; config?: { actionType?: unknown } }; return x?.actionType === "Datos" || x?.config?.actionType === "Datos"; })());
     if (bad) return `consistencia: Loop "${n.id}" contains a Datos step; Datos does not run inside a Loop (it fails closed). Do not use a Loop for Datos: one Datos step handles one event. If the request needs several lines, use one applyTogether with up to 10 operations, or tell the user it is not supported yet`;
   }
   return null;
