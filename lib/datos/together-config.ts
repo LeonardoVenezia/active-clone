@@ -93,7 +93,7 @@ export function valueKindHint(text: string | undefined): string | null {
   const t = (text ?? "").trim();
   if (!t) return null;
   const ref = /\{\{@[^}]+\}\}/.test(t);
-  if (/^\{\{@[^}]+\}\}$/.test(t)) return "Con una sola referencia, el tipo depende de lo que traiga: un objeto, una lista o un JSON válido se guarda como tal; cualquier otro dato, como texto.";
+  if (/^\{\{@[^}]+\}\}$/.test(t)) return "Con una sola referencia, el tipo depende de lo que traiga: un objeto o una lista se guarda como tal; cualquier otro dato, como texto.";
   if (t.startsWith("{") || t.startsWith("[")) {
     try { JSON.parse(t); return t.startsWith("[") ? "Se guardará como lista." : "Se guardará como objeto."; } catch { /* below */ }
     if (ref) return "Se guardará como objeto o lista solo si, con las referencias ya reemplazadas, el texto es JSON válido; si no, se guarda como texto. Para que sea seguro, poné las referencias de texto entre comillas dentro del JSON.";
