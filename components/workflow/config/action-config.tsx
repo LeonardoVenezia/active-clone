@@ -28,6 +28,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { parseTogether, serializeTogether, TOGETHER_LABEL, TOGETHER_MAX, type TogetherRow, validateTogether } from "@/lib/datos/together-config";
 import { aiGatewayStatusAtom } from "@/lib/ai-gateway/state";
 import {
   integrationsAtom,
@@ -397,34 +398,6 @@ function FrontendFields({
 }
 
 // Datos "Aplicar cambios juntos": editable list of changes (stored as a JSON string in config.operations).
-type TogetherRow = { operation: string; collection: string; key: string; value?: string; expected?: string; field?: string; amount?: string; min?: string; max?: string; startAtZero?: boolean };
-const TOGETHER_MAX = 10;
-const TOGETHER_LABEL: Record<string, string> = { add: "Sumar a un número", saveIfAbsent: "Guardar solo si no existe", updateIfMatches: "Actualizar solo si el valor actual coincide" };
-function parseTogether(value: string): TogetherRow[] | null {
-  if (!value.trim()) return [];
-  try {
-    const v = JSON.parse(value);
-    if (!Array.isArray(v) || !v.every((r) => r && typeof r === "object" && !Array.isArray(r) && typeof r.operation === "string")) return null;
-    return v.map((r) => {
-      const str = (x: unknown) => (x === undefined || x === null ? undefined : typeof x === "string" ? x : JSON.stringify(x));
-      return { operation: r.operation, collection: String(r.collection ?? ""), key: String(r.key ?? ""), value: str(r.value), expected: str(r.expected), field: str(r.field), amount: str(r.amount), min: str(r.min), max: str(r.max), startAtZero: r.startAtZero === true || r.startAtZero === "true" };
-    });
-  } catch { return null; }
-}
-function serializeTogether(rows: TogetherRow[]): string {
-  return JSON.stringify(rows.map((r) => {
-    const o: Record<string, unknown> = { operation: r.operation, collection: r.collection, key: r.key };
-    if (r.operation === "saveIfAbsent" || r.operation === "updateIfMatches") o.value = r.value ?? "";
-    if (r.operation === "updateIfMatches") o.expected = r.expected ?? "";
-    if (r.operation === "add") {
-      o.field = r.field ?? ""; o.amount = r.amount ?? "";
-      if (r.min) o.min = r.min;
-      if (r.max) o.max = r.max;
-      if (r.startAtZero) o.startAtZero = true;
-    }
-    return o;
-  }));
-}
 function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled: boolean }) {
   const [collapsed, setCollapsed] = useState<number[]>([]);
   const rows = parseTogether(value);
@@ -437,6 +410,7 @@ function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onC
       </div>
     );
   const set = (i: number, patch: Partial<TogetherRow>) => onChange(serializeTogether(rows.map((r, j) => (j === i ? { ...r, ...patch } : r))));
+  const check = validateTogether(rows);
   return (
     <div className="space-y-3">
       <p className="text-foreground/80 text-sm">Los cambios se aplican todos juntos o ninguno. Si uno no se cumple, no se guarda nada y el resultado dice estado = rechazado y cuál cambio falló. Si el paso se reintenta, devuelve el mismo resultado (repetido = verdadero). Hasta {TOGETHER_MAX} cambios; cada colección y clave solo una vez.</p>
@@ -449,6 +423,11 @@ function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onC
             </button>
             <Button disabled={disabled} onClick={() => { setCollapsed([]); onChange(serializeTogether(rows.filter((_, j) => j !== i))); }} size="sm" type="button" variant="ghost">Quitar</Button>
           </div>
+          {check.errors[i].length > 0 && (
+            <ul className="space-y-1 text-destructive text-xs" role="alert">
+              {check.errors[i].map((m) => (<li key={m}>{m}</li>))}
+            </ul>
+          )}
           {!collapsed.includes(i) && (
           <>
           <select className="h-9 w-full rounded-md border bg-transparent px-3 text-sm" disabled={disabled} id={`datos-t-${i}-op`} onChange={(e) => set(i, { operation: e.target.value })} value={r.operation}>
@@ -491,6 +470,7 @@ function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onC
         <Plus className="mr-1 size-4" />
         Agregar cambio
       </Button>
+      {check.general.length > 0 && <p className="text-destructive text-xs" role="alert">{check.general.join(" ")}</p>}
       {rows.length >= TOGETHER_MAX && <p className="text-muted-foreground text-xs">Máximo {TOGETHER_MAX} cambios.</p>}
     </div>
   );

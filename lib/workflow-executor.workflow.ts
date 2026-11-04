@@ -377,6 +377,7 @@ const JSON_STRING_CONFIG_KEYS = new Set([
   "httpBody",
   "httpHeaders",
   "input",
+  "operations",
   "responseSchema",
 ]);
 
@@ -386,7 +387,10 @@ function escapeForJsonString(raw: string): string {
     .replace(/"/g, '\\"')
     .replace(/\r/g, "\\r")
     .replace(/\n/g, "\\n")
-    .replace(/\t/g, "\\t");
+    .replace(/\t/g, "\\t")
+    // Remaining control characters (and the JS line separators) are not valid raw inside a JSON string.
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional
+    .replace(/[\u0000-\u001f\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 
 function processTemplates(
