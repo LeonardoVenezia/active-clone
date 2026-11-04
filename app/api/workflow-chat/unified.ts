@@ -66,6 +66,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
   const shadow: Shadow = { nodes: [...((i.canvas?.nodes ?? []) as FlowNode[])], edges: [...((i.canvas?.edges ?? []) as FlowEdge[])] };
   const startedEmpty = shadow.nodes.every(n => (n.data as { config?: { placeholder?: boolean } } | undefined)?.config?.placeholder === true);
   const initialIds = new Set(shadow.nodes.map(n => n.id));
+  const initialSnapshot = JSON.stringify({ nodes: shadow.nodes, edges: shadow.edges }); // exact pre-turn canvas, restored if the turn ends on an unsupported limit
   let planText = ""; let flowName = ""; let touched = false; let heldChars = 0; const composioMap = new Map<string, string[]>();
   const userRequest = [...i.past.filter(m => m.role === "user").map(m => m.content), i.text].join("\n");
   const discover = (i.deps?.discover ?? ((x: { catalog: string; search?: string; toolkit?: string }) => discoverComposio(x as Parameters<typeof discoverComposio>[0]))) as (x: { catalog: string; search?: string; toolkit?: string }) => Promise<{ items?: Record<string, unknown>[] }>;
@@ -219,9 +220,8 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               if (startedEmpty && shadow.nodes.length) { const pos = layoutPositions(shadow.nodes, shadow.edges); for (const n of shadow.nodes) { const p = pos.get(n.id); if (p) { (n as { position?: unknown }).position = p; } } }
               for (const n of shadow.nodes) { const c = (n.data as { config?: Record<string, unknown> } | undefined)?.config; if (c?.placeholder === true && (typeof c.actionType === "string" || typeof c.triggerType === "string" || typeof c.scheduleCron === "string" || typeof c.cron === "string")) delete c.placeholder; }
               if (validationLeft.some((e) => e.startsWith(DATOS_LIMIT_MARK))) {
-                // Unsupported limit: what this turn generated is not left on the canvas as a flow that looks complete. The diagnostic is kept in "validation".
-                const keep = new Set(shadow.nodes.filter((n) => initialIds.has(n.id)).map((n) => n.id));
-                shadow.nodes = shadow.nodes.filter((n) => keep.has(n.id)); shadow.edges = shadow.edges.filter((e) => keep.has(e.source) && keep.has(e.target));
+                // Unsupported limit: nothing from this turn (new steps or edits to existing ones) is left on the canvas as a flow that looks complete. The diagnostic is kept in "validation".
+                { const before = JSON.parse(initialSnapshot) as { nodes: FlowNode[]; edges: FlowEdge[] }; shadow.nodes = before.nodes; shadow.edges = before.edges; } // whole pre-turn canvas back: edits to existing steps are undone too
                 emit(`${reply.trim() ? "\n\n" : ""}No lo dejé armado: esto todavía no se puede hacer completo y de forma segura. Descontar el saldo propio y registrar el movimiento funciona de a una línea de pedido por vez y necesita el ID de línea que informa el origen; no soporta pedidos con varias líneas ni pedidos sin ID de línea. No armé reemplazos parciales ni mandé nada. Si querés, lo armo para procesar una línea por vez con su ID de línea, o decime cómo seguimos.`);
                 writer.write({ type: "data-canvas-final", data: { name: flowName, nodes: shadow.nodes, edges: shadow.edges, validation: validationLeft, timedOut, startedEmpty, interrupted, unsupportedLimit: true } });
                 touched = false; break;
