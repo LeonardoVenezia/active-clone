@@ -1,3 +1,16 @@
-// Monaco loads a third-party CDN, excluded from this offline regression.
-import React from 'react';
-export function CodeEditor({value,onChange,...props}:any){return <textarea aria-label="Code editor fixture" value={value||''} onChange={e=>onChange?.(e.target.value)}/>;}
+// Monaco is excluded to avoid a third-party CDN during offline tests.
+export function CodeEditor({
+  value,
+  onChange,
+}: {
+  value?: string;
+  onChange?: (value: string) => void;
+}) {
+  return (
+    <textarea
+      aria-label="Code editor fixture"
+      onChange={(e) => onChange?.(e.target.value)}
+      value={value || ""}
+    />
+  );
+}

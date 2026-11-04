@@ -1,1 +1,3 @@
-export function AuthDialog() { return null; }
+export function AuthDialog() {
+  return null;
+}
