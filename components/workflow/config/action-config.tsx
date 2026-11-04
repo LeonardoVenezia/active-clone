@@ -396,6 +396,98 @@ function FrontendFields({
   );
 }
 
+// Datos "Aplicar cambios juntos": editable list of changes (stored as a JSON string in config.operations).
+type TogetherRow = { operation: string; collection: string; key: string; value?: string; expected?: string; field?: string; amount?: string; min?: string; max?: string; startAtZero?: boolean };
+const TOGETHER_MAX = 10;
+const TOGETHER_LABEL: Record<string, string> = { add: "Sumar a un número", saveIfAbsent: "Guardar solo si no existe", updateIfMatches: "Actualizar solo si el valor actual coincide" };
+function parseTogether(value: string): TogetherRow[] | null {
+  if (!value.trim()) return [];
+  try {
+    const v = JSON.parse(value);
+    if (!Array.isArray(v) || !v.every((r) => r && typeof r === "object" && !Array.isArray(r) && typeof r.operation === "string")) return null;
+    return v.map((r) => {
+      const str = (x: unknown) => (x === undefined || x === null ? undefined : typeof x === "string" ? x : JSON.stringify(x));
+      return { operation: r.operation, collection: String(r.collection ?? ""), key: String(r.key ?? ""), value: str(r.value), expected: str(r.expected), field: str(r.field), amount: str(r.amount), min: str(r.min), max: str(r.max), startAtZero: r.startAtZero === true || r.startAtZero === "true" };
+    });
+  } catch { return null; }
+}
+function serializeTogether(rows: TogetherRow[]): string {
+  return JSON.stringify(rows.map((r) => {
+    const o: Record<string, unknown> = { operation: r.operation, collection: r.collection, key: r.key };
+    if (r.operation === "saveIfAbsent" || r.operation === "updateIfMatches") o.value = r.value ?? "";
+    if (r.operation === "updateIfMatches") o.expected = r.expected ?? "";
+    if (r.operation === "add") {
+      o.field = r.field ?? ""; o.amount = r.amount ?? "";
+      if (r.min) o.min = r.min;
+      if (r.max) o.max = r.max;
+      if (r.startAtZero) o.startAtZero = true;
+    }
+    return o;
+  }));
+}
+function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled: boolean }) {
+  const rows = parseTogether(value);
+  if (rows === null)
+    return (
+      <div className="space-y-2">
+        <Label htmlFor="datos-operations-raw">Lista de cambios (JSON)</Label>
+        <textarea className="min-h-32 w-full rounded-md border bg-background p-2 font-mono text-xs" disabled={disabled} id="datos-operations-raw" onChange={(e) => onChange(e.target.value)} value={value} />
+        <p className="text-foreground/80 text-sm">No se pudo leer la lista como cambios editables. Corregí el JSON o borrá el contenido para armarla con el editor.</p>
+      </div>
+    );
+  const set = (i: number, patch: Partial<TogetherRow>) => onChange(serializeTogether(rows.map((r, j) => (j === i ? { ...r, ...patch } : r))));
+  return (
+    <div className="space-y-3">
+      <p className="text-foreground/80 text-sm">Los cambios se aplican todos juntos o ninguno. Si uno no se cumple, no se guarda nada y el resultado dice estado = rechazado y cuál cambio falló. Si el paso se reintenta, devuelve el mismo resultado (repetido = verdadero). Hasta {TOGETHER_MAX} cambios; cada colección y clave solo una vez.</p>
+      {rows.map((r, i) => (
+        <div className="space-y-2 rounded-md border p-3" key={`${i}-${r.operation}`}>
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor={`datos-t-${i}-op`}>Cambio {i + 1}</Label>
+            <Button disabled={disabled} onClick={() => onChange(serializeTogether(rows.filter((_, j) => j !== i)))} size="sm" type="button" variant="ghost">Quitar</Button>
+          </div>
+          <select className="h-9 w-full rounded-md border bg-transparent px-3 text-sm" disabled={disabled} id={`datos-t-${i}-op`} onChange={(e) => set(i, { operation: e.target.value })} value={r.operation}>
+            {Object.entries(TOGETHER_LABEL).map(([k, l]) => (<option key={k} value={k}>{l}</option>))}
+          </select>
+          <Label htmlFor={`datos-t-${i}-col`}>Colección</Label>
+          <Input disabled={disabled} id={`datos-t-${i}-col`} onChange={(e) => set(i, { collection: e.target.value })} placeholder="productos" value={r.collection} />
+          <Label htmlFor={`datos-t-${i}-key`}>Clave</Label>
+          <Input disabled={disabled} id={`datos-t-${i}-key`} onChange={(e) => set(i, { key: e.target.value })} placeholder="SKU-123" value={r.key} />
+          {r.operation === "add" && (
+            <>
+              <Label htmlFor={`datos-t-${i}-field`}>Campo numérico</Label>
+              <Input disabled={disabled} id={`datos-t-${i}-field`} onChange={(e) => set(i, { field: e.target.value })} placeholder="stock" value={r.field ?? ""} />
+              <Label htmlFor={`datos-t-${i}-amount`}>Cantidad a sumar (negativa para restar)</Label>
+              <Input disabled={disabled} id={`datos-t-${i}-amount`} onChange={(e) => set(i, { amount: e.target.value })} placeholder="-1" value={r.amount ?? ""} />
+              <Label htmlFor={`datos-t-${i}-min`}>Mínimo permitido (opcional)</Label>
+              <Input disabled={disabled} id={`datos-t-${i}-min`} onChange={(e) => set(i, { min: e.target.value })} placeholder="0" value={r.min ?? ""} />
+              <Label htmlFor={`datos-t-${i}-max`}>Máximo permitido (opcional)</Label>
+              <Input disabled={disabled} id={`datos-t-${i}-max`} onChange={(e) => set(i, { max: e.target.value })} value={r.max ?? ""} />
+              <label className="flex items-center gap-2 text-sm"><input checked={!!r.startAtZero} disabled={disabled} onChange={(e) => set(i, { startAtZero: e.target.checked })} type="checkbox" />Si el campo no existe, empezar en 0</label>
+            </>
+          )}
+          {r.operation === "updateIfMatches" && (
+            <>
+              <Label htmlFor={`datos-t-${i}-exp`}>Valor esperado actual</Label>
+              <Input disabled={disabled} id={`datos-t-${i}-exp`} onChange={(e) => set(i, { expected: e.target.value })} placeholder='{"estado": "pendiente"}' value={r.expected ?? ""} />
+            </>
+          )}
+          {(r.operation === "saveIfAbsent" || r.operation === "updateIfMatches") && (
+            <>
+              <Label htmlFor={`datos-t-${i}-val`}>{r.operation === "updateIfMatches" ? "Valor nuevo" : "Valor"}</Label>
+              <Input disabled={disabled} id={`datos-t-${i}-val`} onChange={(e) => set(i, { value: e.target.value })} placeholder='{"estado": "pagado"}' value={r.value ?? ""} />
+            </>
+          )}
+        </div>
+      ))}
+      <Button disabled={disabled || rows.length >= TOGETHER_MAX} onClick={() => onChange(serializeTogether([...rows, { operation: "add", collection: "", key: "", field: "", amount: "" }]))} size="sm" type="button" variant="outline">
+        <Plus className="mr-1 size-4" />
+        Agregar cambio
+      </Button>
+      {rows.length >= TOGETHER_MAX && <p className="text-muted-foreground text-xs">Máximo {TOGETHER_MAX} cambios.</p>}
+    </div>
+  );
+}
+
 // Datos fields component (generic per-company records; prototype)
 function DatosFields({
   config,
@@ -456,18 +548,7 @@ function DatosFields({
         </div>
       )}
       {operation === "applyTogether" && (
-        <div className="space-y-2">
-          <Label htmlFor="datos-operations">Lista de cambios (JSON, hasta 10)</Label>
-          <textarea
-            className="min-h-32 w-full rounded-md border bg-background p-2 font-mono text-xs"
-            disabled={disabled}
-            id="datos-operations"
-            onChange={(e) => onUpdateConfig("operations", e.target.value)}
-            placeholder={'[{"operation":"add","collection":"productos","key":"SKU-1","field":"stock","amount":-1,"min":0},{"operation":"saveIfAbsent","collection":"ventas","key":"V-1","value":{"ok":true}}]'}
-            value={(config?.operations as string) || ""}
-          />
-          <p className="text-foreground/80 text-sm">Cada cambio es guardar si no existe (saveIfAbsent), actualizar si coincide (updateIfMatches) o sumar (add). Se aplican todos juntos o ninguno: si uno no se cumple, no se escribe nada y devuelve estado = rechazado, indicando cuál. Un reintento del mismo paso devuelve el mismo resultado (repetido = verdadero).</p>
-        </div>
+        <DatosTogetherEditor disabled={disabled} onChange={(v) => onUpdateConfig("operations", v)} value={(config?.operations as string) || ""} />
       )}
       {operation === "add" && (
         <div className="space-y-2">
