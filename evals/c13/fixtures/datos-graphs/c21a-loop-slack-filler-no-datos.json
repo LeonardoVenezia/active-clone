@@ -1,0 +1,89 @@
+{
+ "nodes": [
+  {
+   "id": "trigger-order-paid",
+   "type": "trigger",
+   "position": {
+    "x": 90,
+    "y": 110
+   },
+   "data": {
+    "label": "Pedido Pagado Tiendanube",
+    "type": "trigger",
+    "config": {
+     "triggerType": "tiendanube/order-paid"
+    },
+    "status": "idle"
+   }
+  },
+  {
+   "id": "get-order",
+   "type": "action",
+   "position": {
+    "x": 432,
+    "y": 110
+   },
+   "data": {
+    "label": "Obtener Detalle del Pedido",
+    "type": "action",
+    "config": {
+     "orderId": "{{@trigger-order-paid:Pedido Pagado Tiendanube.orderId}}",
+     "actionType": "tiendanube/get-order"
+    },
+    "status": "idle"
+   }
+  },
+  {
+   "id": "loop-items",
+   "type": "action",
+   "position": {
+    "x": 774,
+    "y": 110
+   },
+   "data": {
+    "label": "Loop por productos",
+    "type": "action",
+    "config": {
+     "maxItems": 50,
+     "steps": [
+      {
+       "label": "Notificar Producto",
+       "config": {
+        "slackChannel": "#general",
+        "slackMessage": "Procesando producto {{@item:Item.name}}"
+       },
+       "actionType": "slack/send-message",
+       "id": "dummy-inner"
+      }
+     ],
+     "source": "{{@get-order:Obtener Detalle del Pedido.products}}",
+     "actionType": "Loop",
+     "stepsConfig": [
+      {
+       "label": "Notificar Producto",
+       "actionType": "slack/send-message",
+       "config": {
+        "slackChannel": "#general",
+        "slackMessage": "Procesando producto {{@item:Item.name}}"
+       },
+       "id": "dummy-inner"
+      }
+     ]
+    },
+    "status": "idle"
+   }
+  }
+ ],
+ "edges": [
+  {
+   "source": "trigger-order-paid",
+   "target": "get-order",
+   "id": "e-trigger-order-paid-get-order"
+  },
+  {
+   "source": "get-order",
+   "target": "loop-items",
+   "id": "e-get-order-loop-items"
+  }
+ ]
+}

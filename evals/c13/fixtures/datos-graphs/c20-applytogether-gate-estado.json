@@ -1,0 +1,120 @@
+{
+ "nodes": [
+  {
+   "id": "trigger-manual",
+   "type": "trigger",
+   "position": {
+    "x": 90,
+    "y": 110
+   },
+   "data": {
+    "label": "Datos de Movimiento",
+    "type": "trigger",
+    "config": {
+     "inputFields": [
+      {
+       "label": "Plataforma",
+       "key": "plataforma"
+      },
+      {
+       "key": "pedido",
+       "label": "Pedido"
+      },
+      {
+       "label": "Línea",
+       "key": "linea"
+      },
+      {
+       "label": "Tipo",
+       "key": "tipo"
+      },
+      {
+       "key": "sku",
+       "label": "SKU"
+      },
+      {
+       "key": "cantidad",
+       "label": "Cantidad"
+      }
+     ],
+     "triggerType": "Manual"
+    },
+    "status": "idle"
+   }
+  },
+  {
+   "id": "datos-atomico",
+   "type": "action",
+   "position": {
+    "x": 432,
+    "y": 110
+   },
+   "data": {
+    "label": "Registrar y Descontar Stock",
+    "type": "action",
+    "config": {
+     "operation": "applyTogether",
+     "operations": "[{\"value\":{\"sku\":\"{{@trigger-manual:Datos de Movimiento.sku}}\"},\"key\":\"{{@trigger-manual:Datos de Movimiento.plataforma}}:{{@trigger-manual:Datos de Movimiento.pedido}}:{{@trigger-manual:Datos de Movimiento.linea}}:{{@trigger-manual:Datos de Movimiento.tipo}}\",\"operation\":\"saveIfAbsent\",\"collection\":\"movimientos\"},{\"collection\":\"saldos\",\"field\":\"stock\",\"key\":\"{{@trigger-manual:Datos de Movimiento.sku}}\",\"operation\":\"add\",\"amount\":\"-{{@trigger-manual:Datos de Movimiento.cantidad}}\",\"min\":\"0\"}]",
+     "actionType": "Datos",
+     "operationsFormat": "json:497:d704d5d"
+    },
+    "status": "idle"
+   }
+  },
+  {
+   "id": "cond-aplicado",
+   "type": "action",
+   "position": {
+    "x": 774,
+    "y": 110
+   },
+   "data": {
+    "label": "¿Se aplicó?",
+    "type": "action",
+    "config": {
+     "condition": "{{@datos-atomico:Registrar y Descontar Stock.estado}} === 'aplicado'",
+     "actionType": "Condition"
+    },
+    "status": "idle"
+   }
+  },
+  {
+   "id": "datos-aviso",
+   "type": "action",
+   "position": {
+    "x": 1116,
+    "y": 110
+   },
+   "data": {
+    "label": "Marcar Aviso Interno",
+    "type": "action",
+    "config": {
+     "collection": "avisos",
+     "operation": "save",
+     "value": "{\"mensaje\":\"Movimiento procesado y stock descontado correctamente para el SKU {{@trigger-manual:Datos de Movimiento.sku}}\"}",
+     "key": "{{@trigger-manual:Datos de Movimiento.plataforma}}:{{@trigger-manual:Datos de Movimiento.pedido}}:{{@trigger-manual:Datos de Movimiento.linea}}",
+     "actionType": "Datos",
+     "valueFormat": "json:123:b494cc33"
+    },
+    "status": "idle"
+   }
+  }
+ ],
+ "edges": [
+  {
+   "source": "trigger-manual",
+   "target": "datos-atomico",
+   "id": "e-trigger-manual-datos-atomico"
+  },
+  {
+   "source": "datos-atomico",
+   "target": "cond-aplicado",
+   "id": "e-datos-atomico-cond-aplicado"
+  },
+  {
+   "source": "cond-aplicado",
+   "target": "datos-aviso",
+   "id": "e-cond-aplicado-datos-aviso"
+  }
+ ]
+}

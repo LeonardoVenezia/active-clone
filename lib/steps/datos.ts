@@ -17,6 +17,8 @@ export type DatosInput = StepInput & {
   collection?: string;
   key?: string;
   value?: unknown;
+  valueFormat?: unknown;
+  expectedFormat?: unknown;
   limit?: unknown;
   fields?: unknown;
   expected?: unknown;
@@ -41,13 +43,13 @@ async function stepHandler(input: DatosInput, stepId?: string) {
   const collection = input.collection;
   try {
     switch (input.operation) {
-      case "save": return await datosSave(pgDatosRepo, org, { collection, key: input.key, value: input.value });
+      case "save": return await datosSave(pgDatosRepo, org, { collection, key: input.key, value: input.value, valueFormat: input.valueFormat });
       case "saveIfAbsent":
         if (!stepId) return { success: false as const, error: NO_ID };
-        return await datosSaveIfAbsent(pgDatosRepo, org, { collection, key: input.key, value: input.value, operationId: stepId });
+        return await datosSaveIfAbsent(pgDatosRepo, org, { collection, key: input.key, value: input.value, valueFormat: input.valueFormat, operationId: stepId });
       case "updateIfMatches":
         if (!stepId) return { success: false as const, error: NO_ID };
-        return await datosUpdateIfMatches(pgDatosRepo, org, { collection, key: input.key, expected: input.expected, value: input.value, operationId: stepId });
+        return await datosUpdateIfMatches(pgDatosRepo, org, { collection, key: input.key, expected: input.expected, value: input.value, valueFormat: input.valueFormat, expectedFormat: input.expectedFormat, operationId: stepId });
       case "add":
         // Fail closed: without a stable operation identity a retry could add twice.
         if (!stepId) return { success: false as const, error: NO_ID };

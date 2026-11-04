@@ -35,7 +35,7 @@ const SYSTEM_OUTPUTS: OutputsMap = {
   Approval: ["approved", "note"],
   Fórmula: ["result"],
   Frontend: ["page", "success"],
-  Datos: ["record", "found", "records", "count", "success", "creado", "actualizado", "aplicado", "valor", "motivo"],
+  Datos: ["record", "found", "records", "count", "success", "creado", "actualizado", "aplicado", "valor", "motivo", "estado", "repetido", "operacion", "collection", "fields"],
   "HTTP Request": ["data", "status", "success"],
   "Database Query": ["rows", "count", "success"],
 };
@@ -843,6 +843,150 @@ export function questionActionError(promptText: string, nodes: FlowNode[]): stri
   const asksQuestions = /(buscar|traer|revisar|listar)[^.;\n]{0,50}pregunta|preguntas?[^.;\n]{0,50}sin responder/i.test(promptText);
   if (asksQuestions && !nodes.some((n) => actionTypeOf(n) === "mercadolibre/get-question")) {
     return `consistencia: the request asks to find unanswered buyer questions but no node uses "mercadolibre/get-question"; add it - mercadolibre/search-orders returns orders, not questions`;
+  }
+  return null;
+}
+
+// Datos keys must come from event data or references, never literal placeholders. This does NOT decide whether a referenced field
+// is the order line id: that depends on the source contract (e.g. a Tienda Nube order product id can be the line id) and is not checked here.
+export function datosMovementKeyError(nodes: FlowNode[]): string | null {
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "Datos") continue;
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    let ops: unknown = cfg.operations;
+    if (typeof ops === "string") { try { ops = JSON.parse(ops); } catch { ops = []; } }
+    const items: Record<string, unknown>[] = [cfg, ...(Array.isArray(ops) ? (ops as Record<string, unknown>[]) : [])];
+    for (const it of items) {
+      const k = it?.key;
+      const label0 = n.data?.label ?? n.id;
+      if (["save", "saveIfAbsent", "updateIfMatches", "add"].includes(String(it?.operation)) && !(typeof k === "string" && k.trim())) return `consistencia: Datos node "${n.id}" (${label0}) runs "${String(it.operation)}" without a "key"; every record operation needs a key built from event data or a reference`;
+      if (typeof k !== "string") continue;
+      const literal = k.replace(/\{\{[^}]*\}\}/g, "");
+      const label = n.data?.label ?? n.id;
+      if (/ITEM-|PLACEHOLDER|EXAMPLE|XXX/i.test(literal)) return `consistencia: Datos node "${n.id}" (${label}) has a made-up literal in its key ("${k.slice(0, 80)}"); every part of a key must come from event data or a {{@...}} reference. If the source does not provide a needed id, remove the step and ask the user`;
+      if (/mov/i.test(String(it.collection ?? "")) && !/\{\{/.test(k)) return `consistencia: Datos node "${n.id}" (${label}) uses a movement key with no reference ("${k.slice(0, 80)}"); a movement key must be built from the event's platform, order, order line and type`;
+    }
+  }
+  return null;
+}
+
+// Datos operations may arrive as a JSON string (editor/executor form) or a real array (model form, normalized by the builder).
+function datosOpsOf(cfg: Record<string, unknown>): { ops: Record<string, unknown>[] | null; raw: boolean } {
+  const v = cfg.operations;
+  if (Array.isArray(v)) return { ops: v as Record<string, unknown>[], raw: false };
+  if (typeof v === "string") { try { const p = JSON.parse(v); return { ops: Array.isArray(p) ? (p as Record<string, unknown>[]) : null, raw: true }; } catch { return { ops: null, raw: true }; } }
+  return { ops: null, raw: false };
+}
+
+// UNSUPPORTED-LIMIT gate (Datos). Marker prefix: DATOS_LIMIT_MARK. Intent comes from capabilities in the request, not from one keyword:
+// the user asks to change a balance/stock held in the company's own data AND/OR to record a movement so it is not applied twice.
+export const DATOS_LIMIT_MARK = "LIMITE-DATOS:";
+export function datosBalanceIntent(promptText: string): boolean {
+  const t = promptText.toLowerCase();
+  const changesBalance = /(desc(o|ue)nt|rest[aá]|sum[aá]|baj[aá]|reduc|disminu|ajust|actualiz|increment|decrement|mov[eé])\w*[^.\n]{0,80}\b(saldos?|stock|inventario|existencias)\b/.test(t) || /\b(saldos?|stock|inventario|existencias)\b[^.\n]{0,40}(desc(o|ue)nt|rest[aá]|sum[aá]|baj[aá]|reduc|disminu|ajust|actualiz)/.test(t);
+  const ownData = /datos de la empresa|datos internos|datos propios|(saldos?|stock) (de la empresa|internos?|propios?)|saldos? interno|en los datos|nodo datos|colecci[oó]n de (saldos|movimientos)/.test(t);
+  const recordsMovement = /registr\w+ (el|los|cada) movimiento|no se descuente dos veces|sin duplicar|idempoten/.test(t);
+  return (changesBalance && ownData) || (recordsMovement && changesBalance);
+}
+function movementWriters(nodes: FlowNode[]): FlowNode[] {
+  return nodes.filter((n) => {
+    if (actionTypeOf(n) !== "Datos") return false;
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    const { ops } = datosOpsOf(cfg);
+    const list = [cfg, ...(ops ?? [])];
+    return list.some((it) => /^(saveIfAbsent)$/.test(String(it?.operation)));
+  });
+}
+export function datosLimitError(promptText: string, nodes: FlowNode[]): string | null {
+  if (!datosBalanceIntent(promptText)) return null;
+  const writers = movementWriters(nodes);
+  if (!writers.length) return `${DATOS_LIMIT_MARK} the request asks to change a balance in the company's own data and record the movement, but the canvas has no Datos step that records the movement (saveIfAbsent) with its balance change. Datos handles ONE order line per run and needs the order line id from the source. Do not replace it with Loop, HTTP, Slack or other steps: this case is not supported yet.`;
+  for (const n of writers) {
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    const { ops } = datosOpsOf(cfg);
+    for (const it of [cfg, ...(ops ?? [])]) {
+      if (String(it?.operation) !== "saveIfAbsent" || typeof it.key !== "string") continue;
+      const refs = [...it.key.matchAll(/\{\{@([^:}]+):[^.}]*\.?([^}]*)\}\}/g)];
+      const appRef = refs.some((m) => { const src = nodes.find((x) => x.id === m[1]); const a = src ? (actionTypeOf(src) || String((src.data?.config as Record<string, unknown> | undefined)?.triggerType ?? "")) : ""; return a.includes("/"); });
+      if (appRef && !refs.some((m) => /(^|[._])(line|linea|lineid|line_id|linea_id|orderline|lineitem|item_?id)/i.test(m[2]))) return `${DATOS_LIMIT_MARK} the movement key of Datos node "${n.id}" is built from an app's data but none of its parts is a documented order line id. Do not use another id (order id, product id, list position) as a stand-in: this case is not supported yet.`;
+    }
+  }
+  return null;
+}
+
+// Incomplete or malformed Datos steps are rejected at build time instead of failing (or half-working) at run time.
+export function datosShapeError(nodes: FlowNode[]): string | null {
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "Datos") continue;
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>; const label = n.data?.label ?? n.id;
+    if (cfg.operation === "applyTogether") {
+      const { ops } = datosOpsOf(cfg);
+      if (!ops) return `consistencia: Datos node "${n.id}" (${label}) applyTogether needs "operations" as a JSON list of changes`;
+      if (ops.length === 0 || ops.length > 10) return `consistencia: Datos node "${n.id}" (${label}) applyTogether needs 1 to 10 operations (got ${ops.length}); more changes than 10 are not supported in one step`;
+      const seen = new Set<string>();
+      for (const [i, o] of ops.entries()) {
+        if (!o || typeof o !== "object") return `consistencia: Datos node "${n.id}" (${label}) operation ${i + 1} is not an object`;
+        if (!["saveIfAbsent", "updateIfMatches", "add"].includes(String(o.operation))) return `consistencia: Datos node "${n.id}" (${label}) operation ${i + 1} must be saveIfAbsent, updateIfMatches or add`;
+        if (typeof o.collection !== "string" || !o.collection.trim() || typeof o.key !== "string" || !o.key.trim()) return `consistencia: Datos node "${n.id}" (${label}) operation ${i + 1} needs collection and key`;
+        if (o.operation === "add" && (typeof o.field !== "string" || !o.field.trim() || o.amount === undefined || o.amount === "")) return `consistencia: Datos node "${n.id}" (${label}) operation ${i + 1} (add) needs field and amount`;
+        const id = `${o.collection}\u0000${o.key}`;
+        if (seen.has(id)) return `consistencia: Datos node "${n.id}" (${label}) has two operations on the same collection and key`;
+        seen.add(id);
+      }
+    }
+  }
+  return null;
+}
+
+// Datos steps finish successfully even when nothing changed (rejected, duplicate, no match). What follows a state-changing step must test
+// the field THAT operation returns; a Condition has only a "true" path. Positive tests (estado === 'aplicado', creado === true, ...) and negative
+// ones (rechazado / false: legitimate "was rejected" flows) are both accepted. Limits: only direct successors are checked, and a node that also has
+// another parent outside the gate still runs (merge semantics) - that is not detected here.
+const DATOS_GATE_FIELD: Record<string, string> = { applyTogether: "estado", saveIfAbsent: "creado", updateIfMatches: "actualizado", add: "aplicado" };
+export function datosGateError(nodes: FlowNode[], edges: FlowEdge[]): string | null {
+  const byId = new Map(nodes.map((n) => [n.id, n] as const));
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "Datos") continue;
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    const op = String(cfg.operation); const field = DATOS_GATE_FIELD[op];
+    if (!field) continue;
+    for (const e of edges) {
+      if (e.source !== n.id) continue;
+      const t = byId.get(e.target); const c = (t?.data?.config ?? {}) as Record<string, unknown>;
+      const cond = typeof c.condition === "string" ? c.condition : "";
+      const ref = `\\{\\{@${esc(n.id)}:[^}]*\\.${field}\\}\\}`;
+      const clause = field === "estado"
+        ? new RegExp(`^\\s*${ref}\\s*(===?|!==?)\\s*['"](aplicado|rechazado)['"]\\s*$`)
+        : new RegExp(`^\\s*(!\\s*)?${ref}(\\s*(===?|!==?)\\s*(true|false))?\\s*$`);
+      const ok = t && actionTypeOf(t) === "Condition" && !cond.includes("||") && cond.split("&&").some((part) => clause.test(part));
+      if (!ok) return `consistencia: node "${e.target}" runs right after Datos "${n.id}" (${op}) without a Condition that tests its result. ${op} finishes successfully even when it changed nothing; it returns "${field}", so put a Condition on {{@${n.id}:<label>.${field}}}${field === "estado" ? " === 'aplicado'" : " === true"} before what follows (a Condition only has a "true" path; do not combine it with || and do not test a different field)`;
+    }
+  }
+  return null;
+}
+
+// A Datos step that reads ONE element of a list (e.g. products[0]) silently drops the other elements. Reject it unless the request itself is about a single/first element.
+export function datosCoverageError(nodes: FlowNode[], promptText: string): string | null {
+  if (/\b(primer[ao]?|first|única|unica|una sola|only one|single)\b/i.test(promptText)) return null;
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "Datos") continue;
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    const text = typeof cfg.operations === "string" ? cfg.operations : JSON.stringify(cfg);
+    const m = /\{\{@[^}]*\[\d+\][^}]*\}\}/.exec(text);
+    if (m) return `consistencia: Datos node "${n.id}" uses one element of a list (${m[0].slice(0, 70)}), so the other elements would be ignored without any notice. Do not build a flow that handles only some lines: Datos cannot run in a Loop and one step handles one event. LIMIT: Datos does not support an order with several lines or without a declared line id yet. Do not build or connect anything else (no Loop, no HTTP, no placeholder endpoint): tell the user plainly, in their language, that this case is not supported yet and what is supported (one order line per run, with the line id supplied)`;
+  }
+  return null;
+}
+
+// Datos fails closed inside a Loop step (the executor refuses it): catch it at build time instead of shipping a flow that cannot run.
+export function datosInLoopError(nodes: FlowNode[]): string | null {
+  for (const n of nodes) {
+    if (actionTypeOf(n) !== "Loop") continue;
+    const steps = ((n.data?.config ?? {}) as Record<string, unknown>).steps;
+    if (!Array.isArray(steps)) continue;
+    const bad = steps.find((st) => (() => { const x = st as { actionType?: unknown; config?: { actionType?: unknown } }; return x?.actionType === "Datos" || x?.config?.actionType === "Datos"; })());
+    if (bad) return `consistencia: Loop "${n.id}" contains a Datos step; Datos does not run inside a Loop (it fails closed). Do not use a Loop for Datos: one Datos step handles one event. LIMIT: Datos does not support an order with several lines or without a declared line id yet. Do not rebuild it with HTTP or placeholder endpoints: tell the user plainly, in their language, that this case is not supported yet and what is supported (one order line per run, with the line id supplied)`;
   }
   return null;
 }

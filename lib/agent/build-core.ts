@@ -7,7 +7,8 @@ import { tool } from "ai";
 import { z } from "zod";
 import { getActionOutputFields, getActionOutputItemFields } from "@/plugins/registry";
 import { repairOutputContracts } from "@/lib/agent/contract-repair";
-import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, cyclicFlowError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, emptyResultGuardError, refOrderRaceError, requestCoverageError, sheetContractError, shipmentDetailError, unwiredReportStepError, userIntentText, validateFlow } from "@/lib/flow-validator";
+import { jsonFormatTag } from "@/lib/datos/value-format";
+import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, cyclicFlowError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, datosMovementKeyError, datosInLoopError, datosShapeError, datosGateError, datosCoverageError, datosLimitError, emptyResultGuardError, refOrderRaceError, requestCoverageError, sheetContractError, shipmentDetailError, unwiredReportStepError, userIntentText, validateFlow } from "@/lib/flow-validator";
 
 // Builder core shared by the /api/ai/generate route and the unified chat agent: operations, the validated in-memory graph, the builder rules prompt and valid type sets.
 export type Operation = {
@@ -17,6 +18,16 @@ export type Operation = {
 };
 
 export type Shadow = { nodes: FlowNode[]; edges: FlowEdge[] };
+// The Datos editor and executor treat config.operations (and value/expected) as JSON STRINGS: the executor substitutes {{@...}} only inside
+// string config values (and JSON-escapes them there). A real array would keep its references unresolved, so serialize it here.
+export function normalizeDatosConfig(cfg: Record<string, unknown> | undefined): void {
+  if (!cfg || cfg.actionType !== "Datos") return;
+  // The executor only resolves {{@...}} inside string values, so every JSON document of a Datos step is kept as text: operations, value, expected.
+  for (const k of ["operations", "value", "expected"]) {
+    const v = cfg[k];
+    if (v !== null && typeof v === "object") { const text = JSON.stringify(v); cfg[k] = text; cfg[`${k}Format`] = jsonFormatTag(text); }
+  }
+}
 export function shadowApply(operation: Operation, shadow: Shadow): boolean {
   if (operation.op === "addNode") {
     const node = operation.node as FlowNode | undefined;
@@ -35,6 +46,7 @@ export function shadowApply(operation: Operation, shadow: Shadow): boolean {
         step.config = inner;
       }
     }
+    normalizeDatosConfig(cfg);
     shadow.nodes.push(node);
     return true;
   }
@@ -64,6 +76,7 @@ export function shadowApply(operation: Operation, shadow: Shadow): boolean {
       const mergedData = upd
         ? { ...n.data, ...upd, config: mergeConfig(n.data?.config as Record<string, unknown> | undefined, upd.config as Record<string, unknown> | undefined) }
         : n.data;
+      if (upd) normalizeDatosConfig(mergedData?.config as Record<string, unknown> | undefined);
       return { ...n, ...(operation.updates?.position ? { position: operation.updates.position } : {}), ...(upd ? { data: mergedData } : {}) } as FlowNode;
     });
     return true;
@@ -186,6 +199,7 @@ System action types (built-in):
 - Delay: {"actionType": "Delay", "durationMinutes": 10} — pauses the workflow durably before continuing (use "durationSeconds" for sub-minute waits). NEVER simulate a wait with an HTTP Request to an external service.
 - Unir: {"actionType": "Unir", "joinMode": "all"} — joins parallel branches: wait for ALL parents (joinMode "all") or up to "timeoutSeconds" (joinMode "timeout", "onTimeout": "fail" (default, stops the flow) | "continue" (go on with what arrived); the timeout value is never chosen by you: set it only when the user gave it). "onParentFailure": "fail" (default) | "continue". Its output is {inputs: {<parentNodeId>: <that parent's data>}, completed, failed, skipped, timedOut}; read a branch result as {{@unirId:Unir.inputs.<key>.<field>}} where <key> is the parent node id with every character that is not a letter or digit replaced by "_" (parent "calc-texto" -> key "calc_texto"); a Fórmula parent keeps its value under "result" (…inputs.calc_texto.result). To combine branch values in a Fórmula, put those templates in its "input" under simple names (e.g. {\"texto\": \"{{@u:Unir.inputs.calc_texto.result}}\"}) and write the expression over those simple names (texto & \" \" & $string(numero)); never write hyphenated ids inside a JSONata expression ("-" is a minus there and the result comes out empty). Parents skipped by a false Condition never block it. Use it whenever a step needs the results of several parallel branches.
 - Approval: {"actionType": "Approval", "message": "..."} — pauses the run until a person approves or rejects it from the runs view (human-in-the-loop). Use it whenever the user should review, choose or authorize something before the flow continues (e.g. picking one of N generated options, authorizing a publication or a purchase). A rejection ends the run. Later steps can reference {{@node-id:Label.approved}} and {{@node-id:Label.note}}. When the user asks to be presented options to review or choose from, use this node for that step (never a messaging app they did not ask for).
+- Datos: per-company records. "operation" is one of read ({"collection","key"}), save, saveIfAbsent, updateIfMatches, add, applyTogether. applyTogether applies up to 10 changes ALL or NONE: {"actionType": "Datos", "operation": "applyTogether", "operations": [{"operation": "saveIfAbsent", "collection": "movimientos", "key": "{{@evt:Evento.result.plataforma}}:{{@evt:Evento.result.pedido}}:{{@evt:Evento.result.linea}}:{{@evt:Evento.result.tipo}}", "value": {"sku": "{{@evt:Evento.result.sku}}"}}, {"operation": "add", "collection": "saldos", "key": "{{@evt:Evento.result.sku}}", "field": "stock", "amount": "{{@evt:Evento.result.cantidad}}", "min": "0"}]} - "operations" MUST be a real JSON array of objects (never a string containing JSON) and each item's collection+key must differ. Outputs by operation: applyTogether gives "estado" ("aplicado" or "rechazado"), "repetido", "motivo"; saveIfAbsent gives "creado" (true/false); updateIfMatches gives "actualizado" (true/false); add gives "aplicado" (true/false). A rejected or no-op run still finishes successfully, so what follows a saveIfAbsent/updateIfMatches/add/applyTogether step MUST sit behind a Condition on THAT operation's field (applyTogether: {{@id:Label.estado}} === 'aplicado'; saveIfAbsent: {{@id:Label.creado}} === true; ...). A Condition only has a "true" path. Keys use ":" and never "/" or "|". A movement key is platform:orderId:orderLineId:economicType (e.g. "venta"): use the order LINE id field of the source (only a field the source documents as the line id; do not substitute another id), never an invented placeholder; every key, collection and amount must come from the event data or a {{@...}} reference, never a made-up value like "ITEM-STOCK". "amount" is signed: the applyTogether example ADDS; to deduct stock use a negative amount such as "-{{@evt:Evento.result.cantidad}}". Every save/saveIfAbsent/add/updateIfMatches needs a "key". Datos does NOT run inside a Loop (it fails closed): do not put it in a Loop step; one Datos step handles one event. Never read one element of a list (products[0]) to stand for the whole order: if the request needs every line of an order, Datos cannot do that yet, so say so plainly instead of building a flow that handles only some lines. LIMIT, state it to the user in their language as "not supported yet": an order with several lines, or a source that declares no line id. Say what is supported (one order line per run, with the line id supplied) and build nothing else: no Loop, no HTTP, no placeholder endpoints. If the source gives no order line id, do NOT build the Datos step and do NOT substitute another id: tell the user the line id is missing. Add only the steps the user asked for: no Slack/email/GitHub/Sheets sends or other connectors they did not name.
 - Fórmula: {"actionType": "Fórmula", "input": "{\"precio\": 100}", "expression": "precio * 1.21"} — evaluates a JSONata expression over the JSON input; use it to transform, calculate, filter or reshape data between steps. "input" is a JSON string that may contain {{@...}} templates; "expression" is plain JSONata (no {{@...}} templates inside).
 
 Plugin action types (from integrations):
@@ -250,7 +264,7 @@ ${mode === "tools" ? TOOL_OUTRO : OPS_OUTRO}`;
 }
 
 
-const SYSTEM_ACTION_TYPES = ["Database Query", "HTTP Request", "Condition", "Delay", "Fórmula", "Loop", "Approval", "Unir"];
+const SYSTEM_ACTION_TYPES = ["Database Query", "HTTP Request", "Condition", "Delay", "Fórmula", "Loop", "Approval", "Unir", "Datos"];
 let cachedValidTriggerTypes: Set<string> | null = null;
 export function getValidTriggerTypes(): Set<string> {
   if (!cachedValidTriggerTypes) {
@@ -354,7 +368,7 @@ export function wireDanglingRefs(shadow: Shadow): number {
   return wired;
 }
 
-export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map<string, string[]>; sheetContracts: SheetColumnsContract[]; userPrompt: string; userRequest?: string; skipDeliverables?: Set<string> }): string[] {
+export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map<string, string[]>; sheetContracts: SheetColumnsContract[]; userPrompt: string; userRequest?: string; currentRequest?: string; skipDeliverables?: Set<string> }): string[] {
   const { composioCatalogMap, sheetContracts, userPrompt } = ctx;
   repairOutputContracts(shadow.nodes); // exact contract-path repairs only (see contract-repair.ts); never invents fields
   wireDanglingRefs(shadow); // exact edge repair only; ambiguous dangling steps stay flagged by validateFlow
@@ -371,6 +385,13 @@ export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map
       if (shipment) errs.push(shipment);
       const questions = questionActionError(userPrompt, shadow.nodes);
       if (questions) errs.push(questions);
+      for (const dErr of [datosShapeError(shadow.nodes), datosGateError(shadow.nodes, shadow.edges), datosCoverageError(shadow.nodes, userIntentText(userPrompt))]) if (dErr) errs.push(dErr);
+      const datosLimit = datosLimitError(`${ctx.currentRequest ?? ""}\n${userIntentText(userPrompt)}`, shadow.nodes);
+      if (datosLimit) errs.push(datosLimit);
+      const datosLoop = datosInLoopError(shadow.nodes);
+      if (datosLoop) errs.push(datosLoop);
+      const datosKey = datosMovementKeyError(shadow.nodes);
+      if (datosKey) errs.push(datosKey);
       const crossing = listCrossingError(userPrompt, shadow.nodes);
       if (crossing) errs.push(crossing);
       const condExpr = conditionExpressionError(shadow.nodes);

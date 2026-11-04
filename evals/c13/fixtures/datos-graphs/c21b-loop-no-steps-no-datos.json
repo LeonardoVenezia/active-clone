@@ -1,0 +1,68 @@
+{
+ "nodes": [
+  {
+   "id": "trigger-tiendanube",
+   "type": "trigger",
+   "position": {
+    "x": 90,
+    "y": 110
+   },
+   "data": {
+    "label": "Pedido Pagado Tiendanube",
+    "type": "trigger",
+    "config": {
+     "triggerType": "tiendanube/order-paid"
+    },
+    "status": "idle"
+   }
+  },
+  {
+   "id": "get-order",
+   "type": "action",
+   "position": {
+    "x": 432,
+    "y": 110
+   },
+   "data": {
+    "label": "Obtener Detalle del Pedido",
+    "type": "action",
+    "config": {
+     "orderId": "{{@trigger-tiendanube:Pedido Pagado Tiendanube.orderId}}",
+     "actionType": "tiendanube/get-order"
+    },
+    "status": "idle"
+   }
+  },
+  {
+   "id": "loop-products",
+   "type": "action",
+   "position": {
+    "x": 774,
+    "y": 110
+   },
+   "data": {
+    "label": "Recorrer Productos",
+    "type": "action",
+    "config": {
+     "steps": [],
+     "source": "{{@get-order:Obtener Detalle del Pedido.products}}",
+     "maxItems": 50,
+     "actionType": "Loop"
+    },
+    "status": "idle"
+   }
+  }
+ ],
+ "edges": [
+  {
+   "source": "trigger-tiendanube",
+   "target": "get-order",
+   "id": "e-trigger-tiendanube-get-order"
+  },
+  {
+   "source": "get-order",
+   "target": "loop-products",
+   "id": "e-get-order-loop-products"
+  }
+ ]
+}

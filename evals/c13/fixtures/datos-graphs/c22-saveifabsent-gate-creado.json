@@ -1,0 +1,118 @@
+{
+ "nodes": [
+  {
+   "id": "trigger-manual",
+   "type": "trigger",
+   "position": {
+    "x": 90,
+    "y": 110
+   },
+   "data": {
+    "label": "Datos del Movimiento",
+    "type": "trigger",
+    "config": {
+     "inputFields": [
+      {
+       "key": "plataforma",
+       "label": "Plataforma"
+      },
+      {
+       "label": "Pedido",
+       "key": "pedido"
+      },
+      {
+       "key": "linea",
+       "label": "Línea"
+      },
+      {
+       "key": "tipo",
+       "label": "Tipo"
+      },
+      {
+       "key": "sku",
+       "label": "SKU"
+      }
+     ],
+     "triggerType": "Manual"
+    },
+    "status": "idle"
+   }
+  },
+  {
+   "id": "guardar-movimiento",
+   "type": "action",
+   "position": {
+    "x": 432,
+    "y": 110
+   },
+   "data": {
+    "label": "Guardar Movimiento si Nuevo",
+    "type": "action",
+    "config": {
+     "key": "{{@trigger-manual:Datos del Movimiento.plataforma}}:{{@trigger-manual:Datos del Movimiento.pedido}}:{{@trigger-manual:Datos del Movimiento.linea}}:{{@trigger-manual:Datos del Movimiento.tipo}}",
+     "value": "{\"sku\":\"{{@trigger-manual:Datos del Movimiento.sku}}\"}",
+     "operation": "saveIfAbsent",
+     "collection": "movimientos",
+     "actionType": "Datos",
+     "valueFormat": "json:54:1b575de5"
+    },
+    "status": "idle"
+   }
+  },
+  {
+   "id": "condicion-creado",
+   "type": "action",
+   "position": {
+    "x": 774,
+    "y": 110
+   },
+   "data": {
+    "label": "¿Fue Creado?",
+    "type": "action",
+    "config": {
+     "condition": "{{@guardar-movimiento:Guardar Movimiento si Nuevo.creado}} === true",
+     "actionType": "Condition"
+    },
+    "status": "idle"
+   }
+  },
+  {
+   "id": "guardar-aviso",
+   "type": "action",
+   "position": {
+    "x": 1116,
+    "y": 110
+   },
+   "data": {
+    "label": "Marcar Aviso Pendiente",
+    "type": "action",
+    "config": {
+     "operation": "save",
+     "value": "{\"sku\":\"{{@trigger-manual:Datos del Movimiento.sku}}\",\"estado\":\"pendiente_aviso_interno\"}",
+     "collection": "avisos",
+     "key": "{{@trigger-manual:Datos del Movimiento.plataforma}}:{{@trigger-manual:Datos del Movimiento.pedido}}:{{@trigger-manual:Datos del Movimiento.linea}}",
+     "actionType": "Datos",
+     "valueFormat": "json:89:2998aa40"
+    },
+    "status": "idle"
+   }
+  }
+ ],
+ "edges": [
+  {
+   "source": "trigger-manual",
+   "target": "guardar-movimiento",
+   "id": "e-trigger-manual-guardar-movimiento"
+  },
+  {
+   "source": "guardar-movimiento",
+   "target": "condicion-creado",
+   "id": "e-guardar-movimiento-condicion-creado"
+  },
+  {
+   "source": "condicion-creado",
+   "target": "guardar-aviso",
+   "id": "e-condicion-creado-guardar-aviso"
+  }
+ ]
+}

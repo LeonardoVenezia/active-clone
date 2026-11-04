@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { LlmRoute } from "@/lib/free-models";
 import { type Selection, ModelTrace, languageModel } from "@/lib/model-select";
 import { type ConnStatus, canonicalApp, catalogText, connectOutcome, connectionStatuses } from "@/lib/agent/capabilities";
+import { DATOS_LIMIT_MARK } from "@/lib/flow-validator";
 import { type Operation, type Shadow, computeFlowErrors, createBuildTools, lineageFacts, missingMediaKinds, fixFormulaRefsIn, getSystemPrompt } from "@/lib/agent/build-core";
 import { findPlaceholders } from "@/lib/agent/review";
 import { pendingForUser } from "@/lib/agent/pending-summary";
@@ -65,6 +66,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
   const shadow: Shadow = { nodes: [...((i.canvas?.nodes ?? []) as FlowNode[])], edges: [...((i.canvas?.edges ?? []) as FlowEdge[])] };
   const startedEmpty = shadow.nodes.every(n => (n.data as { config?: { placeholder?: boolean } } | undefined)?.config?.placeholder === true);
   const initialIds = new Set(shadow.nodes.map(n => n.id));
+  const initialSnapshot = JSON.stringify({ nodes: shadow.nodes, edges: shadow.edges }); // exact pre-turn canvas, restored if the turn ends on an unsupported limit
   let planText = ""; let flowName = ""; let touched = false; let heldChars = 0; const composioMap = new Map<string, string[]>();
   const userRequest = [...i.past.filter(m => m.role === "user").map(m => m.content), i.text].join("\n");
   const discover = (i.deps?.discover ?? ((x: { catalog: string; search?: string; toolkit?: string }) => discoverComposio(x as Parameters<typeof discoverComposio>[0]))) as (x: { catalog: string; search?: string; toolkit?: string }) => Promise<{ items?: Record<string, unknown>[] }>;
@@ -198,9 +200,10 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               const request = planText || i.text; let errs: string[] = [];
               for (let round = 0; round < 3; round++) {
                 fixFormulaRefsIn(shadow); await resolveObjective(route);
-                errs = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest, skipDeliverables: skipKinds });
+                errs = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest, currentRequest: i.text, skipDeliverables: skipKinds });
                 { const cur = new Set(errs); const cat = catCounts(errs); const pv = prevErrs; rounds.push({ round, errors: errs.length, cat, ...(pv ? { resolved: [...pv].filter(e => !cur.has(e)).length, persistent: [...pv].filter(e => cur.has(e)).length, fresh: [...cur].filter(e => !pv.has(e)).length } : {}) }); prevErrs = cur; }
                 if (!errs.length) { closeReason = "clean"; break; }
+                if (errs.some((e) => e.startsWith(DATOS_LIMIT_MARK))) { closeReason = "unsupported-limit"; break; } // no corrective rounds: retrying only invites stand-in steps
                 if (abort.signal.aborted) { closeReason = "cap-reached"; break; }
                 stageName = `corrective-${round + 1}`;
                 const nodeList = shadow.nodes.map(n => `- ${n.id}: ${JSON.stringify({ label: (n.data as { label?: string })?.label, config: (n.data as { config?: unknown })?.config })}`).join("\n");
@@ -211,11 +214,18 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               }
               if (closeReason === "no-build") closeReason = "rounds-exhausted";
               await resolveObjective(route);
-              fixFormulaRefsIn(shadow); validationLeft = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest, skipDeliverables: skipKinds });
+              fixFormulaRefsIn(shadow); validationLeft = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest, currentRequest: i.text, skipDeliverables: skipKinds });
               timedOut = abort.signal.aborted;
               if (closeReason === "rounds-exhausted" && !validationLeft.length) closeReason = "clean-after-last-round";
               if (startedEmpty && shadow.nodes.length) { const pos = layoutPositions(shadow.nodes, shadow.edges); for (const n of shadow.nodes) { const p = pos.get(n.id); if (p) { (n as { position?: unknown }).position = p; } } }
               for (const n of shadow.nodes) { const c = (n.data as { config?: Record<string, unknown> } | undefined)?.config; if (c?.placeholder === true && (typeof c.actionType === "string" || typeof c.triggerType === "string" || typeof c.scheduleCron === "string" || typeof c.cron === "string")) delete c.placeholder; }
+              if (validationLeft.some((e) => e.startsWith(DATOS_LIMIT_MARK))) {
+                // Unsupported limit: nothing from this turn (new steps or edits to existing ones) is left on the canvas as a flow that looks complete. The diagnostic is kept in "validation".
+                { const before = JSON.parse(initialSnapshot) as { nodes: FlowNode[]; edges: FlowEdge[] }; shadow.nodes = before.nodes; shadow.edges = before.edges; } // whole pre-turn canvas back: edits to existing steps are undone too
+                emit(`${reply.trim() ? "\n\n" : ""}No lo dejé armado: esto todavía no se puede hacer completo y de forma segura. Descontar el saldo propio y registrar el movimiento funciona de a una línea de pedido por vez y necesita el ID de línea que informa el origen; no soporta pedidos con varias líneas ni pedidos sin ID de línea. No armé reemplazos parciales ni mandé nada. Si querés, lo armo para procesar una línea por vez con su ID de línea, o decime cómo seguimos.`);
+                writer.write({ type: "data-canvas-final", data: { name: flowName, nodes: shadow.nodes, edges: shadow.edges, validation: validationLeft, timedOut, startedEmpty, interrupted, unsupportedLimit: true } });
+                touched = false; break;
+              }
               if (interrupted || timedOut || validationLeft.length) emit(`${reply.trim() ? "\n\n" : ""}Estado del armado: PARCIAL${interrupted ? " (se cortó una llamada al modelo)" : timedOut ? " (llegó al tiempo límite)" : ""}${validationLeft.length ? `, ${validationLeft.length} punto${validationLeft.length === 1 ? "" : "s"} sin resolver` : ""}. Lo que sigue describe lo que quedó en el lienzo; puede no cumplir todo lo pedido.`);
               // Deterministic, so the user sees what is pending and how to continue even if the guide pass below writes nothing.
               if (interrupted || timedOut || validationLeft.length) { const pend = pendingForUser(validationLeft); emit(`${pend ? `\n\n${pend}` : ""}\n\nPara seguir: pedime que lo corrija de nuevo, o tocá «Deshacer último cambio» para volver a como estaba.`); }
