@@ -24,7 +24,7 @@ export function normalizeDatosConfig(cfg: Record<string, unknown> | undefined): 
   // The executor only resolves {{@...}} inside string values, so every JSON document of a Datos step is kept as text: operations, value, expected.
   for (const k of ["operations", "value", "expected"]) {
     const v = cfg[k];
-    if (v !== null && typeof v === "object") cfg[k] = JSON.stringify(v);
+    if (v !== null && typeof v === "object") { cfg[k] = JSON.stringify(v); if (k !== "operations") cfg.valueFormat = "json"; }
   }
 }
 export function shadowApply(operation: Operation, shadow: Shadow): boolean {

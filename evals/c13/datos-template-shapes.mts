@@ -95,4 +95,23 @@ const ts2 = await typed(u, "str"); ok(typeof ts2 === "string", `unquoted string 
 const rp2 = memoryRepo(); await datosSave(rp2, "org", { collection: "saldos", key: "S9", value: tq.num ? JSON.stringify({ stock: tq.num.f }) : "{}" });
 const bad: any = await core.datosAdd(rp2, "org", { collection: "saldos", key: "S9", field: "stock", amount: -1, operationId: "a1" });
 ok(!(bad.success && bad.aplicado), `add on a text-typed stock is refused (success=${bad.success}, aplicado=${bad.aplicado}, error=${String(bad.error).slice(0, 50)})`);
+// 9. explicit contract: valueFormat "json" (set by the builder when it serializes an object) refuses text that does not parse; legacy steps are unchanged
+const rs = memoryRepo();
+const cfgNull: any = processTemplates({ actionType: "Datos", operation: "save", value: u, valueFormat: "json" }, { trig: { label: "T", data: { v: null } } });
+const strictBad: any = await datosSave(rs, "org", { collection: "c", key: "k1", value: cfgNull.value, valueFormat: cfgNull.valueFormat });
+const afterBad: any = await datosRead(rs, "org", { collection: "c", key: "k1" });
+ok(!strictBad.success && !afterBad.record, `valueFormat json: broken JSON is refused and nothing is written (error=${String(strictBad.error).slice(0, 50)})`);
+const legacy: any = await datosSave(rs, "org", { collection: "c", key: "k2", value: cfgNull.value });
+ok(legacy.success, "no valueFormat: legacy behaviour unchanged (text stored as before)");
+const cfgOk: any = processTemplates({ actionType: "Datos", operation: "save", value: u, valueFormat: "json" }, { trig: { label: "T", data: { v: 5 } } });
+const strictOk: any = await datosSave(rs, "org", { collection: "c", key: "k3", value: cfgOk.value, valueFormat: "json" });
+ok(strictOk.success && strictOk.record.value.f === 5, "valueFormat json: valid JSON saves as typed object");
+const plainText: any = await datosSave(rs, "org", { collection: "c", key: "k4", value: "hola {mundo", valueFormat: undefined });
+ok(plainText.success, "plain text that merely contains a brace is still saved as text without the flag");
+const shf: any = { nodes: [], edges: [] };
+shadowApply({ op: "addNode", node: { id: "w", type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: "W", config: { actionType: "Datos", operation: "save", collection: "a", key: "k", value: { a: "{{@trig:T.v}}" } } } } } as any, shf);
+ok(shf.nodes[0].data.config.valueFormat === "json" && typeof shf.nodes[0].data.config.value === "string", "builder marks serialized values with valueFormat json");
+const shp: any = { nodes: [], edges: [] };
+shadowApply({ op: "addNode", node: { id: "w", type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: "W", config: { actionType: "Datos", operation: "save", collection: "a", key: "k", value: "texto libre" } } } } as any, shp);
+ok(shp.nodes[0].data.config.valueFormat === undefined, "builder does not mark plain text values");
 process.exit(fails ? 1 : 0);
