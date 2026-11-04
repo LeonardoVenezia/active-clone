@@ -32,8 +32,16 @@ ok(r3.success && r3.estado === "aplicado", "string form of operations is also ac
 {
   const fv2: any = await import("../../lib/flow-validator"); const g = (fv2.default ?? fv2).datosMovementKeyError;
   const nd = (cfg: any) => [{ id: "d", type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: "D", config: { actionType: "Datos", ...cfg } } }];
-  ok(!!g(nd({ operation: "applyTogether", operations: [{ operation: "saveIfAbsent", key: "tn:{{@evt:E.result.products[0].id}}:venta" }] })), "guard rejects array-index key");
+  ok(!!g(nd({ operation: "applyTogether", operations: [{ operation: "saveIfAbsent", key: "tn:ITEM-STOCK:venta" }] })), "guard rejects made-up literal key");
   ok(!!g(nd({ operation: "applyTogether", operations: JSON.stringify([{ key: "ITEM-STOCK" }]) })), "guard rejects invented key (string form)");
-  ok(!g(nd({ operation: "applyTogether", operations: [{ key: "{{@evt:E.result.plataforma}}:{{@evt:E.result.pedido}}:{{@evt:E.result.linea}}:venta" }] })), "guard accepts line-id key");
+  ok(!g(nd({ operation: "applyTogether", operations: [{ key: "{{@evt:E.result.plataforma}}:{{@evt:E.result.pedido}}:{{@evt:E.result.linea}}:venta" }] })), "guard accepts reference key");
+  ok(!g(nd({ operation: "applyTogether", operations: [{ key: "tn:{{@evt:E.result.products[0].id}}:venta", collection: "movimientos" }] })), "guard does NOT block products[0] (identity depends on source contract)");
+  ok(!!g(nd({ operation: "saveIfAbsent", collection: "movimientos", key: "tn:1:venta" })), "guard rejects reference-less movement key");
+}
+{
+  const g = ((await import("../../lib/flow-validator")) as any).datosMovementKeyError ?? ((await import("../../lib/flow-validator")) as any).default.datosMovementKeyError;
+  const nd2 = (cfg: any) => [{ id: "d", type: "action", position: { x: 0, y: 0 }, data: { type: "action", label: "D", config: { actionType: "Datos", ...cfg } } }];
+  ok(!!g(nd2({ operation: "save", collection: "avisos", value: { a: 1 } })), "guard rejects save without key");
+  ok(!g(nd2({ operation: "save", collection: "avisos", key: "{{@x:y.z}}", value: { a: 1 } })), "guard accepts save with key");
 }
 process.exit(fails ? 1 : 0);

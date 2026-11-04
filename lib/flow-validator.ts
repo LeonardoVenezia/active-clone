@@ -847,21 +847,24 @@ export function questionActionError(promptText: string, nodes: FlowNode[]): stri
   return null;
 }
 
-// Datos movement keys must identify the order LINE. A positional reference ([0], .0.) or an invented placeholder is not an identity:
-// when the source has no line id the builder must stop and ask the user instead of guessing.
+// Datos keys must come from event data or references, never literal placeholders. This does NOT decide whether a referenced field
+// is the order line id: that depends on the source contract (e.g. a Tienda Nube order product id can be the line id) and is not checked here.
 export function datosMovementKeyError(nodes: FlowNode[]): string | null {
   for (const n of nodes) {
     if (actionTypeOf(n) !== "Datos") continue;
     const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
     let ops: unknown = cfg.operations;
     if (typeof ops === "string") { try { ops = JSON.parse(ops); } catch { ops = []; } }
-    const keys: unknown[] = [cfg.key, ...(Array.isArray(ops) ? ops.map((o) => (o as Record<string, unknown> | null)?.key) : [])];
-    for (const k of keys) {
+    const items: Record<string, unknown>[] = [cfg, ...(Array.isArray(ops) ? (ops as Record<string, unknown>[]) : [])];
+    for (const it of items) {
+      const k = it?.key;
+      const label0 = n.data?.label ?? n.id;
+      if (["save", "saveIfAbsent", "updateIfMatches", "add"].includes(String(it?.operation)) && !(typeof k === "string" && k.trim())) return `consistencia: Datos node "${n.id}" (${label0}) runs "${String(it.operation)}" without a "key"; every record operation needs a key built from event data or a reference`;
       if (typeof k !== "string") continue;
-      if (/\[\d+\]|\.\d+\./.test(k) || /ITEM-|PLACEHOLDER|EXAMPLE/i.test(k)) {
-        const label = n.data?.label ?? n.id;
-        return `consistencia: Datos node "${n.id}" (${label}) builds a key from an array position or a made-up value ("${k.slice(0, 80)}"); the key must use the order LINE id from the source. If the source does not provide a line id, do not guess: remove the Datos step and ask the user for it`;
-      }
+      const literal = k.replace(/\{\{[^}]*\}\}/g, "");
+      const label = n.data?.label ?? n.id;
+      if (/ITEM-|PLACEHOLDER|EXAMPLE|XXX/i.test(literal)) return `consistencia: Datos node "${n.id}" (${label}) has a made-up literal in its key ("${k.slice(0, 80)}"); every part of a key must come from event data or a {{@...}} reference. If the source does not provide a needed id, remove the step and ask the user`;
+      if (/mov/i.test(String(it.collection ?? "")) && !/\{\{/.test(k)) return `consistencia: Datos node "${n.id}" (${label}) uses a movement key with no reference ("${k.slice(0, 80)}"); a movement key must be built from the event's platform, order, order line and type`;
     }
   }
   return null;
