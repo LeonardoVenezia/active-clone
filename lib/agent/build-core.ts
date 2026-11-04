@@ -8,7 +8,7 @@ import { z } from "zod";
 import { getActionOutputFields, getActionOutputItemFields } from "@/plugins/registry";
 import { repairOutputContracts } from "@/lib/agent/contract-repair";
 import { jsonFormatTag } from "@/lib/datos/value-format";
-import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, cyclicFlowError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, datosMovementKeyError, datosInLoopError, datosShapeError, datosGateError, datosCoverageError, emptyResultGuardError, refOrderRaceError, requestCoverageError, sheetContractError, shipmentDetailError, unwiredReportStepError, userIntentText, validateFlow } from "@/lib/flow-validator";
+import { type FlowEdge, type FlowNode, type SheetColumnsContract, channelConsistencyError, conditionExpressionError, cyclicFlowError, formulaExpressionError, httpSchemaError, listCrossingError, perItemLoopError, planCoverageError, questionActionError, datosMovementKeyError, datosInLoopError, datosShapeError, datosGateError, datosCoverageError, datosLimitError, emptyResultGuardError, refOrderRaceError, requestCoverageError, sheetContractError, shipmentDetailError, unwiredReportStepError, userIntentText, validateFlow } from "@/lib/flow-validator";
 
 // Builder core shared by the /api/ai/generate route and the unified chat agent: operations, the validated in-memory graph, the builder rules prompt and valid type sets.
 export type Operation = {
@@ -386,6 +386,8 @@ export function computeFlowErrors(shadow: Shadow, ctx: { composioCatalogMap: Map
       const questions = questionActionError(userPrompt, shadow.nodes);
       if (questions) errs.push(questions);
       for (const dErr of [datosShapeError(shadow.nodes), datosGateError(shadow.nodes, shadow.edges), datosCoverageError(shadow.nodes, userIntentText(userPrompt))]) if (dErr) errs.push(dErr);
+      const datosLimit = datosLimitError(userIntentText(userPrompt), shadow.nodes);
+      if (datosLimit) errs.push(datosLimit);
       const datosLoop = datosInLoopError(shadow.nodes);
       if (datosLoop) errs.push(datosLoop);
       const datosKey = datosMovementKeyError(shadow.nodes);

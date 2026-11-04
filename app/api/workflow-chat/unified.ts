@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { LlmRoute } from "@/lib/free-models";
 import { type Selection, ModelTrace, languageModel } from "@/lib/model-select";
 import { type ConnStatus, canonicalApp, catalogText, connectOutcome, connectionStatuses } from "@/lib/agent/capabilities";
+import { DATOS_LIMIT_MARK } from "@/lib/flow-validator";
 import { type Operation, type Shadow, computeFlowErrors, createBuildTools, lineageFacts, missingMediaKinds, fixFormulaRefsIn, getSystemPrompt } from "@/lib/agent/build-core";
 import { findPlaceholders } from "@/lib/agent/review";
 import { pendingForUser } from "@/lib/agent/pending-summary";
@@ -201,6 +202,7 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
                 errs = computeFlowErrors(shadow, { composioCatalogMap: composioMap, sheetContracts: [], userPrompt: request, userRequest, skipDeliverables: skipKinds });
                 { const cur = new Set(errs); const cat = catCounts(errs); const pv = prevErrs; rounds.push({ round, errors: errs.length, cat, ...(pv ? { resolved: [...pv].filter(e => !cur.has(e)).length, persistent: [...pv].filter(e => cur.has(e)).length, fresh: [...cur].filter(e => !pv.has(e)).length } : {}) }); prevErrs = cur; }
                 if (!errs.length) { closeReason = "clean"; break; }
+                if (errs.some((e) => e.startsWith(DATOS_LIMIT_MARK))) { closeReason = "unsupported-limit"; break; } // no corrective rounds: retrying only invites stand-in steps
                 if (abort.signal.aborted) { closeReason = "cap-reached"; break; }
                 stageName = `corrective-${round + 1}`;
                 const nodeList = shadow.nodes.map(n => `- ${n.id}: ${JSON.stringify({ label: (n.data as { label?: string })?.label, config: (n.data as { config?: unknown })?.config })}`).join("\n");
@@ -216,6 +218,14 @@ export async function unifiedResponse(i: UnifiedInput): Promise<Response> {
               if (closeReason === "rounds-exhausted" && !validationLeft.length) closeReason = "clean-after-last-round";
               if (startedEmpty && shadow.nodes.length) { const pos = layoutPositions(shadow.nodes, shadow.edges); for (const n of shadow.nodes) { const p = pos.get(n.id); if (p) { (n as { position?: unknown }).position = p; } } }
               for (const n of shadow.nodes) { const c = (n.data as { config?: Record<string, unknown> } | undefined)?.config; if (c?.placeholder === true && (typeof c.actionType === "string" || typeof c.triggerType === "string" || typeof c.scheduleCron === "string" || typeof c.cron === "string")) delete c.placeholder; }
+              if (validationLeft.some((e) => e.startsWith(DATOS_LIMIT_MARK))) {
+                // Unsupported limit: what this turn generated is not left on the canvas as a flow that looks complete. The diagnostic is kept in "validation".
+                const keep = new Set(shadow.nodes.filter((n) => initialIds.has(n.id)).map((n) => n.id));
+                shadow.nodes = shadow.nodes.filter((n) => keep.has(n.id)); shadow.edges = shadow.edges.filter((e) => keep.has(e.source) && keep.has(e.target));
+                emit(`${reply.trim() ? "\n\n" : ""}No lo dejé armado: esto todavía no se puede hacer completo y de forma segura. Descontar el saldo propio y registrar el movimiento funciona de a una línea de pedido por vez y necesita el ID de línea que informa el origen; no soporta pedidos con varias líneas ni pedidos sin ID de línea. No armé reemplazos parciales ni mandé nada. Si querés, lo armo para procesar una línea por vez con su ID de línea, o decime cómo seguimos.`);
+                writer.write({ type: "data-canvas-final", data: { name: flowName, nodes: shadow.nodes, edges: shadow.edges, validation: validationLeft, timedOut, startedEmpty, interrupted, unsupportedLimit: true } });
+                touched = false; break;
+              }
               if (interrupted || timedOut || validationLeft.length) emit(`${reply.trim() ? "\n\n" : ""}Estado del armado: PARCIAL${interrupted ? " (se cortó una llamada al modelo)" : timedOut ? " (llegó al tiempo límite)" : ""}${validationLeft.length ? `, ${validationLeft.length} punto${validationLeft.length === 1 ? "" : "s"} sin resolver` : ""}. Lo que sigue describe lo que quedó en el lienzo; puede no cumplir todo lo pedido.`);
               // Deterministic, so the user sees what is pending and how to continue even if the guide pass below writes nothing.
               if (interrupted || timedOut || validationLeft.length) { const pend = pendingForUser(validationLeft); emit(`${pend ? `\n\n${pend}` : ""}\n\nPara seguir: pedime que lo corrija de nuevo, o tocá «Deshacer último cambio» para volver a como estaba.`); }

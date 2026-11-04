@@ -878,6 +878,42 @@ function datosOpsOf(cfg: Record<string, unknown>): { ops: Record<string, unknown
   return { ops: null, raw: false };
 }
 
+// UNSUPPORTED-LIMIT gate (Datos). Marker prefix: DATOS_LIMIT_MARK. Intent comes from capabilities in the request, not from one keyword:
+// the user asks to change a balance/stock held in the company's own data AND/OR to record a movement so it is not applied twice.
+export const DATOS_LIMIT_MARK = "LIMITE-DATOS:";
+export function datosBalanceIntent(promptText: string): boolean {
+  const t = promptText.toLowerCase();
+  const changesBalance = /(descont|rest[aá]|sum[aá]|baj[aá]|reduc|disminu|ajust|actualiz|increment|decrement|mov[eé])\w*[^.\n]{0,80}\b(saldos?|stock|inventario|existencias)\b/.test(t) || /\b(saldos?|stock|inventario|existencias)\b[^.\n]{0,40}(descont|rest[aá]|sum[aá]|baj[aá]|reduc|disminu|ajust|actualiz)/.test(t);
+  const ownData = /datos de la empresa|datos internos|datos propios|(saldos?|stock) (de la empresa|internos?|propios?)|saldos? interno|en los datos|nodo datos/.test(t);
+  const recordsMovement = /registr\w+ (el|los|cada) movimiento|no se descuente dos veces|sin duplicar|idempoten/.test(t);
+  return (changesBalance && ownData) || (recordsMovement && changesBalance);
+}
+function movementWriters(nodes: FlowNode[]): FlowNode[] {
+  return nodes.filter((n) => {
+    if (actionTypeOf(n) !== "Datos") return false;
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    const { ops } = datosOpsOf(cfg);
+    const list = [cfg, ...(ops ?? [])];
+    return list.some((it) => /^(saveIfAbsent)$/.test(String(it?.operation)));
+  });
+}
+export function datosLimitError(promptText: string, nodes: FlowNode[]): string | null {
+  if (!datosBalanceIntent(promptText)) return null;
+  const writers = movementWriters(nodes);
+  if (!writers.length) return `${DATOS_LIMIT_MARK} the request asks to change a balance in the company's own data and record the movement, but the canvas has no Datos step that records the movement (saveIfAbsent) with its balance change. Datos handles ONE order line per run and needs the order line id from the source. Do not replace it with Loop, HTTP, Slack or other steps: this case is not supported yet.`;
+  for (const n of writers) {
+    const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
+    const { ops } = datosOpsOf(cfg);
+    for (const it of [cfg, ...(ops ?? [])]) {
+      if (String(it?.operation) !== "saveIfAbsent" || typeof it.key !== "string") continue;
+      const refs = [...it.key.matchAll(/\{\{@([^:}]+):[^.}]*\.?([^}]*)\}\}/g)];
+      const appRef = refs.some((m) => { const src = nodes.find((x) => x.id === m[1]); const a = src ? (actionTypeOf(src) || String((src.data?.config as Record<string, unknown> | undefined)?.triggerType ?? "")) : ""; return a.includes("/"); });
+      if (appRef && !refs.some((m) => /(^|[._])(line|linea|lineid|line_id|linea_id|orderline|lineitem|item_?id)/i.test(m[2]))) return `${DATOS_LIMIT_MARK} the movement key of Datos node "${n.id}" is built from an app's data but none of its parts is a documented order line id. Do not use another id (order id, product id, list position) as a stand-in: this case is not supported yet.`;
+    }
+  }
+  return null;
+}
+
 // Incomplete or malformed Datos steps are rejected at build time instead of failing (or half-working) at run time.
 export function datosShapeError(nodes: FlowNode[]): string | null {
   for (const n of nodes) {
