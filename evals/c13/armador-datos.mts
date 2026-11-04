@@ -75,6 +75,8 @@ ok(r3.success && r3.estado === "aplicado", "string form of operations is also ac
   // coverage: one list element
   const idx = dn("d", { operation: "applyTogether", operations: JSON.stringify([{ operation: "saveIfAbsent", collection: "m", key: "{{@g:G.products[0].id}}" }]) });
   ok(!!F.datosCoverageError([idx], "descontá el stock de cada producto del pedido"), "coverage: one list element for a request about every line is rejected");
+  ok(/LIMIT: Datos does not support an order with several lines/.test(F.datosCoverageError([idx], "descontá el stock de cada producto del pedido") || "") && /no Loop, no HTTP/.test(F.datosCoverageError([idx], "descontá el stock de cada producto del pedido") || ""), "limit: the coverage error states the unsupported limit, validation error preserved, no host-specific text");
+  { const lp: any = { id: "lp", type: "action", data: { config: { actionType: "Loop", steps: [{ actionType: "Datos" }] } } }; const m = F.datosInLoopError([lp]) || ""; ok(/Loop "lp" contains a Datos step/.test(m) && /LIMIT: Datos does not support/.test(m) && !/example\.com/.test(m) && !/applyTogether with up to 10/.test(m), "limit: Datos-in-Loop error keeps the validation error and states the unsupported limit"); }
   ok(!F.datosCoverageError([idx], "descontá solo la primera línea del pedido"), "coverage: allowed when the request is explicitly about the first line");
   ok(!F.datosCoverageError([dn("d", { operation: "applyTogether", operations: JSON.stringify(good) })], "cada línea"), "coverage: references without a list index pass");
 }

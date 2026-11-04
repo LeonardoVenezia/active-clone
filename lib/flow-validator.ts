@@ -938,7 +938,7 @@ export function datosCoverageError(nodes: FlowNode[], promptText: string): strin
     const cfg = (n.data?.config ?? {}) as Record<string, unknown>;
     const text = typeof cfg.operations === "string" ? cfg.operations : JSON.stringify(cfg);
     const m = /\{\{@[^}]*\[\d+\][^}]*\}\}/.exec(text);
-    if (m) return `consistencia: Datos node "${n.id}" uses one element of a list (${m[0].slice(0, 70)}), so the other elements would be ignored without any notice. Do not build a flow that handles only some lines: Datos cannot run in a Loop and one step handles one event, so say plainly that orders with several lines are not supported yet (or use one applyTogether with an operation per line only when the number of lines is fixed and known)`;
+    if (m) return `consistencia: Datos node "${n.id}" uses one element of a list (${m[0].slice(0, 70)}), so the other elements would be ignored without any notice. Do not build a flow that handles only some lines: Datos cannot run in a Loop and one step handles one event. LIMIT: Datos does not support an order with several lines or without a declared line id yet. Do not build or connect anything else (no Loop, no HTTP, no placeholder endpoint): tell the user plainly, in their language, that this case is not supported yet and what is supported (one order line per run, with the line id supplied)`;
   }
   return null;
 }
@@ -950,7 +950,7 @@ export function datosInLoopError(nodes: FlowNode[]): string | null {
     const steps = ((n.data?.config ?? {}) as Record<string, unknown>).steps;
     if (!Array.isArray(steps)) continue;
     const bad = steps.find((st) => (() => { const x = st as { actionType?: unknown; config?: { actionType?: unknown } }; return x?.actionType === "Datos" || x?.config?.actionType === "Datos"; })());
-    if (bad) return `consistencia: Loop "${n.id}" contains a Datos step; Datos does not run inside a Loop (it fails closed). Do not use a Loop for Datos: one Datos step handles one event. If the request needs several lines, use one applyTogether with up to 10 operations, or tell the user it is not supported yet`;
+    if (bad) return `consistencia: Loop "${n.id}" contains a Datos step; Datos does not run inside a Loop (it fails closed). Do not use a Loop for Datos: one Datos step handles one event. LIMIT: Datos does not support an order with several lines or without a declared line id yet. Do not rebuild it with HTTP or placeholder endpoints: tell the user plainly, in their language, that this case is not supported yet and what is supported (one order line per run, with the line id supplied)`;
   }
   return null;
 }
