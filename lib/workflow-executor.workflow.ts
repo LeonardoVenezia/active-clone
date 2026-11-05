@@ -20,6 +20,7 @@ import type { StepContext } from "./steps/step-handler";
 import { createHook, sleep } from "workflow";
 import { markExecutionStartErrorStep } from "./steps/execution-status";
 import { triggerStep } from "./steps/trigger";
+import { joinStep } from "./steps/join";
 import {
   recordApprovalDecisionStep,
   recordPendingApprovalStep,
@@ -1030,7 +1031,16 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           } else if (completed.length === 0) {
             error = "Unir: ninguna rama de entrada terminó con datos.";
           }
-          result = error ? { success: false, error, data } : { success: true, data };
+          result = await joinStep({
+            result: error ? { success: false, error, data } : { success: true, data },
+            _context: {
+              executionId,
+              workflowId,
+              nodeId: node.id,
+              nodeName: getNodeName(node),
+              nodeType: actionType,
+            },
+          });
           results[nodeId] = result;
           outputs[nodeId.replace(/[^a-zA-Z0-9]/g, "_")] = { label: node.data.label || nodeId, data };
           if (result.success) await resolveChildren(nodeId, true, visited);

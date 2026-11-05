@@ -83,8 +83,15 @@ async function evaluateFormula(input: FormulaInput): Promise<FormulaResult> {
         error: `La expresión tardó más de ${EVAL_TIMEOUT_MS} ms.`,
       };
     }
+    // JSONata throws structured objects, not always native Error instances.
     const message =
-      error instanceof Error ? error.message : "Error desconocido";
+      typeof error === "object" &&
+      error !== null &&
+      "message" in error &&
+      typeof error.message === "string" &&
+      error.message.trim().length > 0
+        ? error.message
+        : "Error desconocido";
     return { success: false, error: `Error en la expresión: ${message}` };
   }
 }

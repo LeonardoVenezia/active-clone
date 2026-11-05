@@ -575,7 +575,7 @@ function ExecutionLogEntry({
                 isError
                 title="Error"
               >
-                <pre className="overflow-auto rounded-lg border border-red-500/20 bg-red-500/5 p-3 font-mono text-red-600 text-xs leading-relaxed">
+                <pre className="whitespace-pre-wrap break-words rounded-lg border border-red-500/20 bg-red-500/5 p-3 font-mono text-red-600 text-xs leading-relaxed">
                   {log.error}
                 </pre>
               </CollapsibleSection>

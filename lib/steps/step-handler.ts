@@ -169,7 +169,8 @@ export type StepInputWithWorkflow = {
  */
 export async function withStepLogging<TInput extends StepInput, TOutput>(
   input: TInput,
-  stepLogic: () => Promise<TOutput>
+  stepLogic: () => Promise<TOutput>,
+  options?: { preserveErrorData?: boolean }
 ): Promise<TOutput> {
   // Extract context and log input without internal fields
   const context = input._context as StepContextWithWorkflow | undefined;
@@ -195,6 +196,7 @@ export async function withStepLogging<TInput extends StepInput, TOutput>(
       const errorResult = result as {
         success: false;
         error?: string | { message: string };
+        data?: unknown;
       };
       // Support both old format (error: string) and new format (error: { message: string })
       const errorMessage =
@@ -202,7 +204,9 @@ export async function withStepLogging<TInput extends StepInput, TOutput>(
           ? errorResult.error
           : errorResult.error?.message || "Step execution failed";
       // Log just the error object, not the full result
-      const loggedOutput = errorResult.error ?? { message: errorMessage };
+      const loggedOutput = options?.preserveErrorData
+        ? { data: errorResult.data, error: errorMessage }
+        : errorResult.error ?? { message: errorMessage };
       await logStepComplete(logInfo, "error", loggedOutput, errorMessage);
     } else if (isStandardizedResult) {
       // For standardized success results, log just the data
