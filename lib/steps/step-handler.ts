@@ -4,6 +4,7 @@
  * Uses direct database calls for security (no HTTP endpoint)
  */
 import "server-only";
+import type { TemplateDiagnostic } from "../template-diagnostics";
 
 import { redactSensitiveData } from "../utils/redact";
 import {
@@ -18,6 +19,7 @@ export type StepContext = {
   nodeId: string;
   nodeName: string;
   nodeType: string;
+  warnings?: TemplateDiagnostic[];
 };
 
 /**
@@ -53,6 +55,7 @@ async function logStepStart(
       nodeName: context.nodeName,
       nodeType: context.nodeType,
       input: redactedInput,
+      warnings: context.warnings,
     });
 
     return result;

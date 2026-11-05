@@ -14,6 +14,7 @@ import {
   getStepImporter,
   type StepImporter,
 } from "./step-registry";
+import { diagnoseTemplateReferences } from "./template-diagnostics";
 import { resolveFieldValue } from "./field-path";
 import { exposeStepOutput } from "./loop-output";
 import type { StepContext } from "./steps/step-handler";
@@ -778,8 +779,9 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
         // Accept parameters both nested under config and (as the AI
         // builder sometimes emits them) at the step's top level
         const { id: _bodyId, actionType: _bodyAction, steps: _bodySteps, config: bodyConfig, ...topLevelParams } = bodyStep;
+        const rawBodyConfig = { ...topLevelParams, ...(bodyConfig || {}) };
         const processedBodyConfig = processTemplates(
-          { ...topLevelParams, ...(bodyConfig || {}) },
+          rawBodyConfig,
           itemOutputs
         );
         try {
@@ -792,6 +794,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
               nodeId: `${node.id}#${i + 1}.${stepId}`,
               nodeName: `${getNodeName(node)} item ${i + 1} - ${stepAction}`,
               nodeType: stepAction,
+              warnings: diagnoseTemplateReferences(rawBodyConfig, itemOutputs),
             },
           });
           if (
@@ -1069,6 +1072,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           nodeId: node.id,
           nodeName: getNodeName(node),
           nodeType: actionType,
+          warnings: diagnoseTemplateReferences(config, outputs),
         };
 
         // Execute the action step with stepHandler (logging is handled inside)

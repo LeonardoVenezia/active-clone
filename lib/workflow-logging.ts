@@ -3,6 +3,7 @@
  * These replace the HTTP endpoint for better security
  */
 import "server-only";
+import type { TemplateDiagnostic } from "./template-diagnostics";
 
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -14,6 +15,7 @@ export type LogStepStartParams = {
   nodeName: string;
   nodeType: string;
   input?: unknown;
+  warnings?: TemplateDiagnostic[];
 };
 
 export type LogStepStartResult = {
@@ -36,6 +38,7 @@ export async function logStepStartDb(
       nodeType: params.nodeType,
       status: "running",
       input: params.input,
+      warnings: params.warnings?.length ? params.warnings : undefined,
       startedAt: new Date(),
     })
     .returning();

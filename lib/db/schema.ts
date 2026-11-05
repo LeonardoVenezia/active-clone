@@ -1,3 +1,4 @@
+import type { TemplateDiagnostic } from "../template-diagnostics";
 import { relations } from "drizzle-orm";
 import {
   boolean,
@@ -244,6 +245,7 @@ export const workflowExecutionLogs = pgTable("workflow_execution_logs", {
   input: jsonb("input").$type<any>(),
   // biome-ignore lint/suspicious/noExplicitAny: JSONB type - structure validated at application level
   output: jsonb("output").$type<any>(),
+  warnings: jsonb("warnings").$type<TemplateDiagnostic[]>(),
   error: text("error"),
   startedAt: timestamp("started_at").notNull().defaultNow(),
   completedAt: timestamp("completed_at"),

@@ -1,3 +1,4 @@
+import type { TemplateDiagnostic } from "@/lib/template-diagnostics";
 /**
  * API Client for making type-safe API calls to the backend
  * Replaces server actions with API endpoints
@@ -586,6 +587,7 @@ export const workflowApi = {
         nodeName: string;
         nodeType: string;
         status: "pending" | "running" | "success" | "error" | "waiting_approval";
+        warnings?: TemplateDiagnostic[] | null;
         input: unknown;
         output: unknown;
         error: string | null;

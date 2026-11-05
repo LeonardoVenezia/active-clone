@@ -1,5 +1,7 @@
 "use client";
 
+import type { TemplateDiagnostic } from "@/lib/template-diagnostics";
+
 import { useAtom } from "jotai";
 import {
   Check,
@@ -40,6 +42,7 @@ type ExecutionLog = {
   startedAt: Date;
   completedAt: Date | null;
   duration: string | null;
+  warnings?: TemplateDiagnostic[] | null;
   input?: unknown;
   output?: unknown;
   error: string | null;
@@ -554,6 +557,37 @@ function ExecutionLogEntry({
 
         {isExpanded && (
           <div className="mt-2 mb-2 space-y-3 px-3">
+            {!!log.warnings?.length && (
+              <section
+                aria-label="Avisos de referencias"
+                className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs"
+              >
+                <p className="font-medium">
+                  Avisos de referencias ({log.warnings.length})
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  No cambian el estado ni la salida del paso. Revisá si la
+                  ausencia era esperada.
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-4">
+                  {log.warnings.map((warning, index) => (
+                    <li
+                      className="break-words [overflow-wrap:anywhere]"
+                      key={index}
+                    >
+                      Campo de configuración {warning.configKey}:{" "}
+                      {warning.kind === "missing-node"
+                        ? "el nodo no existe o no se ejecutó"
+                        : warning.kind === "missing-output"
+                          ? "el nodo no tiene salida definida"
+                          : "no se encontró el campo"}{" "}
+                      ({warning.nodeId}
+                      {warning.fieldPath ? `.${warning.fieldPath}` : ""}).
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
             {log.input !== null && log.input !== undefined && (
               <CollapsibleSection copyData={log.input} title="Input">
                 <pre className="overflow-auto rounded-lg border bg-muted/50 p-3 font-mono text-xs leading-relaxed">
@@ -580,7 +614,7 @@ function ExecutionLogEntry({
                 </pre>
               </CollapsibleSection>
             )}
-            {!(log.input || log.output || log.error) && (
+            {!(log.input || log.output || log.error || log.warnings?.length) && (
               <div className="rounded-lg border bg-muted/30 py-4 text-center text-muted-foreground text-xs">
                 No data recorded
               </div>
@@ -657,6 +691,7 @@ export function WorkflowRuns({
         nodeName: string;
         nodeType: string;
         status: "pending" | "running" | "success" | "error" | "waiting_approval";
+        warnings?: TemplateDiagnostic[] | null;
         input: unknown;
         output: unknown;
         error: string | null;
@@ -677,6 +712,7 @@ export function WorkflowRuns({
         startedAt: new Date(log.startedAt),
         completedAt: log.completedAt ? new Date(log.completedAt) : null,
         duration: log.duration,
+        warnings: log.warnings,
         input: log.input,
         output: log.output,
         error: log.error,
