@@ -19,8 +19,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Get pnpm store directory
         shell: bash
@@ -45,8 +43,9 @@ jobs:
         run: pnpm check
 
       - name: Run type check
+        if: success() || failure()
         run: pnpm type-check
 
       - name: Run build
+        if: success() || failure()
         run: pnpm build
-

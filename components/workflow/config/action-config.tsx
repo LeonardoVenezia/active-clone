@@ -492,7 +492,7 @@ function DatosFields({
   onUpdateConfig: (key: string, value: string) => void;
   disabled: boolean;
 }) {
-  const operation = (config?.operation as string) || "save";
+  const operation = (config?.operation as string) || "";
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -504,6 +504,7 @@ function DatosFields({
           onChange={(e) => onUpdateConfig("operation", e.target.value)}
           value={operation}
         >
+          <option disabled value="">Elegí qué hacer</option>
           <option value="save">Guardar un dato</option>
           <option value="saveIfAbsent">Guardar solo si no existe</option>
           <option value="updateIfMatches">Actualizar solo si el valor actual coincide</option>
