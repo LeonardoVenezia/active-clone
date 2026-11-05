@@ -1037,7 +1037,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
               executionId,
               workflowId,
               nodeId: node.id,
-              nodeName: getNodeName(node),
+              nodeName: node.data.label || "Unir",
               nodeType: actionType,
             },
           });
