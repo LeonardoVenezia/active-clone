@@ -530,6 +530,11 @@ function ExecutionLogEntry({
                 <span className="truncate font-medium text-sm transition-colors group-hover:text-foreground">
                   {log.nodeName || log.nodeType}
                 </span>
+                {!!log.warnings?.length && (
+                  <span className="shrink-0 text-amber-700 text-xs dark:text-amber-400" title="Avisos no bloqueantes de referencias">
+                    {log.warnings.length} {log.warnings.length === 1 ? "aviso" : "avisos"}
+                  </span>
+                )}
               </div>
             </div>
 
