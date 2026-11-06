@@ -691,6 +691,9 @@ function UnirFields({
     "h-9 w-full rounded-md border bg-transparent px-2 text-sm";
   return (
     <div className="space-y-4">
+      {(config.onError === "stop" || config.onError === "continue") && (
+        <p className="text-muted-foreground text-xs">Las opciones de error guardadas abajo no se usan mientras haya una política común explícita. Podés cambiarla en "Si este paso falla".</p>
+      )}
       <div className="space-y-2">
         <Label htmlFor="unir-mode">Cuándo seguir</Label>
         <select
@@ -726,7 +729,7 @@ function UnirFields({
             <Label htmlFor="unir-timeout">Si se acaba el tiempo</Label>
             <select
               className={selectClass}
-              disabled={disabled}
+              disabled={disabled || config.onError === "stop" || config.onError === "continue"}
               id="unir-timeout"
               onChange={(e) => onUpdateConfig("onTimeout", e.target.value)}
               value={config?.onTimeout === "continue" ? "continue" : "fail"}
@@ -746,7 +749,7 @@ function UnirFields({
         <Label htmlFor="unir-fail">Si una rama falla</Label>
         <select
           className={selectClass}
-          disabled={disabled}
+          disabled={disabled || config.onError === "stop" || config.onError === "continue"}
           id="unir-fail"
           onChange={(e) => onUpdateConfig("onParentFailure", e.target.value)}
           value={config?.onParentFailure === "continue" ? "continue" : "fail"}

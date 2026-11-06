@@ -944,6 +944,28 @@ export const PanelInner = () => {
                 />
               ) : null}
 
+              {(selectedNode.data.type === "trigger" || Boolean(selectedNode.data.config?.actionType)) && (
+                <div className="space-y-2">
+                  <Label htmlFor="node-error-policy">Si este paso falla</Label>
+                  <select
+                    className="h-9 w-full rounded-md border bg-transparent px-2 text-sm"
+                    disabled={isGenerating || !canEdit}
+                    id="node-error-policy"
+                    value={selectedNode.data.config?.onError === "continue" ? "continue" : selectedNode.data.config?.onError === "stop" ? "stop" : "legacy"}
+                    onChange={(e) => handleUpdateConfig("onError", e.target.value)}
+                  >
+                    <option disabled value="legacy">Sin política explícita (se conserva lo guardado)</option>
+                    <option value="stop">Frenar esta rama</option>
+                    <option value="continue">Seguir y registrar el error</option>
+                  </select>
+                  <p className="text-muted-foreground text-xs">
+                    Seguir no oculta el error ni inventa datos. No deshace ni cancela otras ramas ya iniciadas. Una aprobación rechazada siempre frena.
+                    {selectedNode.data.config?.actionType === "Loop" ? " Se aplica también a los pasos internos; no habilita nuevos tipos de pasos." : ""}
+                    {selectedNode.data.config?.actionType === "Unir" ? " Una elección explícita reemplaza las opciones de error y timeout de Unir." : ""}
+                  </p>
+                </div>
+              )}
+
               {selectedNode.data.type !== "action" ||
               selectedNode.data.config?.actionType ? (
                 <>

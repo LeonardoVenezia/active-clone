@@ -6,6 +6,8 @@ export function withActionDefaults(
   return {
     ...config,
     actionType,
+    // Apply the common safe default only on deliberate selection, never reload.
+    onError: config.onError === "continue" ? "continue" : "stop",
     ...(actionType === "Datos" && !config.operation
       ? { operation: "save" }
       : {}),

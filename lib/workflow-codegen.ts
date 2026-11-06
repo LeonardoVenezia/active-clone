@@ -1,3 +1,6 @@
+import { generateErrorPolicyRunner } from "./workflow-error-policy-codegen";
+import { preValidateConditionExpression } from "./condition-validator";
+import { explicitErrorPolicy } from "./node-error-policy";
 import { findActionById, flattenConfigFields } from "@/plugins";
 import {
   analyzeNodeUsage,
@@ -40,6 +43,7 @@ export function generateWorkflowCode(
 ): GeneratedCode {
   const functionName = sanitizeFunctionName(options.functionName ?? "executeWorkflow");
 
+  const hasErrorPolicy = nodes.some(n => explicitErrorPolicy(n.data.config));
   // Analyze which node outputs are actually used
   const usedNodeOutputs = analyzeNodeUsage(nodes);
 
@@ -71,7 +75,7 @@ export function generateWorkflowCode(
   const visited = new Set<string>();
 
   // Generate function signature
-  const functionSignature = inputIsUsed
+  const functionSignature = inputIsUsed || hasErrorPolicy
     ? `export async function ${functionName}<TInput>(input: TInput) {`
     : `export async function ${functionName}() {`;
   codeLines.push(functionSignature);
@@ -127,7 +131,9 @@ export function generateWorkflowCode(
     const dotIndex = rest.indexOf(".");
     const fieldPath = dotIndex !== -1 ? rest.substring(dotIndex + 1) : "";
 
-    const varName = nodeIdToVarName.get(nodeId);
+    const varName = hasErrorPolicy
+      ? `__policyOutputs[${JSON.stringify(nodeId.replace(/[^a-zA-Z0-9]/g, "_"))}]?.data`
+      : nodeIdToVarName.get(nodeId);
     if (!varName) {
       return match; // Node not found, keep original
     }
@@ -147,7 +153,9 @@ export function generateWorkflowCode(
     const nodeId = parts[0];
     const fieldPath = parts.slice(1).join(".");
 
-    const varName = nodeIdToVarName.get(nodeId);
+    const varName = hasErrorPolicy
+      ? `__policyOutputs[${JSON.stringify(nodeId.replace(/[^a-zA-Z0-9]/g, "_"))}]?.data`
+      : nodeIdToVarName.get(nodeId);
     if (!varName) {
       return match; // Node not found, keep original
     }
@@ -176,7 +184,9 @@ export function generateWorkflowCode(
     const dotIndex = rest.indexOf(".");
     const fieldPath = dotIndex !== -1 ? rest.substring(dotIndex + 1) : "";
 
-    const varName = nodeIdToVarName.get(nodeId);
+    const varName = hasErrorPolicy
+      ? `__policyOutputs[${JSON.stringify(nodeId.replace(/[^a-zA-Z0-9]/g, "_"))}]?.data`
+      : nodeIdToVarName.get(nodeId);
     if (!varName) {
       return match; // Node not found, keep original
     }
@@ -199,7 +209,9 @@ export function generateWorkflowCode(
     const nodeId = parts[0];
     const fieldPath = parts.slice(1).join(".");
 
-    const varName = nodeIdToVarName.get(nodeId);
+    const varName = hasErrorPolicy
+      ? `__policyOutputs[${JSON.stringify(nodeId.replace(/[^a-zA-Z0-9]/g, "_"))}]?.data`
+      : nodeIdToVarName.get(nodeId);
     if (!varName) {
       return match; // Node not found, keep original
     }
@@ -455,6 +467,9 @@ export function generateWorkflowCode(
     const minutes = Number(config.durationMinutes ?? 0) || 0;
     const seconds = Number(config.durationSeconds ?? 0) || 0;
     const totalSeconds = Math.round(minutes * 60 + seconds);
+    if (hasErrorPolicy && (!Number.isFinite(totalSeconds) || totalSeconds <= 0 || totalSeconds > 86400)) {
+      return [`${indent}const ${varName} = {success:false,error:"Invalid delay duration (1 second to 24 hours)."};`];
+    }
     return [
       `${indent}// Delay (durable sleep)`,
       `${indent}await sleep(${totalSeconds} * 1000);`,
@@ -469,7 +484,7 @@ export function generateWorkflowCode(
   ): string[] {
     imports.add(`import { createHook } from 'workflow';`);
     const config = node.data.config || {};
-    const message = String(config.message ?? "").replace(/`/g, "\\`");
+    const message = String(config.message ?? "");
     const token = `approval:${node.id}`;
     return [
       `${indent}// Approval (durable human-in-the-loop pause)`,
@@ -477,7 +492,7 @@ export function generateWorkflowCode(
       `${indent}// Resume with: resumeHook(\`${token}\`, { approved: true, note }) from an API route.`,
       `${indent}// Note: use a per-run unique token if this workflow can run concurrently.`,
       `${indent}const decision${varName} = await hook${varName};`,
-      `${indent}if (decision${varName}?.approved !== true) throw new Error("Aprobación rechazada: ${message}");`,
+      `${indent}if (decision${varName}?.approved !== true) throw new Error(${JSON.stringify("Aprobación rechazada: " + message)});`,
       `${indent}const ${varName} = { success: true, approved: true, note: decision${varName}?.note };`,
     ];
   }
@@ -794,7 +809,7 @@ export function generateWorkflowCode(
     }
 
     // Check if this node's output is used
-    const outputIsUsed = usedNodeOutputs.has(nodeId);
+    const outputIsUsed = hasErrorPolicy || usedNodeOutputs.has(nodeId);
 
     // Helper to process a line with await statement
     function processAwaitLine(line: string): string {
@@ -840,6 +855,15 @@ export function generateWorkflowCode(
       // Remove variable assignment, just call the function
       return removeVariableAssignment(actionLines);
     };
+
+    if (hasErrorPolicy && !["Delay", "Approval", "Unir", "Datos", "Frontend", "Loop"].includes(actionType)) {
+      if (!actionType || (!findActionById(actionType) && !["HTTP Request", "Database Query", "Fórmula"].includes(actionType))) {
+        return [`${indent}const ${varName} = {success:false,error:${JSON.stringify("Unknown action type: " + actionType)}};`];
+      }
+      const stepInfo = getStepInfo(actionType);
+      imports.add(`import { ${stepInfo.functionName} } from '${stepInfo.importPath}';`);
+      return [`${indent}const ${varName} = await ${stepInfo.functionName}(__policyConfig(${JSON.stringify(node.data.config || {})}));`];
+    }
 
     // Check explicit actionType first
     if (actionType === "Generate Text") {
@@ -1265,7 +1289,7 @@ export function generateWorkflowCode(
   }
 
   // Keys to exclude from generated code (internal app fields)
-  const EXCLUDED_CONFIG_KEYS = new Set(["actionType", "integrationId"]);
+  const EXCLUDED_CONFIG_KEYS = new Set(["actionType", "integrationId", "onError"]);
 
   /**
    * Build config parameters using fallback logic
@@ -1382,6 +1406,27 @@ export function generateWorkflowCode(
     return processNextNodes(nodeId, lines, indent);
   }
 
+  if (hasErrorPolicy) {
+    // Limits that predate this policy remain explicit, before any step can run.
+    if(nodes.some(n=>n.data.config?.actionType==="Loop")) codeLines.push('  throw new Error("Export not supported: Loop execution is not available in this export. Run it on the platform.");');
+    const callbacks: string[]=[];
+    for(const node of nodes) {
+      callbacks.push(`    ${JSON.stringify(node.id)}: async () => {`);
+      if(node.data.type==="trigger") callbacks.push('      return input;');
+      else if(node.data.config?.actionType==="Condition") {
+        const raw=node.data.config?.condition;
+        const valid=typeof raw!=="string" || preValidateConditionExpression(raw).valid;
+        const expression=typeof raw==="string" ? convertConditionToJS(raw) : String(Boolean(raw));
+        callbacks.push(valid ? `      try { return {condition:Boolean(${expression || "false"})}; } catch { return {condition:false}; }` : '      return {condition:false};');
+      } else {
+        const varName=nodeIdToVarName.get(node.id)!;
+        callbacks.push(...generateActionNodeCode(node,node.id,"      ",varName));
+        callbacks.push(`      return ${varName};`);
+      }
+      callbacks.push('    },');
+    }
+    codeLines.push(...generateErrorPolicyRunner(nodes,edges,callbacks));
+  } else {
   // Generate code starting from trigger nodes
   if (triggerNodes.length === 0) {
     codeLines.push("  // No trigger nodes found");
@@ -1392,6 +1437,7 @@ export function generateWorkflowCode(
     }
   }
 
+  }
   codeLines.push("}");
 
   // Build final code

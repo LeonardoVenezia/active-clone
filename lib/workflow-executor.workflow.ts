@@ -17,6 +17,7 @@ import {
 import { diagnoseTemplateReferences } from "./template-diagnostics";
 import { resolveFieldValue } from "./field-path";
 import { exposeStepOutput } from "./loop-output";
+import { canContinueAfterError, explicitErrorPolicy, failedStepOutput } from "./node-error-policy";
 import type { StepContext } from "./steps/step-handler";
 import { createHook, sleep } from "workflow";
 import { markExecutionStartErrorStep } from "./steps/execution-status";
@@ -607,7 +608,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
   async function arriveAtJoin(parentId: string, childId: string, active: boolean, visited: Set<string>) {
     const st = joinStateFor(childId);
     if (!st.open || st.status.has(parentId)) return; // late arrival after the deadline: ignored
-    st.status.set(parentId, active ? "ok" : results[parentId]?.success === false ? "failed" : "skipped");
+    st.status.set(parentId, results[parentId]?.success === false ? "failed" : active ? "ok" : "skipped");
     const needed = waitingOn.get(childId);
     if (!needed || st.status.size >= needed.size) st.release();
     if (st.leader) return;
@@ -670,7 +671,8 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
    * output, then runs a linear chain of inner steps once per item.
    * Per-item templates: {{@item:Item.field}} and {{@index:Index.number}}.
    * Inner steps can reference earlier inner steps by their id.
-   * Failed items are marked and the run continues (continue-and-mark-failed).
+   * Without an explicit policy, preserve legacy continue-per-item behavior.
+   * An explicit policy controls inner failures and keeps the Loop failed.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Loop execution requires nested iteration and error handling
   async function executeLoopNode(
@@ -749,7 +751,11 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
     const failed: { index: number; step?: string; error: string }[] = [];
     const filtered: { index: number }[] = [];
 
+    const loopPolicy = explicitErrorPolicy(config);
+    let stoppedOnRefusal = false;
+    let processedItems = 0;
     for (let i = 0; i < items.length; i++) {
+      processedItems += 1;
       const item = items[i];
       const itemOutputs: NodeOutputs = {
         ...baseOutputs,
@@ -814,6 +820,13 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
                     `Inner step "${stepAction}" failed`,
             });
             itemFailed = true;
+            const errorOutput = failedStepOutput(failed.at(-1)!.error);
+            if (loopPolicy === "continue" && stepAction !== "Approval") {
+              stepOutputs[stepId] = errorOutput;
+              itemOutputs[stepId] = { label: stepAction, data: errorOutput };
+              continue;
+            }
+            if (loopPolicy && stepAction === "Approval") stoppedOnRefusal = true;
             break;
           }
           itemResult = bodyResult;
@@ -845,6 +858,13 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
             error: await getErrorMessageAsync(error),
           });
           itemFailed = true;
+          if (loopPolicy === "continue" && stepAction !== "Approval") {
+            const errorOutput = failedStepOutput(failed.at(-1)!.error);
+            stepOutputs[stepId] = errorOutput;
+            itemOutputs[stepId] = { label: stepAction, data: errorOutput };
+            continue;
+          }
+          if (loopPolicy && stepAction === "Approval") stoppedOnRefusal = true;
           break;
         }
       }
@@ -854,7 +874,10 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
       } else if (!itemFailed) {
         loopResults.push(itemResult);
         loopItems.push({ index: i, item, steps: stepOutputs });
+      } else if (loopPolicy) {
+        loopItems.push({ index: i, item, steps: stepOutputs });
       }
+      if ((loopPolicy === "stop" && itemFailed) || stoppedOnRefusal) break;
     }
 
     console.log("[Workflow Executor] Loop completed:", {
@@ -865,13 +888,15 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
     });
 
     return {
-      success: true,
+      success: loopPolicy ? failed.length === 0 : true,
+      ...(loopPolicy && failed.length ? { error: failed[0].error } : {}),
       data: {
         results: loopResults,
         items: loopItems,
         failed,
         filtered,
         count: items.length,
+        ...(loopPolicy ? { processed: processedItems, stopped: processedItems < items.length, stoppedOnRefusal } : {}),
         completed: loopResults.length,
         failedCount: failed.length,
         filteredCount: filtered.length,
@@ -885,6 +910,20 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
   async function executeNode(nodeId: string, visited: Set<string> = new Set()) {
     if (visited.has(nodeId)) return; // Prevent cycles and double runs
     await runNode(nodeId, visited);
+    const result = results[nodeId];
+    const node = nodeMap.get(nodeId);
+    if (result?.success === false && node) {
+      result.error ||= "El paso falló.";
+      // Keep the failed result and log. Continuing never makes a failed run green.
+      outputs[nodeId.replace(/[^a-zA-Z0-9]/g, "_")] = {
+        label: node.data.label || nodeId,
+        data: { ...(result.data && typeof result.data === "object" ? result.data : {}), ...failedStepOutput(result.error || "El paso falló.") },
+      };
+      const refused = (result.data as { stoppedOnRefusal?: boolean } | undefined)?.stoppedOnRefusal;
+      if (!refused && canContinueAfterError(node.data.config)) {
+        await resolveChildren(nodeId, true, visited);
+      }
+    }
     // A step that ended without releasing its children (failed, no action type, unknown) counts as "will not deliver".
     await resolveChildren(nodeId, false, visited);
   }
@@ -1027,9 +1066,9 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           const data = { inputs, completed, failed, skipped, timedOut, hasTimedOut: timedOut.length > 0 };
           const cfg2 = config as Record<string, unknown>;
           let error: string | undefined;
-          if (failed.length > 0 && cfg2.onParentFailure !== "continue") {
+          if (failed.length > 0 && (Boolean(explicitErrorPolicy(cfg2)) || cfg2.onParentFailure !== "continue")) {
             error = `Unir: fallaron ramas de entrada: ${failed.join(", ")}.`;
-          } else if (timedOut.length > 0 && cfg2.onTimeout !== "continue") {
+          } else if (timedOut.length > 0 && (Boolean(explicitErrorPolicy(cfg2)) || cfg2.onTimeout !== "continue")) {
             error = `Unir: se agotó el tiempo de espera; faltaron: ${timedOut.join(", ")}.`;
           } else if (completed.length === 0) {
             error = "Unir: ninguna rama de entrada terminó con datos.";
@@ -1114,6 +1153,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           result = {
             success: false,
             error: errorMessage,
+            data: stepResult,
           };
         } else {
           result = {
