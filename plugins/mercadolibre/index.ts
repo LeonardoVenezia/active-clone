@@ -243,6 +243,41 @@ const mercadolibrePlugin: IntegrationPlugin = {
       ],
     },
     {
+      slug: "stock-snapshot",
+      label: "Stock Snapshot",
+      description:
+        "Read-only snapshot of the seller's catalog with SKU and per-variation stock, for stock comparison reports",
+      category: "Mercado Libre",
+      stepFunction: "stockSnapshotStep",
+      stepImportPath: "stock-snapshot",
+      outputFields: [
+        { field: "sellerId", description: "Seller user id of the connected account" },
+        { field: "count", description: "Items returned" },
+        { field: "items", description: "List of items (id, title, status, availableQuantity, sku, variations with per-variation stock, sku and combination)" },
+      ],
+      configFields: [
+        {
+          key: "status",
+          label: "Status",
+          type: "select",
+          options: [
+            { value: "active", label: "Active" },
+            { value: "paused", label: "Paused" },
+            { value: "closed", label: "Closed" },
+            { value: "any", label: "Any" },
+          ],
+          defaultValue: "active",
+        },
+        {
+          key: "limit",
+          label: "Limit",
+          type: "template-input",
+          placeholder: "50",
+          example: "50",
+        },
+      ],
+    },
+    {
       slug: "get-item",
       label: "Get Listing",
       description: "Get a listing (price, stock, status)",

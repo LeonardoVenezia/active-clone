@@ -91,7 +91,7 @@ Visit [http://localhost:3000](http://localhost:3000) to get started.
 - **Firecrawl**: Scrape URL, Search Web
 - **GitHub**: Create Issue, List Issues, Get Issue, Update Issue
 - **Linear**: Create Ticket, Find Issues
-- **Mercado Libre**: Get Order, Search Orders, Get Question, Answer Question, List Items, Get Listing, Update Listing, Get Shipment, Get Shipping Label, Send Post-Sale Message
+- **Mercado Libre**: Get Order, Search Orders, Get Question, Answer Question, List Items, Stock Snapshot, Get Listing, Update Listing, Get Shipment, Get Shipping Label, Send Post-Sale Message
 - **Mercado Pago**: Create Payment Link, Get Payment, Search Payments, Refund Payment, Create Customer, Search Customers, List Customer Cards
 - **Perplexity**: Search Web, Ask Question, Research Topic
 - **Resend**: Send Email, Get Email Status

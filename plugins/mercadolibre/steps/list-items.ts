@@ -85,15 +85,20 @@ async function stepHandler(
       return { success: true, count: 0, items: [] };
     }
 
-    const itemsRes = await mlFetch(
-      integrationId,
-      credentials,
-      `/items?ids=${ids.join(",")}`
-    );
-    if (!itemsRes.ok) {
-      return { success: false, error: `Failed to fetch items: ${itemsRes.error}` };
+    // Multiget /items is capped at 20 ids per call by the API.
+    const raw: Array<{ code: number; body?: MlItem }> = [];
+    for (let i = 0; i < ids.length; i += 20) {
+      const chunk = ids.slice(i, i + 20);
+      const itemsRes = await mlFetch(
+        integrationId,
+        credentials,
+        `/items?ids=${chunk.join(",")}`
+      );
+      if (!itemsRes.ok) {
+        return { success: false, error: `Failed to fetch items: ${itemsRes.error}` };
+      }
+      raw.push(...(itemsRes.data as Array<{ code: number; body?: MlItem }>));
     }
-    const raw = itemsRes.data as Array<{ code: number; body?: MlItem }>;
     const items = raw
       .filter((r) => r.code === 200 && r.body)
       .map((r) => ({
