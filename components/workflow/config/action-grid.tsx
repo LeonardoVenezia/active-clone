@@ -84,6 +84,12 @@ const SYSTEM_ACTIONS: ActionType[] = [
     category: "System",
   },
   {
+    id: "Comparar Stock",
+    label: "Comparar Stock",
+    description: "Compará el stock de Mercado Libre con Tiendanube por SKU",
+    category: "System",
+  },
+  {
     id: "Delay",
     label: "Delay",
     description: "Espera un tiempo antes de seguir (hasta 24 h)",

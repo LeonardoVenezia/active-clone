@@ -62,6 +62,11 @@ const SYSTEM_ACTIONS: Record<string, StepImporter> = {
     importer: () => import("./steps/datos") as Promise<any>,
     stepFunction: "datosStep",
   },
+  "Comparar Stock": {
+    // biome-ignore lint/suspicious/noExplicitAny: Dynamic module import
+    importer: () => import("./steps/stock-compare") as Promise<any>,
+    stepFunction: "stockCompareStep",
+  },
 };
 
 type ExecutionResult = {
@@ -240,7 +245,7 @@ async function executeActionStep(input: {
   // so a node config can never choose it. Other actions never receive it.
   delete stepInput._dataOrganizationId;
   delete stepInput._dataCanDefineFields;
-  if (actionType === "Datos") {
+  if (actionType === "Datos" || actionType === "Comparar Stock") {
     stepInput._dataOrganizationId = input.dataOrganizationId;
     stepInput._dataCanDefineFields = input.dataCanDefineFields === true;
   }

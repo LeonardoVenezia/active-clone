@@ -1,67 +1,18 @@
 // Fixture-driven comparison ML stock-snapshot vs Tiendanube list-products.
-// Prep for card 11 (stock real): validates the comparison logic and the
-// equivalence-table design against documented payload shapes, no real APIs.
+// Validates the shipped compare logic (lib/stock/compare-shared.ts) against
+// documented payload shapes and the equivalence-table design. No real APIs.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mapItemBody, type StockSnapshotItem } from "../../plugins/mercadolibre/steps/stock-snapshot-shared";
+import { mapItemBody } from "../../plugins/mercadolibre/steps/stock-snapshot-shared";
+import {
+  compareStock,
+  type StockEquivalence,
+  type TnProductShape,
+} from "../../lib/stock/compare-shared";
 
-// ---- Shapes (mirroring plugins/tiendanube/steps/list-products.ts output) ----
-type TnVariant = { id: number; sku: string; price: string; stock: number | null };
-type TnProduct = { id: number; name: string; totalStock: number | null; variants: TnVariant[] };
-
-// Equivalence row as it would live in a Datos collection "equivalencias_sku"
-// per company (Owner/Admin-editable): maps an ML SELLER_SKU to a TN variant sku.
-type Equivalence = { mlSku: string; tnSku: string };
-
-type DiffRow = {
-  mlSku: string | null;
-  tnSku: string | null;
-  via: "equivalencia" | "sku-directo" | null;
-  mlStock: number | null;
-  tnStock: number | null;
-  estado: "ok" | "diferente" | "solo_en_ml" | "solo_en_tn" | "sin_sku_ml";
-};
-
-function compareStock(mlItems: StockSnapshotItem[], tnProducts: TnProduct[], equivalences: Equivalence[]): DiffRow[] {
-  const tnBySku = new Map<string, { sku: string; stock: number | null }>();
-  for (const p of tnProducts) for (const v of p.variants) tnBySku.set(v.sku, { sku: v.sku, stock: v.stock });
-  const eqByMl = new Map(equivalences.map((e) => [e.mlSku, e.tnSku]));
-  const usedTn = new Set<string>();
-  const rows: DiffRow[] = [];
-
-  const emit = (mlSku: string | null, mlStock: number) => {
-    if (!mlSku) {
-      rows.push({ mlSku: null, tnSku: null, via: null, mlStock, tnStock: null, estado: "sin_sku_ml" });
-      return;
-    }
-    const eqTn = eqByMl.get(mlSku);
-    const tnSku = eqTn ?? (tnBySku.has(mlSku) ? mlSku : null);
-    if (!tnSku) {
-      rows.push({ mlSku, tnSku: null, via: null, mlStock, tnStock: null, estado: "solo_en_ml" });
-      return;
-    }
-    usedTn.add(tnSku);
-    const tn = tnBySku.get(tnSku)!;
-    rows.push({
-      mlSku, tnSku, via: eqTn ? "equivalencia" : "sku-directo",
-      mlStock, tnStock: tn.stock,
-      estado: tn.stock === mlStock ? "ok" : "diferente",
-    });
-  };
-
-  for (const item of mlItems) {
-    if (item.variations.length === 0) emit(item.sku, item.availableQuantity);
-    for (const v of item.variations) emit(v.sku, v.availableQuantity);
-  }
-  for (const [sku, tn] of tnBySku) {
-    if (!usedTn.has(sku)) rows.push({ mlSku: null, tnSku: sku, via: null, mlStock: null, tnStock: tn.stock, estado: "solo_en_tn" });
-  }
-  return rows;
-}
-
-// ---- Fixtures ----
-// ML documented payload: item with 2 variations, SELLER_SKU per variation
-// (developers.mercadolibre.com.ar variations doc), plus an item-level SKU row.
+// ML documented payload: item with variations carrying SELLER_SKU
+// (developers.mercadolibre.com.ar variations doc), plus an item-level SKU row,
+// one variation without SKU and a duplicated SKU across two variations.
 const mlFixture = [
   mapItemBody({
     id: "MLA1001", title: "Remera básica", status: "active", available_quantity: 0,
@@ -75,52 +26,117 @@ const mlFixture = [
     id: "MLA1002", title: "Gorra trucker", status: "active", available_quantity: 9,
     attributes: [{ id: "SELLER_SKU", value_name: "GOR-TRU" }],
   }),
+  mapItemBody({
+    id: "MLA1003", title: "Jean slim", status: "active", available_quantity: 4,
+    variations: [
+      { id: 31, available_quantity: 1, attributes: [{ id: "SELLER_SKU", value_name: "JEA-DUP" }], attribute_combinations: [{ name: "Talle", value_name: "40" }] },
+      { id: 32, available_quantity: 3, attributes: [{ id: "SELLER_SKU", value_name: "JEA-DUP" }], attribute_combinations: [{ name: "Talle", value_name: "42" }] },
+    ],
+  }),
+  mapItemBody({
+    id: "MLA1004", title: "Buzo canguro", status: "active", available_quantity: 6,
+    attributes: [{ id: "SELLER_SKU", value_name: "BUZ-CAN" }],
+  }),
 ];
 
-// TN list-products output shape (same products, one renamed sku, one TN-only).
-const tnFixture: TnProduct[] = [
-  { id: 501, name: "Remera básica", totalStock: 7, variants: [
-    { id: 5011, sku: "REM-NE-M", price: "12000", stock: 5 },
-    { id: 5012, sku: "REM-NE-L", price: "12000", stock: 0 },
+// TN list-products output shape (plugins/tiendanube/steps/list-products.ts):
+// one direct match, one renamed sku (equivalence), one TN-only product, one
+// sku duplicated on two variants, one product whose equivalence is missing.
+const tnFixture: TnProductShape[] = [
+  { id: 501, name: "Remera básica", variants: [
+    { id: 5011, sku: "REM-NE-M", stock: 5 },
+    { id: 5012, sku: "REM-NE-L", stock: 0 },
   ]},
-  { id: 502, name: "Gorra trucker", totalStock: 9, variants: [
-    { id: 5021, sku: "CAP-TRUCKER", price: "8000", stock: 9 },
+  { id: 502, name: "Gorra trucker", variants: [
+    { id: 5021, sku: "CAP-TRUCKER", stock: 9 },
   ]},
-  { id: 503, name: "Medias pack x3", totalStock: 20, variants: [
-    { id: 5031, sku: "MED-X3", price: "4500", stock: 20 },
+  { id: 503, name: "Medias pack x3", variants: [
+    { id: 5031, sku: "MED-X3", stock: 20 },
+  ]},
+  { id: 504, name: "Camisa lino", variants: [
+    { id: 5041, sku: "CAM-LIN", stock: 3 },
+    { id: 5042, sku: "CAM-LIN", stock: 8 },
   ]},
 ];
 
-const equivalences: Equivalence[] = [{ mlSku: "GOR-TRU", tnSku: "CAP-TRUCKER" }];
+const equivalences: StockEquivalence[] = [
+  { mlSku: "GOR-TRU", tnSku: "CAP-TRUCKER" },
+  // Ambiguous: two ML skus mapped to the same TN sku.
+  { mlSku: "BUZ-CAN", tnSku: "MED-X3" },
+  { mlSku: "OTRO-ML", tnSku: "MED-X3" },
+  // Points nowhere in TN.
+  { mlSku: "REM-NE-L", tnSku: "REM-L-OLD" },
+];
 
-test("fixture comparison covers all cases", () => {
-  const rows = compareStock(mlFixture, tnFixture, equivalences);
-  const byEstado = (s: DiffRow["estado"]) => rows.filter((r) => r.estado === s);
+test("fixture comparison separates every non-equal case from ok", () => {
+  const { resumen, filas } = compareStock(mlFixture, tnFixture, equivalences);
+  const byEstado = (s: keyof typeof resumen) => filas.filter((r) => r.estado === s);
 
-  assert.equal(byEstado("ok").length, 2);
+  // ok: direct match plus the clean equivalence — nothing ambiguous.
+  assert.equal(resumen.ok, 2);
   assert.equal(byEstado("ok")[0].mlSku, "REM-NE-M");
 
-  const diff = byEstado("diferente");
-  assert.equal(diff.length, 1);
-  assert.equal(diff[0].mlSku, "REM-NE-L");
-  assert.deepEqual([diff[0].mlStock, diff[0].tnStock], [2, 0]);
+  // The equivalence for REM-NE-L points to a TN sku that does not exist:
+  // reported, never matched by falling back to the direct REM-NE-L row.
+  const sinDestino = byEstado("equivalencia_sin_destino");
+  assert.equal(sinDestino.length, 1);
+  assert.equal(sinDestino[0].mlSku, "REM-NE-L");
+  assert.equal(sinDestino[0].tnSku, "REM-L-OLD");
 
-  const eq = rows.find((r) => r.via === "equivalencia");
-  assert.ok(eq);
-  assert.deepEqual([eq.mlSku, eq.tnSku], ["GOR-TRU", "CAP-TRUCKER"]);
-  assert.equal(eq.estado, "ok");
+  // Two ML skus mapped to the same TN sku: ambiguous, not matched.
+  assert.equal(resumen.equivalencia_ambigua, 1);
+  assert.equal(byEstado("equivalencia_ambigua")[0].mlSku, "BUZ-CAN");
 
-  assert.equal(byEstado("sin_sku_ml").length, 1); // variation Blanco/M without SELLER_SKU
-  assert.equal(byEstado("solo_en_tn").length, 1);
-  assert.equal(byEstado("solo_en_tn")[0].tnSku, "MED-X3");
-  assert.equal(byEstado("solo_en_ml").length, 0);
+  // Duplicated ML sku: both occurrences flagged, no stock claim.
+  assert.equal(resumen.ml_sku_duplicado, 2);
+
+  // Missing SELLER_SKU on a variation.
+  assert.equal(resumen.sin_sku_ml, 1);
+
+  // Equivalence mapping: GOR-TRU ↔ CAP-TRUCKER, same stock.
+  const viaEq = filas.find((r) => r.via === "equivalencia" && r.estado === "ok");
+  assert.ok(viaEq);
+  assert.deepEqual([viaEq.mlSku, viaEq.tnSku], ["GOR-TRU", "CAP-TRUCKER"]);
+
+  // TN rows never consumed: the ambiguous-equivalence target and the TN row
+  // left unmatched because its ML counterpart had a dead equivalence.
+  assert.equal(resumen.solo_en_tn, 2);
+  assert.deepEqual(byEstado("solo_en_tn").map((r) => r.tnSku).sort(), ["MED-X3", "REM-NE-L"]);
+
+  // Duplicated TN sku: reported as ambiguous, not silently matched or "solo".
+  assert.equal(resumen.tn_sku_duplicado, 1);
+  assert.equal(byEstado("tn_sku_duplicado")[0].tnSku, "CAM-LIN");
+
+  // No row may be counted twice.
+  assert.equal(
+    filas.length,
+    Object.entries(resumen)
+      .filter(([k]) => k !== "mlVacio" && k !== "tnVacio")
+      .reduce((acc, [, v]) => acc + (v as number), 0)
+  );
 
   // Visible difference report (evidence for the milestone):
   console.log("=== REPORTE DE DIFERENCIAS (fixture) ===");
-  for (const r of rows) {
+  for (const r of filas) {
     console.log(
-      [r.estado.padEnd(11), (r.mlSku ?? "-").padEnd(9), (r.tnSku ?? "-").padEnd(11),
+      [r.estado.padEnd(24), (r.mlSku ?? "-").padEnd(9), (r.tnSku ?? "-").padEnd(11),
        `ml=${r.mlStock ?? "-"}`, `tn=${r.tnStock ?? "-"}`, r.via ?? "-"].join(" | ")
     );
   }
+});
+
+test("empty inputs are reported as empty, not as ok", () => {
+  const { resumen, filas } = compareStock([], [], []);
+  assert.equal(resumen.mlVacio, true);
+  assert.equal(resumen.tnVacio, true);
+  assert.equal(resumen.ok, 0);
+  assert.equal(filas.length, 0);
+});
+
+test("difference in stock is diferente, never ok", () => {
+  const ml = [{ id: "MLA1", title: "X", availableQuantity: 2, sku: "A-1", variations: [] }];
+  const tn = [{ id: 1, name: "X", variants: [{ id: 1, sku: "A-1", stock: 0 }] }];
+  const { resumen } = compareStock(ml, tn, []);
+  assert.equal(resumen.ok, 0);
+  assert.equal(resumen.diferente, 1);
 });

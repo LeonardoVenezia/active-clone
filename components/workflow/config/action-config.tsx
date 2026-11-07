@@ -482,6 +482,64 @@ function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onC
   );
 }
 
+
+// Comparar Stock fields: compares ML snapshot vs TN products via SKU
+function StockCompareFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="stock-compare-ml">Ítems de Mercado Libre</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="stock-compare-ml"
+          onChange={(value) => onUpdateConfig("mlItems", value)}
+          placeholder="Salida del paso Stock ML (items)"
+          value={(config?.mlItems as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Usá @ para referenciar la salida del paso de Mercado Libre.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="stock-compare-tn">Productos de Tiendanube</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="stock-compare-tn"
+          onChange={(value) => onUpdateConfig("tnProducts", value)}
+          placeholder="Salida del paso de Tiendanube (products)"
+          value={(config?.tnProducts as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Usá @ para referenciar la salida del paso de Tiendanube.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="stock-compare-eq">Colección de equivalencias</Label>
+        <Input
+          disabled={disabled}
+          id="stock-compare-eq"
+          onChange={(e) => onUpdateConfig("equivalenciasCollection", e.target.value)}
+          placeholder="equivalencias_sku"
+          value={(config?.equivalenciasCollection as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Colección de Datos de tu empresa con las equivalencias de SKU (clave =
+          SKU de ML, valor con tn_sku). Si dos SKU ya coinciden no hace falta
+          equivalencia.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Datos fields component (generic per-company records; prototype)
 function DatosFields({
   config,
@@ -915,6 +973,14 @@ function SystemActionFields({
           onUpdateConfig={onUpdateConfig}
         />
       );
+    case "Comparar Stock":
+      return (
+        <StockCompareFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
     case "Datos":
       return (
         <DatosFields
@@ -970,6 +1036,7 @@ const SYSTEM_ACTIONS: Array<{ id: string; label: string }> = [
   { id: "Delay", label: "Delay" },
   { id: "Unir", label: "Unir" },
   { id: "Datos", label: "Datos" },
+  { id: "Comparar Stock", label: "Comparar Stock" },
   { id: "Frontend", label: "Frontend" },
 ];
 

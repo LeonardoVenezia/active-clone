@@ -148,7 +148,10 @@ export async function POST(
     // never from the request or the node config. Closed unless enabled.
     let dataOrganizationId: string | undefined;
     let dataCanDefineFields = false;
-    if ((workflow.nodes as WorkflowNode[]).some((n) => (n as { data?: { config?: { actionType?: unknown } } }).data?.config?.actionType === "Datos")) {
+    if ((workflow.nodes as WorkflowNode[]).some((n) => {
+      const at = (n as { data?: { config?: { actionType?: unknown } } }).data?.config?.actionType;
+      return at === "Datos" || at === "Comparar Stock";
+    })) {
       // Same server decision as reading: owner/share AND membership of the
       // organization the workflow is scoped to (a share alone is not enough).
       const dataCtx = datosEnabled() ? await orgForWorkflowRead(request, workflowId) : null;
