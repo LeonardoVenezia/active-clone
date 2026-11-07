@@ -81,13 +81,23 @@ export function FrontendPanel({ view, records, message, canRun, running, onRun, 
         {rowsField && records !== null && !reportRows?.length && <p className="text-muted-foreground">No hay datos todavía.</p>}
         {rowsField && !!reportRows?.length && (
           <div className="space-y-1">
-            <div className="overflow-x-auto"><table className="w-full text-left text-xs sm:text-sm">
+            <div className="hidden sm:block"><table className="w-full text-left text-xs sm:text-sm">
               <thead><tr className="border-b">{columns.map((c) => <th className="py-2 pr-3" key={c}>{labelOf(c)}</th>)}</tr></thead>
               <tbody>{reportRows.map((row, i) => (
                 <tr className="border-b align-top" key={i}>
                   {columns.map((c) => <td className="py-1.5 pr-3 break-words" key={c}>{cell(row, c)}</td>)}
                 </tr>
               ))}</tbody></table></div>
+            <div className="space-y-2 sm:hidden">{reportRows.map((row, i) => (
+              <div className="rounded border p-2 text-xs" key={i}>
+                {columns.map((c) => (
+                  <div className="flex justify-between gap-3 py-0.5" key={c}>
+                    <span className="text-muted-foreground shrink-0">{labelOf(c)}</span>
+                    <span className="text-right break-words">{cell(row, c)}</span>
+                  </div>
+                ))}
+              </div>
+            ))}</div>
             <p className="text-muted-foreground text-xs">Actualizado {reportDate}</p>
           </div>
         )}
