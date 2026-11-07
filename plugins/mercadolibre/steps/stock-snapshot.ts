@@ -4,6 +4,12 @@ import { fetchCredentials } from "@/lib/credential-fetcher";
 import { type StepInput, withStepLogging } from "@/lib/steps/step-handler";
 import { mlFetch, NOT_CONFIGURED_ERROR } from "../api";
 import type { MercadoLibreCredentials } from "../credentials";
+import {
+  chunkIds,
+  mapItemBody,
+  type MlItemBody,
+  type StockSnapshotItem,
+} from "./stock-snapshot-shared";
 
 // Read-only catalog snapshot for stock comparison reports.
 // Contract verified against developers.mercadolibre.com.ar (2026-11-07):
@@ -20,19 +26,7 @@ type StockSnapshotResult =
       success: true;
       sellerId: number;
       count: number;
-      items: Array<{
-        id: string;
-        title: string;
-        status: string;
-        availableQuantity: number;
-        sku: string | null;
-        variations: Array<{
-          id: number;
-          availableQuantity: number;
-          sku: string | null;
-          combination: string;
-        }>;
-      }>;
+      items: StockSnapshotItem[];
     }
   | { success: false; error: string };
 
@@ -49,27 +43,6 @@ export type StockSnapshotInput = StepInput &
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 const MULTIGET_CHUNK = 20;
-
-type MlAttribute = { id?: string; value_name?: string | null };
-type MlVariation = {
-  id?: number;
-  available_quantity?: number;
-  attributes?: MlAttribute[];
-  attribute_combinations?: Array<{ name?: string; value_name?: string | null }>;
-};
-type MlItemBody = {
-  id?: string;
-  title?: string;
-  status?: string;
-  available_quantity?: number;
-  attributes?: MlAttribute[];
-  variations?: MlVariation[];
-};
-
-function skuOf(attributes: MlAttribute[] | undefined): string | null {
-  const sku = attributes?.find((a) => a.id === "SELLER_SKU")?.value_name;
-  return sku ?? null;
-}
 
 async function stepHandler(
   input: StockSnapshotCoreInput,
@@ -120,8 +93,7 @@ async function stepHandler(
     const fields =
       "id,title,status,available_quantity,attributes,variations";
     const bodies: MlItemBody[] = [];
-    for (let i = 0; i < ids.length; i += MULTIGET_CHUNK) {
-      const chunk = ids.slice(i, i + MULTIGET_CHUNK);
+    for (const chunk of chunkIds(ids, MULTIGET_CHUNK)) {
       const itemsRes = await mlFetch(
         integrationId,
         credentials,
@@ -141,22 +113,7 @@ async function stepHandler(
       }
     }
 
-    const items = bodies.map((body) => ({
-      id: body.id ?? "",
-      title: body.title ?? "",
-      status: body.status ?? "",
-      availableQuantity: body.available_quantity ?? 0,
-      sku: skuOf(body.attributes),
-      variations: (body.variations ?? []).map((v) => ({
-        id: v.id ?? 0,
-        availableQuantity: v.available_quantity ?? 0,
-        sku: skuOf(v.attributes),
-        combination: (v.attribute_combinations ?? [])
-          .map((c) => `${c.name ?? ""}: ${c.value_name ?? ""}`)
-          .join(" / "),
-      })),
-    }));
-
+    const items = bodies.map(mapItemBody);
     return { success: true, sellerId: me.id, count: items.length, items };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

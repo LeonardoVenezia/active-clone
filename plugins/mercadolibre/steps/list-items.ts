@@ -3,6 +3,7 @@ import "server-only";
 import { fetchCredentials } from "@/lib/credential-fetcher";
 import { type StepInput, withStepLogging } from "@/lib/steps/step-handler";
 import { mlFetch, NOT_CONFIGURED_ERROR } from "../api";
+import { chunkIds } from "./stock-snapshot-shared";
 import type { MercadoLibreCredentials } from "../credentials";
 
 type ListItemsResult =
@@ -87,8 +88,7 @@ async function stepHandler(
 
     // Multiget /items is capped at 20 ids per call by the API.
     const raw: Array<{ code: number; body?: MlItem }> = [];
-    for (let i = 0; i < ids.length; i += 20) {
-      const chunk = ids.slice(i, i + 20);
+    for (const chunk of chunkIds(ids)) {
       const itemsRes = await mlFetch(
         integrationId,
         credentials,
