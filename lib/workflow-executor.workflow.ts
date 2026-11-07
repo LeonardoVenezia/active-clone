@@ -800,6 +800,8 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
             actionType: stepAction,
             config: processedBodyConfig,
             outputs: itemOutputs,
+            dataOrganizationId: input.dataOrganizationId,
+            dataCanDefineFields: input.dataCanDefineFields,
             context: {
               executionId,
               nodeId: `${node.id}#${i + 1}.${stepId}`,
