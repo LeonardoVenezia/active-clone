@@ -14,7 +14,7 @@ import {
   getStepImporter,
   type StepImporter,
 } from "./step-registry";
-import { diagnoseTemplateReferences } from "./template-diagnostics";
+import { diagnoseFormulaAction, diagnoseTemplateReferences } from "./template-diagnostics";
 import { resolveFieldValue } from "./field-path";
 import { exposeStepOutput } from "./loop-output";
 import { canContinueAfterError, explicitErrorPolicy, failedStepOutput } from "./node-error-policy";
@@ -800,7 +800,10 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
               nodeId: `${node.id}#${i + 1}.${stepId}`,
               nodeName: `${getNodeName(node)} item ${i + 1} - ${stepAction}`,
               nodeType: stepAction,
-              warnings: diagnoseTemplateReferences(rawBodyConfig, itemOutputs),
+              warnings: [
+                ...diagnoseTemplateReferences(rawBodyConfig, itemOutputs),
+                ...diagnoseFormulaAction(rawBodyConfig),
+              ],
             },
           });
           if (
@@ -1111,7 +1114,10 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           nodeId: node.id,
           nodeName: getNodeName(node),
           nodeType: actionType,
-          warnings: diagnoseTemplateReferences(config, outputs),
+          warnings: [
+            ...diagnoseTemplateReferences(config, outputs),
+            ...diagnoseFormulaAction(config),
+          ],
         };
 
         // Execute the action step with stepHandler (logging is handled inside)

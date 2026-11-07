@@ -240,7 +240,7 @@ function FormulaFields({
           disabled={disabled}
           id="formula-input"
           onChange={(value) => onUpdateConfig("input", value)}
-          placeholder='{"precio": 100, "items": [1, 2, 3]}'
+          placeholder='Ejemplo: {"precio": 100, "items": [1, 2, 3]}'
           value={(config?.input as string) || ""}
         />
         <p className="text-muted-foreground text-xs">

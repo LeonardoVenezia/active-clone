@@ -2,7 +2,7 @@ import { resolveFieldValue } from "./field-path";
 
 type NodeOutputs = Record<string, { label: string; data: unknown }>;
 export type TemplateDiagnostic = {
-  kind: "missing-node" | "missing-field" | "missing-output";
+  kind: "missing-node" | "missing-field" | "missing-output" | "formula-empty-input";
   configKey: string;
   nodeId: string;
   fieldPath?: string;
@@ -41,4 +41,16 @@ export function diagnoseTemplateReferences(
     }
   }
   return diagnostics;
+}
+
+/** Warn when a Fórmula action has no Entrada: it runs with empty data and may return null. */
+export function diagnoseFormulaAction(
+  config: Record<string, unknown>,
+): TemplateDiagnostic[] {
+  if (config.actionType !== "Fórmula") return [];
+  const input = config.input;
+  if (typeof input === "string" && input.trim().length > 0) return [];
+  if (input !== undefined && input !== null && typeof input !== "string")
+    return [];
+  return [{ kind: "formula-empty-input", configKey: "input", nodeId: "" }];
 }

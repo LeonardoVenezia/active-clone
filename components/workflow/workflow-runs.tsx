@@ -580,14 +580,24 @@ function ExecutionLogEntry({
                       className="break-words [overflow-wrap:anywhere]"
                       key={index}
                     >
-                      Campo de configuración {warning.configKey}:{" "}
-                      {warning.kind === "missing-node"
-                        ? "el nodo no existe o no se ejecutó"
-                        : warning.kind === "missing-output"
-                          ? "el nodo no tiene salida definida"
-                          : "no se encontró el campo"}{" "}
-                      ({warning.nodeId}
-                      {warning.fieldPath ? `.${warning.fieldPath}` : ""}).
+                      {warning.kind === "formula-empty-input" ? (
+                        <>
+                          la Entrada de la Fórmula está vacía: corre sin datos
+                          y el resultado puede ser vacío (null). Si la fórmula
+                          no usa datos de entrada, ignorá este aviso.
+                        </>
+                      ) : (
+                        <>
+                          Campo de configuración {warning.configKey}:{" "}
+                          {warning.kind === "missing-node"
+                            ? "el nodo no existe o no se ejecutó"
+                            : warning.kind === "missing-output"
+                              ? "el nodo no tiene salida definida"
+                              : "no se encontró el campo"}{" "}
+                          ({warning.nodeId}
+                          {warning.fieldPath ? `.${warning.fieldPath}` : ""}).
+                        </>
+                      )}
                     </li>
                   ))}
                 </ul>
