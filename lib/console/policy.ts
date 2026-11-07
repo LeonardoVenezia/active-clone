@@ -78,10 +78,12 @@ export function canManageGrant(
     actor.userId === next.userId ||
     (current?.organizationId &&
       current.organizationId !== actor.organizationId) ||
-    current?.role === "owner" ||
-    next.role === "owner"
+    current?.role === "owner"
   )
     return false;
+  // Only a console owner can name another owner (managed onboarding: the
+  // agency activates the console and names the client's owner).
+  if (next.role === "owner") return actor.role === "owner";
   if (actor.role === "owner") return true;
   if (actor.role === "admin")
     return (
