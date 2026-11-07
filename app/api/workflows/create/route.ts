@@ -88,6 +88,17 @@ export async function POST(request: Request) {
       workflowName = `Untitled ${count}`;
     }
 
+    // Nodes from API/agent callers may lack data.type (the UI always sets
+    // it); without it the executor silently skips the node. Normalize at
+    // write time so every saved workflow is runnable.
+    const normalizedNodes = (nodes as Array<Record<string, unknown>>).map((n) => ({
+      ...n,
+      data: {
+        ...(n.data as Record<string, unknown>),
+        type: (n.data as Record<string, unknown> | undefined)?.type ?? n.type,
+      },
+    }));
+
     // Generate workflow ID first
     const workflowId = generateId();
 
@@ -98,7 +109,7 @@ export async function POST(request: Request) {
           id: workflowId,
           name: workflowName,
           description: body.description,
-          nodes,
+          nodes: normalizedNodes,
           edges: body.edges,
           userId: session.user.id,
         })

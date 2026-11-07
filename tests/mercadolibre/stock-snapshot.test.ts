@@ -82,7 +82,7 @@ test("mapItemBody tolerates missing fields", () => {
     id: "",
     title: "",
     status: "",
-    availableQuantity: 0,
+    availableQuantity: null,
     sku: null,
     variations: [],
   });

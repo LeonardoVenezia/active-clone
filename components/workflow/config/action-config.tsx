@@ -302,6 +302,30 @@ function FrontendFields({
         />
       </div>
       <div className="space-y-2">
+        <Label htmlFor="frontend-rowsfield">Lista dentro del registro (opcional)</Label>
+        <Input
+          disabled={disabled}
+          id="frontend-rowsfield"
+          onChange={(e) => onUpdateConfig("rowsField", e.target.value)}
+          placeholder="filas"
+          value={(config?.rowsField as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Si el último registro guarda una lista (por ejemplo un informe),
+          mostrala como tabla en lugar de un registro por fila.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="frontend-labels">Etiquetas de columnas (opcional)</Label>
+        <Input
+          disabled={disabled}
+          id="frontend-labels"
+          onChange={(e) => onUpdateConfig("labels", e.target.value)}
+          placeholder="estado=Estado, stock_ml=Stock ML"
+          value={(config?.labels as string) || ""}
+        />
+      </div>
+      <div className="space-y-2">
         <Label htmlFor="frontend-collection">Colección de Datos a mostrar</Label>
         <Input
           disabled={disabled}

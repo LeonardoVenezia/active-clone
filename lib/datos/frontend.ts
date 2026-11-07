@@ -16,7 +16,7 @@ export type FrontendView = {
   keyField: string;
   /** After saving from the form, also run this workflow with the validated values as input. */
   runOnSubmit: boolean;
-};
+ rowsField?: string; labels?: Record<string, string> };
 const FIELD_NAME_RE = /^[A-Za-z][A-Za-z0-9_]{0,39}$/;
 export const MAX_COLUMNS = 12;
 
@@ -38,7 +38,22 @@ export function frontendViewFromNodes(nodes: unknown): FrontendView | null {
     : [];
   const keyField = typeof c.keyField === "string" && FIELD_NAME_RE.test(c.keyField.trim()) ? c.keyField.trim() : "";
   const showForm = c.showForm === "true" || c.showForm === true;
-  return { title, collection, showRun: c.showRun !== "false" && c.showRun !== false, columns, showForm, keyField, runOnSubmit: showForm && (c.runOnSubmit === "true" || c.runOnSubmit === true) };
+  // Optional: render the array stored at value[rowsField] of the latest record
+  // as the table (single-record reports), instead of one row per record.
+  const rowsField = typeof c.rowsField === "string" && FIELD_NAME_RE.test(c.rowsField.trim()) ? c.rowsField.trim() : "";
+  // Optional display labels: "campo=Etiqueta, otro=Otra". Labels are free text
+  // rendered as table headers (React escapes them).
+  const labels: Record<string, string> = {};
+  if (typeof c.labels === "string") {
+    for (const pair of c.labels.split(",")) {
+      const eqIdx = pair.indexOf("=");
+      if (eqIdx < 1) continue;
+      const field = pair.slice(0, eqIdx).trim();
+      const label = pair.slice(eqIdx + 1).trim().slice(0, 40);
+      if (FIELD_NAME_RE.test(field) && label) labels[field] = label;
+    }
+  }
+  return { title, collection, showRun: c.showRun !== "false" && c.showRun !== false, columns, showForm, keyField, rowsField, labels, runOnSubmit: showForm && (c.runOnSubmit === "true" || c.runOnSubmit === true) };
 }
 
 /** Only organization owners and admins may define or change the fields of a collection. */

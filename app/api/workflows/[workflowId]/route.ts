@@ -134,7 +134,14 @@ function buildUpdateData(
     updateData.description = body.description;
   }
   if (body.nodes !== undefined) {
-    updateData.nodes = body.nodes;
+    // Same normalization as create: never persist nodes without data.type.
+    updateData.nodes = (body.nodes as Array<Record<string, unknown>>).map((n) => ({
+      ...n,
+      data: {
+        ...(n.data as Record<string, unknown>),
+        type: (n.data as Record<string, unknown> | undefined)?.type ?? n.type,
+      },
+    }));
   }
   if (body.edges !== undefined) {
     updateData.edges = body.edges;

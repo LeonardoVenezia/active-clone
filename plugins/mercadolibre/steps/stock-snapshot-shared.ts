@@ -22,11 +22,11 @@ export type StockSnapshotItem = {
   id: string;
   title: string;
   status: string;
-  availableQuantity: number;
+  availableQuantity: number | null;
   sku: string | null;
   variations: Array<{
     id: number;
-    availableQuantity: number;
+    availableQuantity: number | null;
     sku: string | null;
     combination: string;
   }>;
@@ -44,11 +44,11 @@ export function mapItemBody(body: MlItemBody): StockSnapshotItem {
     id: body.id ?? "",
     title: body.title ?? "",
     status: body.status ?? "",
-    availableQuantity: body.available_quantity ?? 0,
+    availableQuantity: body.available_quantity ?? null,
     sku: skuOf(body.attributes),
     variations: (body.variations ?? []).map((v) => ({
       id: v.id ?? 0,
-      availableQuantity: v.available_quantity ?? 0,
+      availableQuantity: v.available_quantity ?? null,
       sku: skuOf(v.attributes),
       combination: (v.attribute_combinations ?? [])
         .map((c) => `${c.name ?? ""}: ${c.value_name ?? ""}`)

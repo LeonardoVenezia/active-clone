@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
-export type PanelView = { title: string; collection: string; showRun: boolean; columns?: string[]; showForm?: boolean; keyField?: string; runOnSubmit?: boolean };
+export type PanelView = { title: string; collection: string; showRun: boolean; columns?: string[]; showForm?: boolean; keyField?: string; runOnSubmit?: boolean; rowsField?: string; labels?: Record<string, string> };
 export type PanelRecord = { key: string; value: unknown; updatedAt: string };
 export type PanelField = { name: string; type: "texto" | "numero" | "booleano" | "fecha"; required: boolean };
 
@@ -51,6 +51,16 @@ export function FrontendPanel({ view, records, message, canRun, running, onRun, 
   fields?: PanelField[] | null; formMessage?: string; submitting?: boolean; onSubmit?: (values: Record<string, string>) => Promise<boolean>;
 }) {
   const columns = view?.columns ?? [];
+  const labels = view?.labels ?? {};
+  const labelOf = (c: string) => labels[c] ?? c;
+  // rowsField mode: the latest record holds the report; its value[rowsField]
+  // array is the table. One overwritten record = no stale rows across runs.
+  const rowsField = view?.rowsField ?? "";
+  const reportRecord = rowsField
+    ? (records ?? []).find((r) => r.value && typeof r.value === "object" && !Array.isArray(r.value) && Array.isArray((r.value as Record<string, unknown>)[rowsField]))
+    : undefined;
+  const reportRows = reportRecord ? ((reportRecord.value as Record<string, unknown>)[rowsField] as Record<string, unknown>[]) : null;
+  const reportDate = reportRecord ? new Date(reportRecord.updatedAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "";
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
       <h1 className="text-2xl font-bold">{view?.title || "Panel"}</h1>
@@ -68,15 +78,28 @@ export function FrontendPanel({ view, records, message, canRun, running, onRun, 
         <h2 className="font-semibold">{view ? `Datos: ${view.collection}` : "Esta página todavía no está configurada."}</h2>
         <p className="text-muted-foreground text-xs">Se actualiza cada 5 segundos.</p>
         {records === null && <p>Cargando...</p>}
-        {records?.length === 0 && <p className="text-muted-foreground">No hay datos todavía.</p>}
-        {!!records?.length && (
-          <div className="overflow-x-auto"><table className="w-full min-w-max text-left text-sm">
-            <thead><tr className="border-b"><th className="py-2 pr-4">Clave</th>{columns.length ? columns.map((c) => <th className="pr-4" key={c}>{c}</th>) : <th className="pr-4">Valor</th>}<th>Actualizado</th></tr></thead>
+        {rowsField && records !== null && !reportRows?.length && <p className="text-muted-foreground">No hay datos todavía.</p>}
+        {rowsField && !!reportRows?.length && (
+          <div className="space-y-1">
+            <div className="overflow-x-auto"><table className="w-full text-left text-xs sm:text-sm">
+              <thead><tr className="border-b">{columns.map((c) => <th className="py-2 pr-3" key={c}>{labelOf(c)}</th>)}</tr></thead>
+              <tbody>{reportRows.map((row, i) => (
+                <tr className="border-b align-top" key={i}>
+                  {columns.map((c) => <td className="py-1.5 pr-3 break-words" key={c}>{cell(row, c)}</td>)}
+                </tr>
+              ))}</tbody></table></div>
+            <p className="text-muted-foreground text-xs">Actualizado {reportDate}</p>
+          </div>
+        )}
+        {!rowsField && records?.length === 0 && <p className="text-muted-foreground">No hay datos todavía.</p>}
+        {!rowsField && !!records?.length && (
+          <div className="overflow-x-auto"><table className="w-full text-left text-xs sm:text-sm">
+            <thead><tr className="border-b"><th className="py-2 pr-3">Clave</th>{columns.length ? columns.map((c) => <th className="pr-3" key={c}>{labelOf(c)}</th>) : <th className="pr-3">Valor</th>}<th>Actualizado</th></tr></thead>
             <tbody>{records.map((r) => (
               <tr className="border-b align-top" key={r.key}>
-                <td className="py-2 pr-4 font-mono">{r.key}</td>
-                {columns.length ? columns.map((c) => <td className="pr-4" key={c}>{cell(r.value, c)}</td>) : <td className="pr-4 font-mono">{typeof r.value === "string" ? r.value : JSON.stringify(r.value)}</td>}
-                <td>{new Date(r.updatedAt).toISOString().slice(0, 19).replace("T", " ")}</td>
+                <td className="py-1.5 pr-3 break-words font-mono">{r.key}</td>
+                {columns.length ? columns.map((c) => <td className="pr-3 break-words" key={c}>{cell(r.value, c)}</td>) : <td className="pr-3 font-mono">{typeof r.value === "string" ? r.value : JSON.stringify(r.value)}</td>}
+                <td className="whitespace-nowrap">{new Date(r.updatedAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}</td>
               </tr>
             ))}</tbody></table></div>
         )}

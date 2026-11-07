@@ -5,11 +5,16 @@
  * _dataOrganizationId (resolved on the server from the workflow's scope).
  * Never calls Mercado Libre or Tiendanube: it compares the outputs of
  * previous steps (or fixture data) passed via template references.
+ *
+ * The report is persisted as ONE record ("ultimo") in the report collection,
+ * overwritten on every run: Datos never deletes rows by design, so a single
+ * overwritten record is the repetition-safe shape (no stale rows when the
+ * report changes size, order, or comes back empty).
  */
 import "server-only";
 
-import { compareStock, type MlItemShape, type StockEquivalence, type TnProductShape } from "../stock/compare-shared";
-import { datosList } from "../datos/core";
+import { buildVista, compareStock, type MlItemShape, type StockEquivalence, type TnProductShape } from "../stock/compare-shared";
+import { datosList, datosSave, DATOS_LIMITS } from "../datos/core";
 import { pgDatosRepo } from "../datos/repo";
 import { type StepInput, withStepLogging } from "./step-handler";
 
@@ -17,10 +22,13 @@ export type StockCompareInput = StepInput & {
   mlItems?: unknown;
   tnProducts?: unknown;
   equivalenciasCollection?: unknown;
+  reporteCollection?: unknown;
   _dataOrganizationId?: string;
 };
 
 const DEFAULT_EQ_COLLECTION = "equivalencias_sku";
+const DEFAULT_REPORTE_COLLECTION = "reporte_stock";
+const REPORTE_KEY = "ultimo";
 
 function parseList(value: unknown): unknown[] | null {
   if (Array.isArray(value)) return value;
@@ -35,6 +43,10 @@ function parseList(value: unknown): unknown[] | null {
     }
   }
   return null;
+}
+
+function cleanCollectionName(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
 async function stepHandler(input: StockCompareInput) {
@@ -52,15 +64,17 @@ async function stepHandler(input: StockCompareInput) {
     };
   }
 
-  const collection =
-    typeof input.equivalenciasCollection === "string" && input.equivalenciasCollection.trim()
-      ? input.equivalenciasCollection.trim()
-      : DEFAULT_EQ_COLLECTION;
+  const eqCollection = cleanCollectionName(input.equivalenciasCollection, DEFAULT_EQ_COLLECTION);
+  const reporteCollection = cleanCollectionName(input.reporteCollection, DEFAULT_REPORTE_COLLECTION);
 
   let equivalences: StockEquivalence[] = [];
+  let equivalenciasTruncadas = false;
   try {
-    const eqResult = await datosList(pgDatosRepo, org, { collection });
+    // Read up to the platform list cap; if the collection reaches it, say so
+    // in the output instead of silently missing equivalences.
+    const eqResult = await datosList(pgDatosRepo, org, { collection: eqCollection, limit: DATOS_LIMITS.maxListLimit });
     if (!eqResult.success) return { success: false as const, error: eqResult.error };
+    equivalenciasTruncadas = (eqResult.count ?? 0) >= DATOS_LIMITS.maxListLimit;
     equivalences = (eqResult.records ?? [])
       .map((r) => {
         const value = r.value as { tn_sku?: unknown } | null;
@@ -78,7 +92,31 @@ async function stepHandler(input: StockCompareInput) {
     tnProducts as TnProductShape[],
     equivalences
   );
-  return { success: true as const, ...report };
+  const vista = buildVista(report.filas);
+
+  try {
+    const saved = await datosSave(pgDatosRepo, org, {
+      collection: reporteCollection,
+      key: REPORTE_KEY,
+      value: {
+        generado: new Date().toISOString(),
+        total: vista.length,
+        resumen: report.resumen,
+        filas: vista,
+      },
+    });
+    if (!saved.success) return { success: false as const, error: saved.error };
+  } catch {
+    return { success: false as const, error: "No pudimos acceder a los datos. Probá de nuevo." };
+  }
+
+  return {
+    success: true as const,
+    ...report,
+    vista,
+    equivalenciasTruncadas,
+    reporte: { collection: reporteCollection, key: REPORTE_KEY },
+  };
 }
 
 export async function stockCompareStep(input: StockCompareInput) {

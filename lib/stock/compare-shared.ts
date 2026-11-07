@@ -10,7 +10,7 @@
 
 export type MlVariationShape = {
   id?: number;
-  availableQuantity?: number;
+  availableQuantity?: number | null;
   sku?: string | null;
   combination?: string;
 };
@@ -18,7 +18,7 @@ export type MlItemShape = {
   id?: string;
   title?: string;
   status?: string;
-  availableQuantity?: number;
+  availableQuantity?: number | null;
   sku?: string | null;
   variations?: MlVariationShape[];
 };
@@ -40,7 +40,8 @@ export type CompareEstado =
   | "equivalencia_ambigua"
   | "equivalencia_sin_destino"
   | "solo_en_ml"
-  | "solo_en_tn";
+  | "solo_en_tn"
+  | "stock_incompleto";
 
 export type CompareRow = {
   estado: CompareEstado;
@@ -60,7 +61,7 @@ export type CompareResumen = Record<CompareEstado, number> & {
 
 export type CompareReport = { resumen: CompareResumen; filas: CompareRow[] };
 
-type MlEmit = { sku: string | null; stock: number; ref: string | null };
+type MlEmit = { sku: string | null; stock: number | null; ref: string | null };
 
 function flattenMl(items: MlItemShape[]): MlEmit[] {
   const out: MlEmit[] = [];
@@ -69,14 +70,14 @@ function flattenMl(items: MlItemShape[]): MlEmit[] {
     if (variations.length === 0) {
       out.push({
         sku: item.sku ?? null,
-        stock: item.availableQuantity ?? 0,
+        stock: item.availableQuantity ?? null,
         ref: item.title || item.id || null,
       });
     }
     for (const v of variations) {
       out.push({
         sku: v.sku ?? null,
-        stock: v.availableQuantity ?? 0,
+        stock: v.availableQuantity ?? null,
         ref: [item.title || item.id || "", v.combination || (v.id != null ? `var ${v.id}` : "")]
           .filter(Boolean)
           .join(" · ") || null,
@@ -97,6 +98,7 @@ function emptyResumen(): CompareResumen {
     equivalencia_sin_destino: 0,
     solo_en_ml: 0,
     solo_en_tn: 0,
+    stock_incompleto: 0,
     mlVacio: false,
     tnVacio: false,
   };
@@ -176,6 +178,19 @@ export function compareStock(
       continue;
     }
     usedTn.add(tnSku);
+    if (m.stock === null || tn.stock === null) {
+      push({
+        estado: "stock_incompleto",
+        mlSku: m.sku,
+        tnSku,
+        mlStock: m.stock,
+        tnStock: tn.stock,
+        via: eq ? "equivalencia" : "sku-directo",
+        mlRef: m.ref,
+        tnRef: tn.ref,
+      });
+      continue;
+    }
     push({
       estado: tn.stock === m.stock ? "ok" : "diferente",
       mlSku: m.sku,
@@ -198,4 +213,46 @@ export function compareStock(
   }
 
   return { resumen, filas };
+}
+
+/** Spanish labels for client-facing report pages (machine codes stay in filas). */
+export const ESTADO_LABELS: Record<CompareEstado, string> = {
+  ok: "Stock igual",
+  diferente: "Stock distinto",
+  sin_sku_ml: "Sin SKU en Mercado Libre",
+  ml_sku_duplicado: "SKU repetido en Mercado Libre",
+  tn_sku_duplicado: "SKU repetido en Tiendanube",
+  equivalencia_ambigua: "Equivalencia ambigua",
+  equivalencia_sin_destino: "Equivalencia sin destino",
+  solo_en_ml: "Solo en Mercado Libre",
+  solo_en_tn: "Solo en Tiendanube",
+  stock_incompleto: "Stock sin dato",
+};
+
+/** Display row for the report page (underscore field names: Datos/Frontend contract). */
+export type VistaRow = {
+  estado: string;
+  producto: string;
+  sku_ml: string;
+  sku_tn: string;
+  stock_ml: string;
+  stock_tn: string;
+  via: string;
+};
+
+const VIA_LABELS: Record<NonNullable<CompareRow["via"]>, string> = {
+  equivalencia: "Equivalencia",
+  "sku-directo": "SKU directo",
+};
+
+export function buildVista(filas: CompareRow[]): VistaRow[] {
+  return filas.map((r) => ({
+    estado: ESTADO_LABELS[r.estado],
+    producto: r.mlRef ?? r.tnRef ?? "",
+    sku_ml: r.mlSku ?? "",
+    sku_tn: r.tnSku ?? "",
+    stock_ml: r.mlStock === null ? "sin dato" : String(r.mlStock),
+    stock_tn: r.tnStock === null ? "sin dato" : String(r.tnStock),
+    via: r.via ? VIA_LABELS[r.via] : "",
+  }));
 }

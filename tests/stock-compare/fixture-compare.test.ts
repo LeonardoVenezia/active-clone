@@ -5,6 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mapItemBody } from "../../plugins/mercadolibre/steps/stock-snapshot-shared";
 import {
+  buildVista,
   compareStock,
   type StockEquivalence,
   type TnProductShape,
@@ -139,4 +140,44 @@ test("difference in stock is diferente, never ok", () => {
   const { resumen } = compareStock(ml, tn, []);
   assert.equal(resumen.ok, 0);
   assert.equal(resumen.diferente, 1);
+});
+
+test("missing stock on either side is stock_incompleto, never ok", () => {
+  // ML variation without available_quantity (mapper keeps null) matched
+  // against a TN row with stock 0: must NOT count as equal. A null-null
+  // match is not equal either.
+  const ml = [mapItemBody({
+    id: "MLA2001", title: "Piluso", status: "active", 
+    attributes: [],
+    variations: [{ id: 41, attributes: [{ id: "SELLER_SKU", value_name: "PIL-NEG" }], attribute_combinations: [] }],
+  })];
+  const tn: TnProductShape[] = [
+    { id: 601, name: "Piluso", variants: [{ id: 6011, sku: "PIL-NEG", stock: 0 }] },
+  ];
+  const { resumen, filas } = compareStock(ml, tn, []);
+  assert.equal(resumen.ok, 0);
+  assert.equal(resumen.diferente, 0);
+  assert.equal(resumen.stock_incompleto, 1);
+  assert.equal(filas[0].estado, "stock_incompleto");
+});
+
+test("null stock on both sides is stock_incompleto, not equal", () => {
+  const ml = [{ id: "MLA9", title: "Yerba", availableQuantity: null as number | null, sku: "YER-1", variations: [] as never[] }];
+  const tn: TnProductShape[] = [{ id: 8, name: "Yerba", variants: [{ id: 81, sku: "YER-1", stock: null }] }];
+  const { resumen, filas } = compareStock(ml, tn, []);
+  assert.equal(resumen.ok, 0);
+  assert.equal(resumen.stock_incompleto, 1);
+  assert.equal(filas[0].estado, "stock_incompleto");
+});
+
+test("vista rows carry Spanish labels and sin dato for missing stock", () => {
+  const ml = [{ id: "MLA3", title: "Azucar 1kg", availableQuantity: null as number | null, sku: "AZU-1", variations: [] as never[] }];
+  const tn: TnProductShape[] = [{ id: 7, name: "Azucar 1kg", variants: [{ id: 71, sku: "AZU-1", stock: 3 }] }];
+  const { filas } = compareStock(ml, tn, []);
+  const vista = buildVista(filas);
+  assert.equal(vista.length, 1);
+  assert.equal(vista[0].estado, "Stock sin dato");
+  assert.equal(vista[0].stock_ml, "sin dato");
+  assert.equal(vista[0].producto, "Azucar 1kg");
+  assert.equal(vista[0].via, "SKU directo");
 });
