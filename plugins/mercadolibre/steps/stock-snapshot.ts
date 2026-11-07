@@ -27,6 +27,9 @@ type StockSnapshotResult =
       sellerId: number;
       count: number;
       items: StockSnapshotItem[];
+      /** True when the catalog has more items than this snapshot covers. */
+      truncated: boolean;
+      total?: number;
     }
   | { success: false; error: string };
 
@@ -84,10 +87,11 @@ async function stepHandler(
     if (!searchRes.ok) {
       return { success: false, error: `Failed to list items: ${searchRes.error}` };
     }
-    const search = searchRes.data as { results?: string[] };
+    const search = searchRes.data as { results?: string[]; paging?: { total?: number } };
+    const total = typeof search.paging?.total === "number" ? search.paging.total : undefined;
     const ids = (search.results ?? []).slice(0, limit);
     if (!ids.length) {
-      return { success: true, sellerId: me.id, count: 0, items: [] };
+      return { success: true, sellerId: me.id, count: 0, items: [], truncated: false, total: 0 };
     }
 
     const fields =
@@ -114,7 +118,14 @@ async function stepHandler(
     }
 
     const items = bodies.map(mapItemBody);
-    return { success: true, sellerId: me.id, count: items.length, items };
+    return {
+      success: true,
+      sellerId: me.id,
+      count: items.length,
+      items,
+      truncated: total !== undefined ? total > items.length : ids.length >= limit,
+      total,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { success: false, error: `Failed to snapshot stock: ${message}` };

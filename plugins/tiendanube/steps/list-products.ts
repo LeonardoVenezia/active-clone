@@ -33,6 +33,8 @@ type ListProductsResult =
         totalStock: number | null;
         variants: Array<{ id: number; sku: string; price: string; stock: number | null }>;
       }>;
+      /** True when a full page came back: there may be more products. */
+      truncated: boolean;
     }
   | { success: false; error: string };
 
@@ -84,7 +86,7 @@ async function stepHandler(
     );
 
     if (response.status === 404) {
-      return { success: true, count: 0, products: [] };
+      return { success: true, count: 0, products: [], truncated: false };
     }
     if (!response.ok) {
       return {
@@ -105,7 +107,8 @@ async function stepHandler(
       const totalStock = stocks.length ? stocks.reduce((a, b) => a + b, 0) : null;
       return { id: product.id, name: productName(product.name), totalStock, variants };
     });
-    return { success: true, count: products.length, products };
+    // Tiendanube does not return a total; a full page means there may be more.
+    return { success: true, count: products.length, products, truncated: products.length >= limit };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { success: false, error: `Failed to list products: ${message}` };

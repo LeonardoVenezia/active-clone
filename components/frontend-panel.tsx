@@ -60,6 +60,9 @@ export function FrontendPanel({ view, records, message, canRun, running, onRun, 
     ? (records ?? []).find((r) => r.value && typeof r.value === "object" && !Array.isArray(r.value) && Array.isArray((r.value as Record<string, unknown>)[rowsField]))
     : undefined;
   const reportRows = reportRecord ? ((reportRecord.value as Record<string, unknown>)[rowsField] as Record<string, unknown>[]) : null;
+  const reportAdvertencias = reportRecord
+    ? (((reportRecord.value as Record<string, unknown>).advertencias as string[] | undefined) ?? [])
+    : [];
   const reportDate = reportRecord ? new Date(reportRecord.updatedAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "";
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
@@ -79,6 +82,11 @@ export function FrontendPanel({ view, records, message, canRun, running, onRun, 
         <p className="text-muted-foreground text-xs">Se actualiza cada 5 segundos.</p>
         {records === null && <p>Cargando...</p>}
         {rowsField && records !== null && !reportRows?.length && <p className="text-muted-foreground">No hay datos todavía.</p>}
+        {rowsField && reportAdvertencias.length > 0 && (
+          <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+            {reportAdvertencias.map((a, i) => <p key={i}>Atención: {a}</p>)}
+          </div>
+        )}
         {rowsField && !!reportRows?.length && (
           <div className="space-y-1">
             <div className="hidden sm:block"><table className="w-full text-left text-xs sm:text-sm">

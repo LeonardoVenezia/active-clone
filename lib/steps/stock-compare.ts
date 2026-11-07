@@ -23,6 +23,8 @@ export type StockCompareInput = StepInput & {
   tnProducts?: unknown;
   equivalenciasCollection?: unknown;
   reporteCollection?: unknown;
+  mlTruncado?: unknown;
+  tnTruncado?: unknown;
   _dataOrganizationId?: string;
 };
 
@@ -94,6 +96,17 @@ async function stepHandler(input: StockCompareInput) {
   );
   const vista = buildVista(report.filas);
 
+  // Anything that makes the comparison partial must be visible in the saved
+  // report, never look like a full-catalog answer.
+  const advertencias: string[] = [];
+  if (equivalenciasTruncadas) {
+    advertencias.push(`Se aplicaron solo las primeras ${DATOS_LIMITS.maxListLimit} equivalencias; puede haber más sin aplicar.`);
+  }
+  const mlTrunc = input.mlTruncado === true || input.mlTruncado === "true";
+  const tnTrunc = input.tnTruncado === true || input.tnTruncado === "true";
+  if (mlTrunc) advertencias.push("La lista de Mercado Libre está incompleta: el reporte no cubre todo el catálogo.");
+  if (tnTrunc) advertencias.push("La lista de Tiendanube está incompleta: el reporte no cubre todo el catálogo.");
+
   try {
     const saved = await datosSave(pgDatosRepo, org, {
       collection: reporteCollection,
@@ -103,6 +116,7 @@ async function stepHandler(input: StockCompareInput) {
         total: vista.length,
         resumen: report.resumen,
         filas: vista,
+        advertencias,
       },
     });
     if (!saved.success) return { success: false as const, error: saved.error };
@@ -115,6 +129,7 @@ async function stepHandler(input: StockCompareInput) {
     ...report,
     vista,
     equivalenciasTruncadas,
+    advertencias,
     reporte: { collection: reporteCollection, key: REPORTE_KEY },
   };
 }
