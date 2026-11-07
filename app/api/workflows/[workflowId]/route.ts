@@ -233,7 +233,9 @@ export async function PATCH(
       );
     }
 
-    // A workflow can only be turned on if it has a complete integration trigger.
+    // A workflow can only be turned on if it has a complete trigger: manual
+    // triggers are self-contained (console clients start them on demand);
+    // integration triggers still need an event and a connection.
     if (body.active === true) {
       const nodesToCheck = (
         Array.isArray(body.nodes) ? body.nodes : existingWorkflow.nodes
@@ -241,9 +243,10 @@ export async function PATCH(
       const trigger = nodesToCheck.find((n) => n.data?.type === "trigger");
       const config = trigger?.data?.config;
       if (
-        config?.triggerType !== "Integration" ||
-        !config.integrationTrigger ||
-        !config.integrationId
+        config?.triggerType !== "Manual" &&
+        (config?.triggerType !== "Integration" ||
+          !config.integrationTrigger ||
+          !config.integrationId)
       ) {
         return NextResponse.json(
           {
