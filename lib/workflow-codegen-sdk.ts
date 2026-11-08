@@ -1,6 +1,6 @@
-import { generateErrorPolicyRunner } from "./workflow-error-policy-codegen";
 import { preValidateConditionExpression } from "./condition-validator";
 import { explicitErrorPolicy } from "./node-error-policy";
+import { generateErrorPolicyRunner } from "./workflow-error-policy-codegen";
 import "server-only";
 
 import { findActionById } from "@/plugins";
@@ -15,7 +15,7 @@ const SYSTEM_CODEGEN_TEMPLATES: Record<string, string> = {
   "Database Query": databaseQueryTemplate,
   "HTTP Request": httpRequestTemplate,
   Condition: conditionTemplate,
-  "Fórmula": formulaTemplate,
+  Fórmula: formulaTemplate,
 };
 
 import {
@@ -226,7 +226,7 @@ export function generateWorkflowSDKCode(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[]
 ): string {
-  const hasErrorPolicy = nodes.some(n=>explicitErrorPolicy(n.data.config));
+  const hasErrorPolicy = nodes.some((n) => explicitErrorPolicy(n.data.config));
   const imports = new Set<string>();
   const stepFunctions: string[] = [];
 
@@ -501,7 +501,7 @@ export function generateWorkflowSDKCode(
       "Generate Image": () => buildAIImageParams(config),
       "Database Query": () => buildDatabaseParams(config),
       "HTTP Request": () => buildHttpParams(config),
-      "Fórmula": () => buildFormulaParams(config),
+      Fórmula: () => buildFormulaParams(config),
       Condition: () => buildConditionParams(config),
       Scrape: () => buildFirecrawlParams(actionType, config),
       Search: () => buildFirecrawlParams(actionType, config),
@@ -532,9 +532,11 @@ export function generateWorkflowSDKCode(
     let stepBody: string;
     if (stepImplementation && node.data.type === "action") {
       const inputParams = buildStepInputParams(actionType, config);
-      stepBody = hasErrorPolicy ? `  const outputs = input.outputs;
+      stepBody = hasErrorPolicy
+        ? `  const outputs = input.outputs;
   const stepInput: Record<string, any> = {${inputParams.join(",\n")}, ...(input.config as Record<string, any>)};
-${stepImplementation.replace(/\binput\b/g,"stepInput")}` : `  // Call step function with constructed input
+${stepImplementation.replace(/\binput\b/g, "stepInput")}`
+        : `  // Call step function with constructed input
   const stepInput = {
     ${inputParams.join(",\n    ")}
   };
@@ -555,7 +557,18 @@ ${stepBody}
   // Generate all step functions with unique names
   const nodeToStepName = createStepNameMapping(nodes);
   stepFunctions.push(
-    ...generateAllStepFunctions(hasErrorPolicy ? nodes.filter(n => !["Condition", "Delay", "Approval"].includes(String(n.data.config?.actionType))) : nodes, nodeToStepName, generateStepFunction)
+    ...generateAllStepFunctions(
+      hasErrorPolicy
+        ? nodes.filter(
+            (n) =>
+              !["Condition", "Delay", "Approval"].includes(
+                String(n.data.config?.actionType)
+              )
+          )
+        : nodes,
+      nodeToStepName,
+      generateStepFunction
+    )
   );
 
   // Helper to generate trigger node code
@@ -682,7 +695,16 @@ ${stepBody}
           // Conditions handle their own next nodes
           return lines;
         }
-        if (actionType === "Datos" || actionType === "Frontend" || actionType === "Comparar Stock") {
+        if (
+          actionType === "Datos" ||
+          actionType === "Frontend" ||
+          actionType === "Comparar Stock" ||
+          actionType === "Conciliar Pagos" ||
+          actionType === "Revisar Envíos" ||
+          actionType === "Alertas de Stock" ||
+          actionType === "Preparar Avisos" ||
+          actionType === "Preparar Respuestas"
+        ) {
           lines.push(
             `${indent}// ${actionType} "${node.data.label}": NOT exported. It depends on the platform (data store / workflow page).`,
             `${indent}const result_${sanitizeVarName(nodeId)} = { status: "not-exported", actionType: "${actionType}" };`
@@ -725,31 +747,67 @@ ${stepBody}
   const workflowBody: string[] = [];
 
   if (hasErrorPolicy) {
-    if(nodes.some(n=>n.data.config?.actionType==="Loop")) workflowBody.push('  throw new Error("Export not supported: Loop execution is not available in this export. Run it on the platform.");');
-    workflowBody.push('  const outputs: Record<string, {label:string;data:any}> = {};');
-    const callbacks: string[]=[];
-    for(const node of nodes) {
+    if (nodes.some((n) => n.data.config?.actionType === "Loop"))
+      workflowBody.push(
+        '  throw new Error("Export not supported: Loop execution is not available in this export. Run it on the platform.");'
+      );
+    workflowBody.push(
+      "  const outputs: Record<string, {label:string;data:any}> = {};"
+    );
+    const callbacks: string[] = [];
+    for (const node of nodes) {
       callbacks.push(`    ${JSON.stringify(node.id)}: async () => {`);
-      const action=node.data.config?.actionType;
-      if(node.data.type==="trigger") callbacks.push('      return input;');
-      else if(action==="Condition") {
-        const raw=node.data.config?.condition;
-        const valid=typeof raw!=="string" || preValidateConditionExpression(raw).valid;
+      const action = node.data.config?.actionType;
+      if (node.data.type === "trigger") callbacks.push("      return input;");
+      else if (action === "Condition") {
+        const raw = node.data.config?.condition;
+        const valid =
+          typeof raw !== "string" || preValidateConditionExpression(raw).valid;
         // Convert template substitutions to expressions, not truthy strings.
-        const expression=typeof raw==="string" ? convertTemplateToJS(raw).replace(/\$\{([^}]+)\}/g,'($1)') : String(Boolean(raw));
-        callbacks.push(valid ? `      try { return {condition:Boolean(${expression || "false"})}; } catch { return {condition:false}; }` : '      return {condition:false};');
-      } else if(action==="Delay") {
-        const secs=Math.round(Number(node.data.config?.durationMinutes || 0)*60+Number(node.data.config?.durationSeconds || 0));
-        callbacks.push(Number.isFinite(secs)&&secs>0&&secs<=86400 ? `      await sleep(${secs}*1000); return {success:true,waitedSeconds:${secs}};` : '      return {success:false,error:"Invalid delay duration (1 second to 24 hours)."};');
-      } else if(action==="Approval") {
+        const expression =
+          typeof raw === "string"
+            ? convertTemplateToJS(raw).replace(/\$\{([^}]+)\}/g, "($1)")
+            : String(Boolean(raw));
+        callbacks.push(
+          valid
+            ? `      try { return {condition:Boolean(${expression || "false"})}; } catch { return {condition:false}; }`
+            : "      return {condition:false};"
+        );
+      } else if (action === "Delay") {
+        const secs = Math.round(
+          Number(node.data.config?.durationMinutes || 0) * 60 +
+            Number(node.data.config?.durationSeconds || 0)
+        );
+        callbacks.push(
+          Number.isFinite(secs) && secs > 0 && secs <= 86_400
+            ? `      await sleep(${secs}*1000); return {success:true,waitedSeconds:${secs}};`
+            : '      return {success:false,error:"Invalid delay duration (1 second to 24 hours)."};'
+        );
+      } else if (action === "Approval") {
         imports.add("import { createHook } from 'workflow';");
-        callbacks.push(`      const decision=await createHook<{approved?:boolean;note?:string}>({token:${JSON.stringify("approval:"+node.id)}});`, '      return decision?.approved===true ? {success:true,approved:true,note:decision.note} : {success:false,approved:false,error:"Aprobación rechazada."};');
-      } else if(!action || !loadStepImplementation(String(action))) callbacks.push(`      return {success:false,error:${JSON.stringify("Unknown or unsupported action: "+action)}};`);
-      else callbacks.push(`      return await ${nodeToStepName.get(node.id)}({...input,outputs,config:__policyConfig(${JSON.stringify(node.data.config || {})})});`);
-      callbacks.push('    },');
+        callbacks.push(
+          `      const decision=await createHook<{approved?:boolean;note?:string}>({token:${JSON.stringify("approval:" + node.id)}});`,
+          '      return decision?.approved===true ? {success:true,approved:true,note:decision.note} : {success:false,approved:false,error:"Aprobación rechazada."};'
+        );
+      } else if (action && loadStepImplementation(String(action)))
+        callbacks.push(
+          `      return await ${nodeToStepName.get(node.id)}({...input,outputs,config:__policyConfig(${JSON.stringify(node.data.config || {})})});`
+        );
+      else
+        callbacks.push(
+          `      return {success:false,error:${JSON.stringify("Unknown or unsupported action: " + action)}};`
+        );
+      callbacks.push("    },");
     }
-    const runner=generateErrorPolicyRunner(nodes,edges,callbacks);
-    workflowBody.push(...runner.map(line=>line.replace('const __policyOutputs: Record<string, {label:string; data:any}> = {};','const __policyOutputs = outputs;')));
+    const runner = generateErrorPolicyRunner(nodes, edges, callbacks);
+    workflowBody.push(
+      ...runner.map((line) =>
+        line.replace(
+          "const __policyOutputs: Record<string, {label:string; data:any}> = {};",
+          "const __policyOutputs = outputs;"
+        )
+      )
+    );
   } else if (triggerNodes.length === 0) {
     workflowBody.push('  return { error: "No trigger nodes" };');
   } else {
@@ -777,8 +835,21 @@ ${stepBody}
 
   const functionName = sanitizeFunctionName(workflowName);
 
-  const hasUnir = nodes.some((n) => n.data.type === "action" && n.data.config?.actionType === "Unir");
-  const hasPlatformOnly = nodes.some((n) => n.data.type === "action" && (n.data.config?.actionType === "Datos" || n.data.config?.actionType === "Frontend" || n.data.config?.actionType === "Comparar Stock"));
+  const hasUnir = nodes.some(
+    (n) => n.data.type === "action" && n.data.config?.actionType === "Unir"
+  );
+  const hasPlatformOnly = nodes.some(
+    (n) =>
+      n.data.type === "action" &&
+      (n.data.config?.actionType === "Datos" ||
+        n.data.config?.actionType === "Frontend" ||
+        n.data.config?.actionType === "Comparar Stock" ||
+        n.data.config?.actionType === "Conciliar Pagos" ||
+        n.data.config?.actionType === "Revisar Envíos" ||
+        n.data.config?.actionType === "Alertas de Stock" ||
+        n.data.config?.actionType === "Preparar Avisos" ||
+        n.data.config?.actionType === "Preparar Respuestas")
+  );
   const PLATFORM_ONLY_GUARD = `\n  // EXPORT BLOCKED: this flow has a Datos or Frontend node. They depend on the platform (per-company data store and workflow page);\n  // this exported code cannot reproduce them, so it refuses to run instead of silently behaving differently.\n  const platformOnlyNotSupported: boolean = true;\n  if (platformOnlyNotSupported) {\n    throw new Error("Export not supported: this flow uses a Datos or Frontend node. Run it on the platform.");\n  }\n`;
   const UNIR_GUARD = `\n  // EXPORT BLOCKED: this flow has a Unir (join) node. The platform engine waits there for parallel branches (or a timeout);\n  // this exported code cannot reproduce that, so it refuses to run instead of silently behaving differently.\n  const unirNotSupported: boolean = true;\n  if (unirNotSupported) {\n    throw new Error("Export not supported: this flow uses a Unir node (join of parallel branches). Run it on the platform.");\n  }\n`;
 

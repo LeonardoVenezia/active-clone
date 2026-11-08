@@ -74,7 +74,8 @@ const SYSTEM_ACTIONS: ActionType[] = [
   {
     id: "Frontend",
     label: "Frontend",
-    description: "Una página básica con botón de ejecutar y los datos de una colección",
+    description:
+      "Una página básica con botón de ejecutar y los datos de una colección",
     category: "System",
   },
   {
@@ -87,6 +88,41 @@ const SYSTEM_ACTIONS: ActionType[] = [
     id: "Comparar Stock",
     label: "Comparar Stock",
     description: "Compará el stock de Mercado Libre con Tiendanube por SKU",
+    category: "System",
+  },
+  {
+    id: "Conciliar Pagos",
+    label: "Conciliar Pagos",
+    description:
+      "Cruzá ventas de Tiendanube/Mercado Libre con cobros de Mercado Pago por referencia",
+    category: "System",
+  },
+  {
+    id: "Revisar Envíos",
+    label: "Revisar Envíos",
+    description:
+      "Detectá envíos demorados o en estado de alerta, sin repetir avisos",
+    category: "System",
+  },
+  {
+    id: "Alertas de Stock",
+    label: "Alertas de Stock",
+    description:
+      "Marcá productos por debajo del umbral, sin repetir avisos (no modifica stock)",
+    category: "System",
+  },
+  {
+    id: "Preparar Avisos",
+    label: "Preparar Avisos",
+    description:
+      "Prepará avisos de postcompra (pago, despacho, entrega) para aprobación humana; no envía nada",
+    category: "System",
+  },
+  {
+    id: "Preparar Respuestas",
+    label: "Preparar Respuestas",
+    description:
+      "Borradores de soporte con el estado real del pedido/envío, para aprobación humana; no envía nada",
     category: "System",
   },
   {
@@ -127,11 +163,19 @@ function useAllActions(): ActionType[] {
   }, []);
 }
 
-type ComposioApp = { id: string; name: string; description: string; logoUrl: string | null };
+type ComposioApp = {
+  id: string;
+  name: string;
+  description: string;
+  logoUrl: string | null;
+};
 type ComposioTool = { slug: string; name: string; description: string };
 
 type ActionGridProps = {
-  onSelectAction: (actionType: string, extraConfig?: Record<string, string>) => void;
+  onSelectAction: (
+    actionType: string,
+    extraConfig?: Record<string, string>
+  ) => void;
   disabled?: boolean;
   isNewlyCreated?: boolean;
 };
@@ -183,7 +227,9 @@ const VIEW_MODE_KEY = "workflow-action-grid-view-mode";
 type ViewMode = "list" | "grid";
 
 function getInitialHiddenGroups(): Set<string> {
-  if (typeof window === "undefined") return new Set();
+  if (typeof window === "undefined") {
+    return new Set();
+  }
   try {
     const stored = localStorage.getItem(HIDDEN_GROUPS_KEY);
     return stored ? new Set(JSON.parse(stored)) : new Set();
@@ -193,7 +239,9 @@ function getInitialHiddenGroups(): Set<string> {
 }
 
 function getInitialViewMode(): ViewMode {
-  if (typeof window === "undefined") return "list";
+  if (typeof window === "undefined") {
+    return "list";
+  }
   try {
     const stored = localStorage.getItem(VIEW_MODE_KEY);
     return stored === "grid" ? "grid" : "list";
@@ -226,7 +274,9 @@ export function ActionGrid({
   const [remoteApps, setRemoteApps] = useState<ComposioApp[]>([]);
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [expandedApp, setExpandedApp] = useState<string | null>(null);
-  const [toolsByApp, setToolsByApp] = useState<Record<string, ComposioTool[] | "loading">>({});
+  const [toolsByApp, setToolsByApp] = useState<
+    Record<string, ComposioTool[] | "loading">
+  >({});
 
   useEffect(() => {
     const q = filter.trim();
@@ -239,14 +289,20 @@ export function ActionGrid({
     let live = true;
     setRemoteLoading(true);
     const t = setTimeout(() => {
-      fetch(`/api/composio-tools?q=${encodeURIComponent(q)}`, { cache: "no-store" })
+      fetch(`/api/composio-tools?q=${encodeURIComponent(q)}`, {
+        cache: "no-store",
+      })
         .then((r) => (r.ok ? r.json() : { items: [] }))
         .then((d: { items?: ComposioApp[] }) => {
-          if (live) setRemoteApps(d.items ?? []);
+          if (live) {
+            setRemoteApps(d.items ?? []);
+          }
         })
-        .catch(() => undefined)
+        .catch(() => {})
         .finally(() => {
-          if (live) setRemoteLoading(false);
+          if (live) {
+            setRemoteLoading(false);
+          }
         });
     }, 350);
     return () => {
@@ -258,12 +314,18 @@ export function ActionGrid({
   const toggleApp = (appId: string) => {
     setExpandedApp((prev) => (prev === appId ? null : appId));
     setToolsByApp((prev) => {
-      if (prev[appId]) return prev;
+      if (prev[appId]) {
+        return prev;
+      }
       return { ...prev, [appId]: "loading" };
     });
     setToolsByApp((prev) => {
-      if (prev[appId] !== "loading" && prev[appId] !== undefined) return prev;
-      fetch(`/api/composio-tools?toolkit=${encodeURIComponent(appId)}`, { cache: "no-store" })
+      if (prev[appId] !== "loading" && prev[appId] !== undefined) {
+        return prev;
+      }
+      fetch(`/api/composio-tools?toolkit=${encodeURIComponent(appId)}`, {
+        cache: "no-store",
+      })
         .then((r) => (r.ok ? r.json() : { items: [] }))
         .then((d: { items?: ComposioTool[] }) => {
           setToolsByApp((cur) => ({ ...cur, [appId]: d.items ?? [] }));
@@ -338,8 +400,12 @@ export function ActionGrid({
 
     // Sort categories: System first, then alphabetically
     const sortedCategories = Object.keys(groups).sort((a, b) => {
-      if (a === "System") return -1;
-      if (b === "System") return 1;
+      if (a === "System") {
+        return -1;
+      }
+      if (b === "System") {
+        return 1;
+      }
       return a.localeCompare(b);
     });
 
@@ -351,7 +417,9 @@ export function ActionGrid({
 
   // Filter groups based on hidden state
   const visibleGroups = useMemo(() => {
-    if (showHidden) return groupedActions;
+    if (showHidden) {
+      return groupedActions;
+    }
     return groupedActions.filter((g) => !hiddenGroups.has(g.category));
   }, [groupedActions, hiddenGroups, showHidden]);
 
@@ -361,7 +429,7 @@ export function ActionGrid({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex shrink-0 gap-2">
         <div className="relative flex-1">
-          <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="-translate-y-1/2 absolute top-1/2 left-3 size-4 text-muted-foreground" />
           <Input
             className="pl-9"
             data-testid="action-search-input"
@@ -563,7 +631,9 @@ export function ActionGrid({
               Composio apps
             </div>
             {remoteLoading && remoteApps.length === 0 && (
-              <p className="px-3 py-2 text-muted-foreground text-xs">Searching apps...</p>
+              <p className="px-3 py-2 text-muted-foreground text-xs">
+                Searching apps...
+              </p>
             )}
             {!remoteLoading && remoteApps.length === 0 && (
               <p className="px-3 py-2 text-muted-foreground text-xs">
@@ -592,21 +662,33 @@ export function ActionGrid({
                     />
                     {app.logoUrl && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img alt="" className="size-4 object-contain" src={app.logoUrl} />
+                      // biome-ignore lint/performance/noImgElement lint/correctness/useImageSize: logo remoto chico de integración; next/image no aplica acá
+                      <img
+                        alt=""
+                        className="size-4 object-contain"
+                        src={app.logoUrl}
+                      />
                     )}
                     <span className="min-w-0 flex-1 truncate">
                       <span className="font-medium">{app.name}</span>
                       {app.description && (
-                        <span className="text-muted-foreground text-xs"> - {app.description}</span>
+                        <span className="text-muted-foreground text-xs">
+                          {" "}
+                          - {app.description}
+                        </span>
                       )}
                     </span>
                   </button>
                   {expanded && (
                     <div className="ml-6 border-l pl-2">
                       {tools === "loading" || tools === undefined ? (
-                        <p className="px-3 py-2 text-muted-foreground text-xs">Loading actions...</p>
+                        <p className="px-3 py-2 text-muted-foreground text-xs">
+                          Loading actions...
+                        </p>
                       ) : tools.length === 0 ? (
-                        <p className="px-3 py-2 text-muted-foreground text-xs">No actions listed for this app.</p>
+                        <p className="px-3 py-2 text-muted-foreground text-xs">
+                          No actions listed for this app.
+                        </p>
                       ) : (
                         tools.map((tool) => (
                           <button
@@ -628,7 +710,10 @@ export function ActionGrid({
                             <span className="min-w-0 flex-1 truncate">
                               <span className="font-medium">{tool.name}</span>
                               {tool.description && (
-                                <span className="text-muted-foreground text-xs"> - {tool.description}</span>
+                                <span className="text-muted-foreground text-xs">
+                                  {" "}
+                                  - {tool.description}
+                                </span>
                               )}
                             </span>
                           </button>
