@@ -61,7 +61,7 @@ function marcaKey(pedidoId: string, evento: string): string {
 
 const TEXTOS: Record<EventoPostcompra, (p: { pedidoId: string; referencia: string }) => string> = {
   pago_confirmado: ({ referencia }) =>
-    `Recibimos tu pago del pedido ${referencia}. Te avisamos cuando se despache.`,
+    `Recibimos tu pago del pedido ${referencia}.`,
   despachado: ({ referencia }) =>
     `Tu pedido ${referencia} ya está en camino.`,
   entregado: ({ referencia }) =>

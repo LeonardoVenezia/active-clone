@@ -36,6 +36,15 @@ test("estado siempre pendiente_aprobacion y textos transaccionales", () => {
   assert.match(pago?.texto ?? "", /TN-1001/);
 });
 
+test("avisos sin compromisos futuros: solo hechos del evento", () => {
+  const { avisos } = prepararAvisos(eventosFixture);
+  for (const a of avisos) {
+    assert.doesNotMatch(a.texto, /te avisamos/i);
+    assert.doesNotMatch(a.texto, /cuando se despache/i);
+    assert.doesNotMatch(a.texto, /vamos a|haremos|gestionaremos/i);
+  }
+});
+
 test("eventosHabilitados restringe; vacío habilita los tres", () => {
   const { avisos } = prepararAvisos(eventosFixture, ["pago_confirmado"]);
   assert.equal(avisos.length, 2);

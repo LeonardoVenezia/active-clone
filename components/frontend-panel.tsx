@@ -64,6 +64,9 @@ export function FrontendPanel({ view, records, message, canRun, running, onRun, 
     ? (((reportRecord.value as Record<string, unknown>).advertencias as string[] | undefined) ?? [])
     : [];
   const reportDate = reportRecord ? new Date(reportRecord.updatedAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "";
+  const reportOmitidos = reportRecord
+    ? (((reportRecord.value as Record<string, unknown>).omitidos as Record<string, unknown>[] | undefined) ?? [])
+    : [];
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
       <h1 className="text-2xl font-bold">{view?.title || "Panel"}</h1>
@@ -107,6 +110,16 @@ export function FrontendPanel({ view, records, message, canRun, running, onRun, 
               </div>
             ))}</div>
             <p className="text-muted-foreground text-xs">Actualizado {reportDate}</p>
+          </div>
+        )}
+        {rowsField && reportOmitidos.length > 0 && (
+          <div className="rounded border p-2 text-xs space-y-1">
+            <p className="font-semibold">Omitidos (sin borrador)</p>
+            {reportOmitidos.map((o, i) => (
+              <p key={i} className="text-muted-foreground">
+                {Object.entries(o).map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`).join(" · ")}
+              </p>
+            ))}
           </div>
         )}
         {!rowsField && records?.length === 0 && <p className="text-muted-foreground">No hay datos todavía.</p>}

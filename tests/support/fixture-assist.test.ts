@@ -11,7 +11,7 @@ import {
 } from "../../lib/support/assisted-shared";
 
 const contexto = {
-  "TN-1001": { estado: "pagado", detalle: "preparando el paquete" },
+  "TN-1001": { estado: "pagado", detalle: "pago acreditado" },
   "TN-1002": { estado: "despachado" },
 };
 
@@ -40,7 +40,7 @@ test("borrador solo con contexto real; el resto deriva a humano", () => {
   const c1 = porId.get("C-1");
   assert.equal(c1?.estado, "pendiente_aprobacion");
   assert.match(c1?.borrador ?? "", /pagado/);
-  assert.match(c1?.borrador ?? "", /preparando el paquete/);
+  assert.match(c1?.borrador ?? "", /pago acreditado/);
   const c2 = porId.get("C-2");
   assert.match(c2?.borrador ?? "", /despachado/);
   const c3 = porId.get("C-3");
@@ -74,4 +74,23 @@ test("vista distingue Nuevo / Ya preparado y muestra derivación", () => {
   const derivada = vista.find((v) => v.consulta === "C-4");
   assert.match(derivada?.estado ?? "", /Deriva a humano/);
   assert.equal(derivada?.borrador, "(sin borrador)");
+});
+
+test("derivación registrada no se etiqueta como borrador preparado", () => {
+  const respuestas = prepararRespuestas(consultasFixture, contexto);
+  const derivada = respuestas.find((r) => r.estado === "derivar_humano");
+  assert.ok(derivada);
+  const vista = buildVistaRespuestas(respuestas, new Set([derivada.marcaKey]));
+  const fila = vista.find((v) => v.consulta === derivada.consultaId);
+  assert.equal(fila?.preparacion, "Derivación registrada");
+  assert.equal(fila?.borrador, "(sin borrador)");
+});
+
+test("borradores sin compromisos futuros: solo hechos del contexto", () => {
+  const respuestas = prepararRespuestas(consultasFixture, contexto);
+  for (const r of respuestas) {
+    assert.doesNotMatch(r.borrador, /revisamos con el correo/i);
+    assert.doesNotMatch(r.borrador, /te avisamos/i);
+    assert.doesNotMatch(r.borrador, /vamos a|haremos|gestionaremos/i);
+  }
 });

@@ -121,7 +121,7 @@ export function prepararRespuestas(
       ? `tu pedido ${pedidoId} está en estado: ${estado}${detalle ? ` (${detalle})` : ""}.`
       : tema === "estado_envio"
         ? `el envío de tu pedido ${pedidoId} está en estado: ${estado}${detalle ? ` (${detalle})` : ""}.`
-        : `el envío de tu pedido ${pedidoId} registra estado: ${estado}${detalle ? ` (${detalle})` : ""}. Si la demora sigue, lo revisamos con el correo.`;
+        : `el envío de tu pedido ${pedidoId} registra estado: ${estado}${detalle ? ` (${detalle})` : ""}.`;
     respuestas.push({
       ...base,
       borrador: `${saludo}${cuerpo}`,
@@ -150,7 +150,7 @@ const TEMA_LABELS: Record<TemaSoporte, string> = {
 
 export function buildVistaRespuestas(respuestas: Respuesta[], yaPreparadas: Set<string>): VistaRespuestaRow[] {
   return respuestas.map((r) => ({
-    preparacion: yaPreparadas.has(r.marcaKey) ? "Ya preparado" : "Nuevo",
+    preparacion: yaPreparadas.has(r.marcaKey) ? (r.estado === "derivar_humano" ? "Derivación registrada" : "Ya preparado") : "Nuevo",
     consulta: r.consultaId,
     cliente: r.cliente,
     tema: TEMA_LABELS[r.tema],
