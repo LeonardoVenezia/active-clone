@@ -375,3 +375,13 @@ Propuesta de criterio para los recorridos funcionales (a definir con Leo antes d
 - **Fix aplicado:** INTEGRATION_ENCRYPTION_KEY cargada en Vercel para Preview rama soluciones-configurables (Production DESMARCADO), valor desde vault "Active-clone STAGING INTEGRATION_ENCRYPTION_KEY" vía vault fill (valor nunca leído ni registrado). Requiere redeploy para tomar efecto; si la key STAGING no coincide con la que cifró las conexiones existentes, las nuevas conexiones manuales (Zipnova/Envíopack) igual funcionan y las viejas seguirán ilegibles en preview.
 - Nota de seguridad observada: GET /api/integrations/[id] devuelve el config desencriptado completo al usuario dueño de la sesión. Documentado para revisión; fuera de alcance de esta rama.
 - Primer intento ML stock-snapshot (workflow 075mn0xkewkzxqibshq65, ejecución xqivop00p3chfi44vqy1g): error esperado "Mercado Libre is not connected" por la key faltante; reintentar tras redeploy.
+
+### 8-nov (noche, cuarta parte): env vars del preview aplicadas y estado de pruebas
+
+- INTEGRATION_ENCRYPTION_KEY (Preview, rama soluciones-configurables) y COMPOSIO_API_KEY (idem) cargadas en Vercel vía vault fill, Production desmarcado. Redeploy por push.
+- Verificado en vivo: POST/GET/DELETE de conexión dummy round-trip OK (cifrado operativo); /api/connectors 200 con catálogo Composio; /connections muestra apps nativas (Envíopack visible con formulario manual).
+- Las 4 conexiones preexistentes (3 MP + 1 ML, cifradas con otra key) siguen sin desencriptar en el preview: legibles solo donde viva la key original. No se tocaron.
+- ML: bloqueado en preview por doble vía — conexión existente ilegible (key distinta) y OAuth no disponible (faltan MERCADOLIBRE_APP_ID/SECRET en el entorno Preview; no están en el vault). Gap exacto: esas dos env vars, o correr la lectura autorizada (7-nov) donde la key original exista.
+- Envíopack: formulario de conexión abierto, API Key cargada (username vault, sin restricción), Secret Key bloqueada por restricción de sitio del vault (entry limitada a enviopack.com/.ar): requiere aprobación del usuario (approval_url generada, en manos del orquestador). Sin submit parcial.
+- Zipnova: queda para después (3 campos; account ID no está claramente en el vault).
+- MP: excluido por instrucción (sin autorización registrada).
