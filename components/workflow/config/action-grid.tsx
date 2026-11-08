@@ -114,6 +114,12 @@ const SYSTEM_ACTIONS: ActionType[] = [
     category: "System",
   },
   {
+    id: "Preparar Respuestas",
+    label: "Preparar Respuestas",
+    description: "Borradores de soporte con el estado real del pedido/envío, para aprobación humana; no envía nada",
+    category: "System",
+  },
+  {
     id: "Delay",
     label: "Delay",
     description: "Espera un tiempo antes de seguir (hasta 24 h)",

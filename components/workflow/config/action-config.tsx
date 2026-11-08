@@ -796,6 +796,51 @@ function PrepararAvisosFields({
   );
 }
 
+// Preparar Respuestas fields: drafts support answers from provided context
+// for human approval; never sends anything.
+function PrepararRespuestasFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="support-consultas">Consultas</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="support-consultas"
+          onChange={(value) => onUpdateConfig("consultas", value)}
+          placeholder="Salida del paso con consultas (consultaId, cliente, texto, pedidoId)"
+          value={(config?.consultas as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Usá @ para referenciar la salida del paso con las consultas. Solo
+          prepara borradores: el envío requiere aprobación humana.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="support-contexto">Contexto de pedidos</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="support-contexto"
+          onChange={(value) => onUpdateConfig("contextoPedidos", value)}
+          placeholder='Mapa pedidoId {"{"}"estado","detalle"{"}"} desde Datos u otro paso'
+          value={(config?.contextoPedidos as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Sin contexto del pedido, la consulta se deriva a una persona: nunca
+          se responde sin dato.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Datos fields component (generic per-company records; prototype)
 function DatosFields({
   config,
@@ -1269,6 +1314,14 @@ function SystemActionFields({
           onUpdateConfig={onUpdateConfig}
         />
       );
+    case "Preparar Respuestas":
+      return (
+        <PrepararRespuestasFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
     case "Datos":
       return (
         <DatosFields
@@ -1329,6 +1382,7 @@ const SYSTEM_ACTIONS: Array<{ id: string; label: string }> = [
   { id: "Revisar Envíos", label: "Revisar Envíos" },
   { id: "Alertas de Stock", label: "Alertas de Stock" },
   { id: "Preparar Avisos", label: "Preparar Avisos" },
+  { id: "Preparar Respuestas", label: "Preparar Respuestas" },
   { id: "Frontend", label: "Frontend" },
 ];
 
