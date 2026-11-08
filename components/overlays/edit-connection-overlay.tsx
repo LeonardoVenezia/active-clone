@@ -490,7 +490,11 @@ export function DeleteConnectionOverlay({
       onSuccess?.();
     } catch (error) {
       console.error("Failed to delete integration:", error);
-      toast.error("Failed to delete connection");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo eliminar la conexión"
+      );
       setDeleting(false);
     }
   };
