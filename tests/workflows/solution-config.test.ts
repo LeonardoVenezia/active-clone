@@ -63,6 +63,14 @@ test("parse: slots de frontend validados y recortados", () => {
   assert.equal(bad, null);
   const long = parseSolutionConfig({ frontend: { brand: "x".repeat(200) } });
   assert.equal(long?.frontend?.brand?.length, 60);
+  // la bajada admite una frase completa: el tope es 240, no 140 (cortaba
+  // la frase a media palabra en desktop)
+  const sub = parseSolutionConfig({ frontend: { subheading: "y".repeat(300) } });
+  assert.equal(sub?.frontend?.subheading?.length, 240);
+  const frase =
+    "Demostración con datos ficticios. Fuentes desactivadas: la demo no las consulta.";
+  const kept = parseSolutionConfig({ frontend: { subheading: frase } });
+  assert.equal(kept?.frontend?.subheading, frase);
 });
 
 test("integración de un paso: solo IDs plugin/slug; sistema nunca se omite", () => {

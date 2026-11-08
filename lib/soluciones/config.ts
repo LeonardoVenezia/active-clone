@@ -75,7 +75,7 @@ function parseFrontendSlots(raw: unknown): SolutionFrontendSlots | undefined {
   const f = raw as Record<string, unknown>;
   const slots: SolutionFrontendSlots = {
     brand: cleanText(f.brand, 60),
-    subheading: cleanText(f.subheading, 140),
+    subheading: cleanText(f.subheading, 240),
     emptyText: cleanText(f.emptyText, 120),
   };
   if (typeof f.accent === "string" && ACCENT_RE.test(f.accent.trim())) {

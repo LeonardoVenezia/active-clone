@@ -431,3 +431,7 @@ Las cinco demos QA (l0dkaj67, sjrejqbx, zd8gmw9n, cmspos2u, bymstnlf) recibieron
 - Envíos: KPI interno pasa de "Ya avisadas" a "Ya detectadas" (marca interna, nunca implica avisos enviados).
 - Avisos y soporte: las advertencias de los registros declaran "estos borradores no se envían desde esta demo" (sin prometer flujos de aprobación/envío no implementados).
 - Fuentes de las demos QA: todas figuran Desactivada ("la demo no las consulta"); datos simulados, no fuentes conectadas vacías.
+
+## (8-nov): bajada sin corte a mitad de frase
+
+- El tope de subheading era 140 y cortaba la frase "…la demo no las consulta." a media palabra en desktop; sube a 240 (test de regresión en solution-config.test.ts). Sin clamp CSS: el texto completo se muestra igual en desktop y móvil.
