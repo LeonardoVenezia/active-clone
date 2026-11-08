@@ -150,7 +150,7 @@ export async function POST(
     let dataCanDefineFields = false;
     if ((workflow.nodes as WorkflowNode[]).some((n) => {
       const at = (n as { data?: { config?: { actionType?: unknown } } }).data?.config?.actionType;
-      return at === "Datos" || at === "Comparar Stock" || at === "Conciliar Pagos" || at === "Revisar Envíos";
+      return at === "Datos" || at === "Comparar Stock" || at === "Conciliar Pagos" || at === "Revisar Envíos" || at === "Alertas de Stock";
     })) {
       // Same server decision as reading: owner/share AND membership of the
       // organization the workflow is scoped to (a share alone is not enough).

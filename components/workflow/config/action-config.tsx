@@ -707,6 +707,50 @@ function RevisarEnviosFields({
   );
 }
 
+// Alertas de Stock fields: flags products below a stock threshold, deduped
+function AlertasStockFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="alerts-productos">Productos</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="alerts-productos"
+          onChange={(value) => onUpdateConfig("productos", value)}
+          placeholder="Salida del paso de productos (productoId, sku, nombre, stock, umbral opcional)"
+          value={(config?.productos as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Usá @ para referenciar la salida del paso con los productos. Solo
+          reporte y marcas internas: no modifica el stock ni envía avisos.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="alerts-umbral">Umbral de stock</Label>
+        <Input
+          disabled={disabled}
+          id="alerts-umbral"
+          onChange={(e) => onUpdateConfig("umbral", e.target.value)}
+          placeholder="5"
+          value={(config?.umbral as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Avisa si el stock es menor que ese número. Cada producto puede traer
+          su propio umbral; este es el valor por defecto (vacío = 5).
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Datos fields component (generic per-company records; prototype)
 function DatosFields({
   config,
@@ -1164,6 +1208,14 @@ function SystemActionFields({
           onUpdateConfig={onUpdateConfig}
         />
       );
+    case "Alertas de Stock":
+      return (
+        <AlertasStockFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
     case "Datos":
       return (
         <DatosFields
@@ -1222,6 +1274,7 @@ const SYSTEM_ACTIONS: Array<{ id: string; label: string }> = [
   { id: "Comparar Stock", label: "Comparar Stock" },
   { id: "Conciliar Pagos", label: "Conciliar Pagos" },
   { id: "Revisar Envíos", label: "Revisar Envíos" },
+  { id: "Alertas de Stock", label: "Alertas de Stock" },
   { id: "Frontend", label: "Frontend" },
 ];
 

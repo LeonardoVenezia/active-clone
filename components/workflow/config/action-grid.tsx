@@ -102,6 +102,12 @@ const SYSTEM_ACTIONS: ActionType[] = [
     category: "System",
   },
   {
+    id: "Alertas de Stock",
+    label: "Alertas de Stock",
+    description: "Marcá productos por debajo del umbral, sin repetir avisos (no modifica stock)",
+    category: "System",
+  },
+  {
     id: "Delay",
     label: "Delay",
     description: "Espera un tiempo antes de seguir (hasta 24 h)",
