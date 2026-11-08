@@ -4,7 +4,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildVistaStock,
+  decidirMarca,
   revisarStock,
+  type MarcaStock,
   type ProductoShape,
 } from "../../lib/stock/alerts-shared";
 
@@ -52,6 +54,26 @@ test("marcaKey estable y con caracteres válidos para Datos", () => {
   // Misma entrada → misma clave (dedupe determinista)
   const otra = revisarStock([{ productoId: "prod éxito/1 (a)", stock: 1 }], 5);
   assert.equal(otra[0].marcaKey, key);
+});
+
+test("episodio nuevo tras recuperación: no se silencia para siempre", () => {
+  const alerta = revisarStock([{ productoId: "P-9", stock: 1 }], 5)[0];
+  const activa: MarcaStock = { productoId: "P-9", motivo: "bajo_stock", stock: 1, umbral: 5, estado: "activa" };
+  const resuelta: MarcaStock = { ...activa, estado: "resuelta" };
+  // Primera caída: crear / Nuevo
+  assert.deepEqual(decidirMarca(alerta, null), { accion: "crear", deteccion: "Nuevo" });
+  // Repetición con episodio activo: mantener / Ya detectado
+  assert.deepEqual(decidirMarca(alerta, activa), { accion: "mantener", deteccion: "Ya detectado" });
+  // Recuperación (alerta=null) con marca activa: resolver
+  assert.deepEqual(decidirMarca(null, activa), { accion: "resolver", deteccion: null });
+  // Nueva caída tras recuperación: reactivar / Nuevo (NO silenciada)
+  assert.deepEqual(decidirMarca(alerta, resuelta), { accion: "reactivar", deteccion: "Nuevo" });
+  // Sano sin marca: no escribe nada
+  assert.deepEqual(decidirMarca(null, null), { accion: "nada", deteccion: null });
+  // Cambio de motivo con episodio activo: episodio nuevo
+  const otra = revisarStock([{ productoId: "P-9", stock: "???" }], 5)[0];
+  assert.equal(otra.motivo, "sin_dato");
+  assert.deepEqual(decidirMarca(otra, activa), { accion: "reactivar", deteccion: "Nuevo" });
 });
 
 test("vista marca Ya detectado solo en claves conocidas", () => {

@@ -5,11 +5,13 @@
  */
 import "server-only";
 
-import { datosSave, datosSaveIfAbsent } from "../datos/core";
+import { datosRead, datosSave, datosSaveIfAbsent } from "../datos/core";
 import { pgDatosRepo } from "../datos/repo";
 import {
   buildVistaStock,
+  decidirMarca,
   revisarStock,
+  type MarcaStock,
   type ProductoShape,
 } from "../stock/alerts-shared";
 import { type StepInput, withStepLogging } from "./step-handler";
@@ -70,21 +72,49 @@ async function stepHandler(input: StockAlertsInput) {
   const marcasCollection = cleanCollectionName(input.marcasCollection, DEFAULT_MARCAS_COLLECTION);
   const reporteCollection = cleanCollectionName(input.reporteCollection, DEFAULT_REPORTE_COLLECTION);
 
-  const alertas = revisarStock(productos as ProductoShape[], umbral);
+  const lista = productos as ProductoShape[];
+  const alertas = revisarStock(lista, umbral);
+  const alertaPorKey = new Map(alertas.map((a) => [a.marcaKey, a]));
 
-  // Dedupe: una marca por producto+motivo, creada solo la primera vez.
+  // Dedupe por episodio: marca activa silencia repeticiones; si el producto se
+  // recupera, la marca se resuelve y una nueva caída cuenta como episodio nuevo.
   const yaDetectadas = new Set<string>();
   let nuevas = 0;
   try {
-    for (const a of alertas) {
-      const marca = await datosSaveIfAbsent(pgDatosRepo, org, {
-        collection: marcasCollection,
-        key: a.marcaKey,
-        value: { productoId: a.productoId, motivo: a.motivo, stock: a.stock, umbral: a.umbral },
+    for (const p of lista) {
+      const identidad = typeof p?.productoId === "string" && p.productoId.trim() ? p.productoId.trim() : typeof p?.sku === "string" && p.sku.trim() ? p.sku.trim() : "";
+      if (!identidad) continue;
+      // La clave depende del motivo; para productos sanos probamos ambos motivos.
+      const claves = ["bajo_stock", "sin_dato"].map((m) => {
+        const clean = (s: string) => s.replace(/[^A-Za-z0-9._:@-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+        return `${clean(identidad)}:${clean(m)}`.slice(0, 120);
       });
-      if (!marca.success) return { success: false as const, error: marca.error };
-      if (marca.creado) nuevas += 1;
-      else yaDetectadas.add(a.marcaKey);
+      for (const key of claves) {
+        const alerta = alertaPorKey.get(key) ?? null;
+        const leida = await datosRead(pgDatosRepo, org, { collection: marcasCollection, key });
+        if (!leida.success) return { success: false as const, error: leida.error };
+        const existente = (leida.found ? (leida.record?.value as MarcaStock) : null) ?? null;
+        const decision = decidirMarca(alerta, existente);
+        if (decision.accion === "crear" && alerta) {
+          const marca = await datosSaveIfAbsent(pgDatosRepo, org, {
+            collection: marcasCollection,
+            key,
+            value: { productoId: alerta.productoId, motivo: alerta.motivo, stock: alerta.stock, umbral: alerta.umbral, estado: "activa" } satisfies MarcaStock,
+          });
+          if (!marca.success) return { success: false as const, error: marca.error };
+          if (marca.creado) nuevas += 1;
+          else yaDetectadas.add(key); // carrera: otro proceso la creó activa
+        } else if (decision.accion === "mantener") {
+          yaDetectadas.add(key);
+        } else if ((decision.accion === "reactivar" && alerta) || decision.accion === "resolver") {
+          const value: MarcaStock = decision.accion === "resolver"
+            ? { ...existente, estado: "resuelta" } as MarcaStock
+            : { productoId: alerta.productoId, motivo: alerta.motivo, stock: alerta.stock, umbral: alerta.umbral, estado: "activa" };
+          const saved = await datosSave(pgDatosRepo, org, { collection: marcasCollection, key, value });
+          if (!saved.success) return { success: false as const, error: saved.error };
+          if (decision.accion === "reactivar") nuevas += 1;
+        }
+      }
     }
   } catch {
     return { success: false as const, error: "No pudimos acceder a los datos. Probá de nuevo." };

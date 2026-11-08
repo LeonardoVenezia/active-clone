@@ -100,6 +100,41 @@ export type VistaStockRow = {
   detalle: string;
 };
 
+// Dedupe por episodio: una marca "activa" silencia repeticiones, pero si el
+// producto se recupera (stock >= umbral) la marca pasa a "resuelta" y una
+// nueva caída cuenta como episodio nuevo ("Nuevo"), no se silencia para siempre.
+export type MarcaStockEstado = "activa" | "resuelta";
+
+export type MarcaStock = {
+  productoId: string;
+  motivo: string;
+  stock: number | null;
+  umbral: number;
+  estado: MarcaStockEstado;
+};
+
+export type DecisionMarca = {
+  accion: "crear" | "mantener" | "reactivar" | "resolver" | "nada";
+  deteccion: "Nuevo" | "Ya detectado" | null;
+};
+
+// Decisión pura dado el estado actual del producto y la marca guardada.
+// alerta=null significa producto sano (stock >= umbral).
+export function decidirMarca(alerta: AlertaStock | null, existente: MarcaStock | null): DecisionMarca {
+  if (alerta) {
+    if (!existente) return { accion: "crear", deteccion: "Nuevo" };
+    if (existente.estado === "activa" && existente.motivo === alerta.motivo) {
+      return { accion: "mantener", deteccion: "Ya detectado" };
+    }
+    // Episodio resuelto que vuelve a caer, o cambio de motivo: episodio nuevo.
+    return { accion: "reactivar", deteccion: "Nuevo" };
+  }
+  if (existente && existente.estado === "activa") {
+    return { accion: "resolver", deteccion: null };
+  }
+  return { accion: "nada", deteccion: null };
+}
+
 const MOTIVO_LABELS: Record<AlertaStockMotivo, string> = {
   bajo_stock: "Bajo stock",
   sin_dato: "Stock sin dato",
