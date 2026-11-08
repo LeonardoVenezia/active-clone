@@ -335,3 +335,9 @@ persistente; Trello linkea acá.
 ## 3.8 Sistema visual del panel (8-nov, Impeccable)
 
 Revisión visual pedida por Leo (audio 15:45) aplicando la guía Impeccable. El sistema completo (paleta con el porqué de cada color, tipografía, estados, movimiento, alcance) quedó definido en `DESIGN.md` en la raíz del repo; todo el color vive en variables CSS en `app/globals.css` (editable en un solo lugar). Regla central: el petróleo (200°) es identidad/acción primaria y el resto del color siempre significa estado (éxito/atención/error); carga con skeleton, vacíos que enseñan, foco y selección teñidos de marca. Alcance: panel del cliente; el builder conserva el tema neutro (extensión pendiente). Verificado renderizado en desktop y móvil sobre el preview.
+
+### Bitácora 8-nov (tarde): sistema visual + guía manual
+
+- Revisión visual del panel con la guía Impeccable: sistema definido en `DESIGN.md` (commits 295e274 y 006f992). Coherencia de superficie: /frontend ya no muestra el header del backoffice ni nombres internos (slug de colección); labels de la config aplicados también al formulario; copy del indicador de refresco aclarado (vista, no proveedor); reduced-motion respetado; modo oscuro verificado.
+- Guía manual completa por recorridos del cliente (File PRIVATE): https://files.instinct.com/ljprore922eg-guia-de-active-clone-por-recorridos — Parte 1 cliente (7 recorridos), Parte 2 configuración manual de Leo (8), Parte 3 pruebas internas. Refleja la app real al 8-nov; actualizarla cuando se integren bloques/acciones por caso.
+- Pendiente vivo: bloques ordenados + acciones por caso (trabajo en curso, no descartado).
