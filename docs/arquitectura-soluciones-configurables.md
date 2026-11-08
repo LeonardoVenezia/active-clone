@@ -425,3 +425,9 @@ Propuesta de criterio para los recorridos funcionales (a definir con Leo antes d
 - **Soporte**: dos secciones (pendientes de aprobación con borrador citado; derivadas a una persona con motivo), la derivación se muestra como marca interna registrada, nunca como acción externa.
 
 Las cinco demos QA (l0dkaj67, sjrejqbx, zd8gmw9n, cmspos2u, bymstnlf) recibieron su nodo Solución con `view`, marca, bajada, texto de vacío y fuentes declaradas por caso (activas ficticias figuran "sin datos" porque la última ejecución leyó el fixture, no la fuente: estado honesto; inactivas figuran "desactivada: no se consulta"). Tests nuevos en `tests/workflows/solution-views.test.ts` (registro cerrado, parse defensivo, extracción del reporte, celdas seguras): 40/40 verdes en tests/workflows, tsc y lint de archivos tocados limpios.
+
+## f3e5d20 (8-nov): ajustes de copy honesto
+
+- Envíos: KPI interno pasa de "Ya avisadas" a "Ya detectadas" (marca interna, nunca implica avisos enviados).
+- Avisos y soporte: las advertencias de los registros declaran "estos borradores no se envían desde esta demo" (sin prometer flujos de aprobación/envío no implementados).
+- Fuentes de las demos QA: todas figuran Desactivada ("la demo no las consulta"); datos simulados, no fuentes conectadas vacías.
