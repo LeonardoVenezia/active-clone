@@ -1,9 +1,6 @@
 # Arquitectura: soluciones cerradas configurables y frontend por solución
 
-Estado: **propuesta en revisión** (2026-11-08). Las decisiones marcadas como
-"adoptada" vienen del pedido de Leo del 8-nov-2026 13:59 (WhatsApp); todo lo
-demás es propuesta pendiente de su OK. Referencia operativa: tablero Trello
-del proyecto.
+Estado actual (8-nov-2026 17:16): **base implementada y verificada en rama/preview; frontend dedicado de cada solución todavía pendiente**. No merge ni producción. Las secciones iniciales conservan el diagnóstico y propuesta originales; la implementación y los límites vigentes están en la bitácora y en el cierre de incremento al final. Estado operativo en Trello: https://trello.com/c/lnebGtju .
 
 ## 1. Decisiones adoptadas (de Leo, 8-nov-2026)
 
@@ -406,3 +403,13 @@ Propuesta de criterio para los recorridos funcionales (a definir con Leo antes d
 - GET ML en preview después del deploy: configReadable false, 0 campos, updatedAt intacto. No PUT/DELETE sobre conexiones reales para probar rechazo. La UI bloqueada se verifica abriendo el diálogo, sin guardar.
 
 - Verificación visual del guard: diálogo Edit Mercado Libre muestra aviso en español; Delete, Test y Update disabled=true y campos deshabilitados. Sólo GET; ningún intento de write sobre la conexión original. Captura 2026-11-08 17:11:26 -03. Fixture de casos reabierto después del deploy: tres filas pendientes y acciones visibles, sin mutar.
+
+
+## Cierre de incremento 8-nov 17:16: base verificada, no arquitectura completa
+
+- Guard y refuerzo final af864dd con CI success: https://github.com/LeonardoVenezia/active-clone/actions/runs/42519002096/job/128848152725 . 32/32 tests workflows, tsc limpio, lint del diff completo sin errores (11 warnings existentes).
+- Guía publicada privada generación 7, misma URL: https://files.instinct.com/ljprore922eg-guia-de-active-clone-por-recorridos . Todos los recorridos identifican PREVIEW + entrada; producción sólo referencia. Pruebas activas de fixtures 1-7 y 16-21; configuración 8-14 referencia hasta preparar pruebas individuales aisladas; 22 sólo mirar conexiones. Envíopack: inspección de la lectura real ya obtenida, sin repetirla.
+- Las cinco demos siguen siendo tablas genéricas alimentadas por datos ficticios. Orden de bloques, marca y acciones de Estado son una base reutilizable, no reemplazan la experiencia dedicada de cada caso.
+- Stock: falta componer y validar experiencia de alertas, controles y fuentes reales elegidas. Envíos: falta experiencia de excepciones e ingesta de envíos (sucursales no la valida). Conciliación: falta experiencia propia de diferencias venta/cobro con sus fuentes; sin pruebas de dinero. Avisos: falta experiencia de revisión de borradores y sus estados, sin sugerir envíos. Soporte: falta experiencia de consultas, borradores y derivación humana; una acción de Estado no es una derivación externa.
+- Para cada caso hay que verificar su configuración de fuentes, estados vacíos/error, diseño y acciones. Esto concreta el pedido original de frontends por caso, sin ampliar a efectos comerciales no aprobados.
+- Incremento guard + lectura Envíopack + guía queda cerrado y verificado. Arquitectura permanece Haciendo en Trello; no se pide una nueva decisión de producto para continuar la parte visual/técnica sin costo. Las limitaciones ML/Zipnova permanecen y no habilitan nuevos cambios de secretos ni prod.
