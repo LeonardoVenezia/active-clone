@@ -568,7 +568,7 @@ export function FrontendPanel({
                       </td>
                       {rowActions.length > 0 && (
                         <td className="px-3 py-2.5">
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="flex flex-col items-start gap-1.5">
                             {rowActions.map((a) => {
                               const busy = actionBusy === `${r.key}:${a.id}`;
                               return (
