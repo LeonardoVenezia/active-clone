@@ -69,3 +69,10 @@ default · hover · focus-visible · disabled · loading · error · empty.
 
 Revisado renderizando el resultado (desktop y móvil) sobre el preview de la rama,
 no solo el código: contraste, estados, skeleton, vacío y layout en ambos tamaños.
+
+## Coherencia cliente vs backoffice (8-nov, segunda pasada)
+
+- **Superficie cliente (`/frontend/...`) sin navegación del backoffice:** el panel ya no monta el header del builder (Empresas/History/Connections). Lo que ve el cliente es su solución: marca (slot `brand`) y título. El logo del producto queda sólo en el backoffice.
+- **Nada de nombres internos en pantalla cliente:** el encabezado de datos es "Datos", nunca el slug de la colección; las columnas y campos usan el mapa `labels` de la config del nodo Frontend (el nombre técnico del campo no es copy de cliente).
+- **El indicador "en vivo" significa refresco de la vista**, nunca frescura del proveedor: copy "Esta vista se actualiza cada 5 segundos". La frescura de cada fuente se muestra sólo como fecha de su última consulta registrada.
+- **Movimiento reducido:** `prefers-reduced-motion` apaga pulso y transiciones.

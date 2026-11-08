@@ -1,6 +1,5 @@
 "use client";
 import { use, useCallback, useEffect, useState } from "react";
-import { AppHeader } from "@/components/app-header";
 import {
   FrontendPanel,
   type PanelField,
@@ -121,9 +120,9 @@ export default function FrontendPage({
     }
   }
 
+  // Superficie cliente: header mínimo de marca, sin la navegación del backoffice.
   return (
     <main className="pointer-events-auto fixed inset-0 z-20 flex flex-col bg-background">
-      <AppHeader />
       <div className="flex-1 overflow-auto">
         <FrontendPanel
           blocked={blocked}

@@ -141,10 +141,12 @@ function FormBlock({
   fields,
   onSubmit,
   busy,
+  labels,
 }: {
   fields: PanelField[];
   onSubmit: (values: Record<string, string>) => Promise<boolean>;
   busy: boolean;
+  labels: Record<string, string>;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
   return (
@@ -162,7 +164,7 @@ function FormBlock({
         // biome-ignore lint/a11y/noLabelWithoutControl: el control va anidado dentro del label
         <label className="block space-y-1.5 text-sm" key={f.name}>
           <span className="font-medium">
-            {f.name}
+            {labels[f.name] ?? f.name}
             {f.required && <span className="text-error"> *</span>}
           </span>
           {f.type === "booleano" ? (
@@ -238,7 +240,7 @@ function LiveNote() {
         aria-hidden
         className="size-1.5 animate-pulse rounded-full bg-brand"
       />
-      Se actualiza cada 5 segundos
+      Esta vista se actualiza cada 5 segundos
     </p>
   );
 }
@@ -366,6 +368,7 @@ export function FrontendPanel({
             <FormBlock
               busy={!!submitting}
               fields={fields}
+              labels={labels}
               onSubmit={onSubmit}
             />
           ) : (
@@ -391,9 +394,7 @@ export function FrontendPanel({
         <section className="space-y-2.5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="font-medium">
-              {view
-                ? `Datos: ${view.collection}`
-                : "Esta página todavía no está configurada."}
+              {view ? "Datos" : "Esta página todavía no está configurada."}
             </h2>
             {view && <LiveNote />}
           </div>
