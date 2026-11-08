@@ -564,6 +564,78 @@ function StockCompareFields({
   );
 }
 
+// Conciliar Pagos fields: matches sales vs payment records by reference
+function ConciliarPagosFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="reconcile-ventas">Ventas</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="reconcile-ventas"
+          onChange={(value) => onUpdateConfig("ventas", value)}
+          placeholder="Salida del paso de ventas (canal, ordenId, referencia, total)"
+          value={(config?.ventas as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Usá @ para referenciar la salida del paso con las ventas de Tiendanube
+          y/o Mercado Libre.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="reconcile-pagos">Cobros</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="reconcile-pagos"
+          onChange={(value) => onUpdateConfig("pagos", value)}
+          placeholder="Salida del paso de cobros (pagoId, referencia, bruto, comision, neto)"
+          value={(config?.pagos as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Usá @ para referenciar la salida del paso con los cobros de Mercado
+          Pago.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="reconcile-tolerancia">Tolerancia de monto</Label>
+        <Input
+          disabled={disabled}
+          id="reconcile-tolerancia"
+          onChange={(e) => onUpdateConfig("tolerancia", e.target.value)}
+          placeholder="1"
+          value={(config?.tolerancia as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Diferencia máxima entre el total de la venta y el cobro para considerarlos
+          conciliados (en la moneda de la venta). Vacío = 1.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="reconcile-reporte">Colección del reporte</Label>
+        <Input
+          disabled={disabled}
+          id="reconcile-reporte"
+          onChange={(e) => onUpdateConfig("reporteCollection", e.target.value)}
+          placeholder="reporte_conciliacion"
+          value={(config?.reporteCollection as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Colección de Datos de tu empresa donde se guarda el último reporte
+          (se sobrescribe en cada corrida).
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Datos fields component (generic per-company records; prototype)
 function DatosFields({
   config,
@@ -1005,6 +1077,14 @@ function SystemActionFields({
           onUpdateConfig={onUpdateConfig}
         />
       );
+    case "Conciliar Pagos":
+      return (
+        <ConciliarPagosFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
     case "Datos":
       return (
         <DatosFields
@@ -1061,6 +1141,7 @@ const SYSTEM_ACTIONS: Array<{ id: string; label: string }> = [
   { id: "Unir", label: "Unir" },
   { id: "Datos", label: "Datos" },
   { id: "Comparar Stock", label: "Comparar Stock" },
+  { id: "Conciliar Pagos", label: "Conciliar Pagos" },
   { id: "Frontend", label: "Frontend" },
 ];
 

@@ -90,6 +90,12 @@ const SYSTEM_ACTIONS: ActionType[] = [
     category: "System",
   },
   {
+    id: "Conciliar Pagos",
+    label: "Conciliar Pagos",
+    description: "Cruzá ventas de Tiendanube/Mercado Libre con cobros de Mercado Pago por referencia",
+    category: "System",
+  },
+  {
     id: "Delay",
     label: "Delay",
     description: "Espera un tiempo antes de seguir (hasta 24 h)",
