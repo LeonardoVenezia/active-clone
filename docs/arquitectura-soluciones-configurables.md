@@ -296,3 +296,38 @@ persistente; Trello linkea acá.
   desktop y mobile.
 - Nueva sección 3.7: customización estructural por caso (niveles,
   implementado vs. propuesto, ejemplo concreto del pack).
+
+### 8-nov-2026: demo EN VIVO del panel con flag habilitado (preview de la rama)
+
+- Leo autorizó (8-nov 15:22, alcance puntual) habilitar
+  `DATOS_STORAGE_ENABLED=true` sólo para Preview/branch
+  `soluciones-configurables` + redeploy, con datos ficticios QA, sin tocar
+  producción ni esquema. Se aplicó exactamente ese alcance: variable tipo
+  Secret con scope Preview branch-only (Production desmarcado; el patrón
+  branch-scoped ya existía en el proyecto para otras dos ramas). Redeploy
+  del commit 9f57895 → deployment 6qczQUTT Ready.
+- **Fixture con empresa:** el fixture `ma94hwgh9i9k74bpl4prx` no tenía
+  empresa asignada y la app no permite asignarla post-creación (el scope
+  org se inserta sólo en `POST /api/workflows/create`; el PATCH de
+  workflows ignora `organizationId`). Se creó la copia
+  `8xguveq6eijfwi7rj4rsp` en la org QA "nueva empresa" con los mismos
+  nodos/edges + un nodo Frontend (`qa_solucion_panel`). El fixture
+  original quedó intacto (snapshot verificado por GET).
+- **Verificación en vivo** (sesión QA owner de la org, preview
+  `active-clone-61ad0bjvs-...vercel.app`):
+  - `/api/datos?workflowId=...` responde `enabled:true` con view, slots de
+    la Solución, fields y records (antes: `enabled:false`).
+  - Panel del ejemplo de catálogo (`t22rymy9ank9n8ulb63qr`): formulario +
+    registros reales con fecha de actualización.
+  - Panel de la solución QA con **Ejecutar real** desde el botón del
+    panel: Stripe pasó de "Sin datos todavía" a "Error · Falta conectar
+    Stripe · 8/11/26, 3:35 p. m." (copy cliente + fecha real del log);
+    Tiendanube quedó "Desactivada en la configuración de esta solución:
+    no se consulta". Comprobado en vivo: la fuente inactiva nunca se
+    consulta, ni siquiera en un run real; la activa sin credencial se
+    distingue de la inactiva en la vista del cliente.
+  - Slots de diseño del nodo Solución aplicados al panel vivo (marca,
+    acento, subtítulo, emptyText). Capturas desktop y mobile en el
+    reporte a main (8-nov 15:36).
+- La cuenta QA aislada (grn0ar+clone-qa1) no es miembro de la org QA:
+  403 correcto ("Sin acceso a los datos de esta empresa").
