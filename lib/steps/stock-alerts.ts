@@ -106,13 +106,15 @@ async function stepHandler(input: StockAlertsInput) {
           else yaDetectadas.add(key); // carrera: otro proceso la creó activa
         } else if (decision.accion === "mantener") {
           yaDetectadas.add(key);
-        } else if ((decision.accion === "reactivar" && alerta) || decision.accion === "resolver") {
-          const value: MarcaStock = decision.accion === "resolver"
-            ? { ...existente, estado: "resuelta" } as MarcaStock
-            : { productoId: alerta.productoId, motivo: alerta.motivo, stock: alerta.stock, umbral: alerta.umbral, estado: "activa" };
+        } else if (decision.accion === "reactivar" && alerta) {
+          const value: MarcaStock = { productoId: alerta.productoId, motivo: alerta.motivo, stock: alerta.stock, umbral: alerta.umbral, estado: "activa" };
           const saved = await datosSave(pgDatosRepo, org, { collection: marcasCollection, key, value });
           if (!saved.success) return { success: false as const, error: saved.error };
-          if (decision.accion === "reactivar") nuevas += 1;
+          nuevas += 1;
+        } else if (decision.accion === "resolver" && existente) {
+          const value: MarcaStock = { ...existente, estado: "resuelta" };
+          const saved = await datosSave(pgDatosRepo, org, { collection: marcasCollection, key, value });
+          if (!saved.success) return { success: false as const, error: saved.error };
         }
       }
     }
