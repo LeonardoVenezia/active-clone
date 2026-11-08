@@ -16,11 +16,19 @@ import {
   type PagoShape,
   type VentaShape,
 } from "../payments/reconcile-shared";
+import {
+  adaptCobrosMP,
+  adaptVentasML,
+  adaptVentasTN,
+  isOrdersEnvelope,
+  isPaymentsEnvelope,
+} from "../payments/reconcile-adapters";
 import { type StepInput, withStepLogging } from "./step-handler";
 
 export type PaymentReconcileInput = StepInput & {
   ventas?: unknown;
   pagos?: unknown;
+  canalVentas?: unknown;
   tolerancia?: unknown;
   reporteCollection?: unknown;
   ventasTruncadas?: unknown;
@@ -47,6 +55,17 @@ function parseList(value: unknown): unknown[] | null {
   return null;
 }
 
+function maybeParseJson(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
 function cleanCollectionName(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
@@ -62,8 +81,39 @@ async function stepHandler(input: PaymentReconcileInput) {
     return { success: false as const, error: "Conciliar Pagos no está disponible para este workflow todavía." };
   }
 
-  const ventas = parseList(input.ventas);
-  const pagos = parseList(input.pagos);
+  const advertencias: string[] = [...FUERA_DE_ALCANCE];
+
+  // Entradas: acepta la lista normalizada o la salida cruda de los conectores
+  // (search-orders TN/ML, search-payments MP) con el mapeo documentado en
+  // reconcile-adapters.ts. Nunca inventa campos que el conector no expone.
+  let ventasRaw = maybeParseJson(input.ventas);
+  if (isOrdersEnvelope(ventasRaw)) {
+    const canalCfg = typeof input.canalVentas === "string" ? input.canalVentas.trim().toLowerCase() : "";
+    const first = ventasRaw.orders[0] as Record<string, unknown> | undefined;
+    const detectado = first && typeof first === "object"
+      ? "number" in first ? "tiendanube" : "id" in first ? "mercadolibre" : ""
+      : "";
+    const canal = canalCfg === "tiendanube" || canalCfg === "mercadolibre" ? canalCfg : detectado;
+    if (!canal) {
+      return {
+        success: false as const,
+        error: "No pude saber si las órdenes son de Tiendanube o Mercado Libre: configurá el canal de ventas.",
+      };
+    }
+    const adapted = canal === "mercadolibre" ? adaptVentasML(ventasRaw) : adaptVentasTN(ventasRaw);
+    ventasRaw = adapted.items;
+    advertencias.push(...adapted.advertencias);
+  }
+
+  let pagosRaw = maybeParseJson(input.pagos);
+  if (isPaymentsEnvelope(pagosRaw)) {
+    const adapted = adaptCobrosMP(pagosRaw);
+    pagosRaw = adapted.items;
+    advertencias.push(...adapted.advertencias);
+  }
+
+  const ventas = parseList(ventasRaw);
+  const pagos = parseList(pagosRaw);
   if (ventas === null || pagos === null) {
     return {
       success: false as const,
@@ -76,10 +126,6 @@ async function stepHandler(input: PaymentReconcileInput) {
 
   const report = reconcilePayments(ventas as VentaShape[], pagos as PagoShape[], tolerancia);
   const vista = buildVista(report.filas);
-
-  // Anything that makes the reconciliation partial must be visible in the
-  // saved report, never look like a full answer.
-  const advertencias: string[] = [...FUERA_DE_ALCANCE];
   if (input.ventasTruncadas === true || input.ventasTruncadas === "true") {
     advertencias.push("La lista de ventas está incompleta: el reporte no cubre todas las ventas.");
   }

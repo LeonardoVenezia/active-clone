@@ -587,7 +587,21 @@ function ConciliarPagosFields({
         />
         <p className="text-muted-foreground text-xs">
           Usá @ para referenciar la salida del paso con las ventas de Tiendanube
-          y/o Mercado Libre.
+          y/o Mercado Libre. Acepta la salida cruda del conector (órdenes).
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="reconcile-canal">Canal de ventas (opcional)</Label>
+        <Input
+          disabled={disabled}
+          id="reconcile-canal"
+          onChange={(e) => onUpdateConfig("canalVentas", e.target.value)}
+          placeholder="tiendanube o mercadolibre"
+          value={(config?.canalVentas as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Solo si pegás la salida cruda del conector y no se puede detectar
+          solo. Vacío = detectar.
         </p>
       </div>
       <div className="space-y-2">

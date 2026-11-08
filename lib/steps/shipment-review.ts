@@ -15,6 +15,7 @@ import {
   revisarEnvios,
   type EnvioShape,
 } from "../shipments/review-shared";
+import { adaptEnvios } from "../shipments/review-adapters";
 import { type StepInput, withStepLogging } from "./step-handler";
 
 export type ShipmentReviewInput = StepInput & {
@@ -81,7 +82,11 @@ async function stepHandler(input: ShipmentReviewInput) {
     };
   }
 
-  const alertas = revisarEnvios(envios as EnvioShape[], { estadosAlerta, umbralDias });
+  // Entradas: lista normalizada o salidas crudas de los conectores de envío
+  // (ML get-shipment, zipnova get-shipment) con mapeo documentado; lo crudo de
+  // Enviopack se omite con advertencia, nunca se interpreta por las dudas.
+  const adapted = adaptEnvios(envios);
+  const alertas = revisarEnvios(adapted.envios, { estadosAlerta, umbralDias });
 
   // Dedupe: una marca por envío+motivo, creada solo la primera vez.
   const yaAvisadas = new Set<string>();
@@ -102,13 +107,13 @@ async function stepHandler(input: ShipmentReviewInput) {
   }
 
   const vista = buildVista(alertas, yaAvisadas);
-  const advertencias: string[] = [];
+  const advertencias: string[] = [...adapted.advertencias];
   if (input.enviosTruncados === true || input.enviosTruncados === "true") {
     advertencias.push("La lista de envíos está incompleta: puede haber alertas sin revisar.");
   }
 
   const resumen = {
-    enviosRevisados: (envios as EnvioShape[]).filter((e) => typeof e?.envioId === "string" && e.envioId.trim()).length,
+    enviosRevisados: adapted.envios.filter((e) => typeof e?.envioId === "string" && e.envioId.trim()).length,
     alertasNuevas: nuevas,
     yaAvisadas: yaAvisadas.size,
   };
