@@ -331,3 +331,7 @@ persistente; Trello linkea acá.
     reporte a main (8-nov 15:36).
 - La cuenta QA aislada (grn0ar+clone-qa1) no es miembro de la org QA:
   403 correcto ("Sin acceso a los datos de esta empresa").
+
+## 3.8 Sistema visual del panel (8-nov, Impeccable)
+
+Revisión visual pedida por Leo (audio 15:45) aplicando la guía Impeccable. El sistema completo (paleta con el porqué de cada color, tipografía, estados, movimiento, alcance) quedó definido en `DESIGN.md` en la raíz del repo; todo el color vive en variables CSS en `app/globals.css` (editable en un solo lugar). Regla central: el petróleo (200°) es identidad/acción primaria y el resto del color siempre significa estado (éxito/atención/error); carga con skeleton, vacíos que enseñan, foco y selección teñidos de marca. Alcance: panel del cliente; el builder conserva el tema neutro (extensión pendiente). Verificado renderizado en desktop y móvil sobre el preview.
