@@ -26,6 +26,61 @@ export type PanelField = {
   type: "texto" | "numero" | "booleano" | "fecha";
   required: boolean;
 };
+export type PanelFuente = {
+  integration: string;
+  label: string;
+  state: "al_dia" | "sin_datos" | "error" | "desactivada";
+  detail: string;
+};
+
+const FUENTE_STATE_TEXT: Record<PanelFuente["state"], string> = {
+  al_dia: "Al día",
+  sin_datos: "Sin datos todavía",
+  error: "Error",
+  desactivada: "Desactivada",
+};
+
+const FUENTE_STATE_STYLE: Record<PanelFuente["state"], string> = {
+  al_dia: "border-emerald-300 bg-emerald-50 text-emerald-800",
+  sin_datos: "border-amber-300 bg-amber-50 text-amber-800",
+  error: "border-red-300 bg-red-50 text-red-800",
+  desactivada: "border-zinc-300 bg-zinc-100 text-zinc-600",
+};
+
+function FuentesSection({ fuentes }: { fuentes: PanelFuente[] }) {
+  if (fuentes.length === 0) {
+    return null;
+  }
+  const todasDesactivadas = fuentes.every((f) => f.state === "desactivada");
+  return (
+    <section className="space-y-2 rounded-md border p-4">
+      <h2 className="font-semibold text-sm">Fuentes de esta solución</h2>
+      <ul className="space-y-2">
+        {fuentes.map((f) => (
+          <li className="flex items-start gap-2 text-sm" key={f.integration}>
+            <span
+              className={`shrink-0 rounded-full border px-2 py-0.5 font-medium text-xs ${FUENTE_STATE_STYLE[f.state]}`}
+            >
+              {FUENTE_STATE_TEXT[f.state]}
+            </span>
+            <span>
+              <span className="font-medium">{f.label}</span>
+              <span className="block text-muted-foreground text-xs">
+                {f.detail}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {todasDesactivadas && (
+        <p className="text-muted-foreground text-xs">
+          Todas las fuentes están desactivadas en esta solución: no hay
+          consultas en curso. Esto es una configuración, no un error.
+        </p>
+      )}
+    </section>
+  );
+}
 
 function cell(value: unknown, col: string): string {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -130,6 +185,7 @@ export function FrontendPanel({
   formMessage,
   submitting,
   onSubmit,
+  fuentes,
 }: {
   blocked?: boolean;
   view: PanelView | null;
@@ -142,6 +198,7 @@ export function FrontendPanel({
   formMessage?: string;
   submitting?: boolean;
   onSubmit?: (values: Record<string, string>) => Promise<boolean>;
+  fuentes?: PanelFuente[];
 }) {
   const columns = view?.columns ?? [];
   const labels = view?.labels ?? {};
@@ -208,6 +265,7 @@ export function FrontendPanel({
         )}
         {message && <p className="text-muted-foreground text-sm">{message}</p>}
       </div>
+      {fuentes && fuentes.length > 0 && <FuentesSection fuentes={fuentes} />}
       {!blocked && view?.showForm && (
         <section className="space-y-2">
           {fields?.length && onSubmit ? (

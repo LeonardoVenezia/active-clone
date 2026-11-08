@@ -1,6 +1,7 @@
 /**
  * Solución cerrada configurable: configuración por cliente de un workflow.
- * Persiste en workflows.solution_config (jsonb) y gobierna DOS cosas:
+ * Se declara EN UN NODO "Solución" del propio workflow (sin migraciones de
+ * base de datos: el preview comparte la base con producción) y gobierna DOS cosas:
  *
  * 1. Ejecución: una fuente (integración) declarada "inactive" NO se consulta
  *    ni se espera. El paso se omite REGISTRADO, sin error, y el flujo sigue
