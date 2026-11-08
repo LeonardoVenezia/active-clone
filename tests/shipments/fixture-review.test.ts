@@ -28,7 +28,7 @@ test("estado alerta (con subestado compuesto) y demora por umbral", () => {
   assert.equal(porEnvio.get("ME2-111")?.motivo, "estado_alerta");
   assert.equal(porEnvio.get("ME2-111")?.estado, "shipped/delayed");
   assert.equal(porEnvio.get("CA-222")?.motivo, "sin_movimiento");
-  assert.equal(porEnvio.get("CA-222")?.marcaKey, "CA-222|sin_movimiento|en_transito");
+  assert.equal(porEnvio.get("CA-222")?.marcaKey, "CA-222:sin_movimiento:en_transito");
   assert.equal(porEnvio.has("ZN-333"), false);
   assert.equal(porEnvio.has("EP-444"), false);
 });
@@ -84,7 +84,7 @@ test("parseEstadosAlerta acepta lista o string separado por comas", () => {
 
 test("vista: Nuevo vs Ya avisado según marcas, motivos en español", () => {
   const alertas = revisarEnvios(enviosFixture, { estadosAlerta: ["shipped/delayed"], umbralDias: 7 });
-  const yaAvisadas = new Set(["CA-222|sin_movimiento|en_transito"]);
+  const yaAvisadas = new Set(["CA-222:sin_movimiento:en_transito"]);
   const vista = buildVista(alertas, yaAvisadas);
   const porEnvio = new Map(vista.map((v) => [v.envio, v]));
   assert.equal(porEnvio.get("ME2-111")?.aviso, "Nuevo");

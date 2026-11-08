@@ -40,6 +40,12 @@ function asNumber(value: unknown): number | null {
   return null;
 }
 
+// Las claves de Datos solo aceptan letras, números y . _ : @ - (máx 120).
+function marcaKey(envioId: string, motivo: string, estado: string): string {
+  const clean = (s: string) => s.replace(/[^A-Za-z0-9._:@-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  return `${clean(envioId)}:${clean(motivo)}:${clean(estado) || "sin-estado"}`.slice(0, 120);
+}
+
 export function parseEstadosAlerta(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(asText).filter(Boolean);
   return asText(value)
@@ -73,7 +79,7 @@ export function revisarEnvios(
         referencia,
         motivo: "estado_alerta",
         detalle: `Estado ${compuesto}`,
-        marcaKey: `${envioId}|estado_alerta|${compuesto}`,
+        marcaKey: marcaKey(envioId, "estado_alerta", compuesto),
       });
       continue; // un envío, una alerta: el estado alerta prevalece sobre la demora
     }
@@ -86,7 +92,7 @@ export function revisarEnvios(
         referencia,
         motivo: "sin_movimiento",
         detalle: `${dias} días en estado ${compuesto || "desconocido"}`,
-        marcaKey: `${envioId}|sin_movimiento|${compuesto}`,
+        marcaKey: marcaKey(envioId, "sin_movimiento", compuesto),
       });
     }
   }
