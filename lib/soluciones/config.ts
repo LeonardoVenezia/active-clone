@@ -13,6 +13,8 @@
  * Módulo puro (sin server-only) para pruebas offline.
  */
 
+import { parseSolutionViewKind, type SolutionViewKind } from "./views";
+
 export const OMITTED_MARKER = "__solutionOmitted";
 
 /** actionType del nodo declarativo que lleva la configuración de la solución. */
@@ -29,6 +31,11 @@ export type SolutionFrontendSlots = {
   accent?: string;
   /** Texto cuando la tabla está vacía. */
   emptyText?: string;
+  /**
+   * Vista dedicada del caso (registro cerrado, ver lib/soluciones/views.ts).
+   * Ausente o desconocida = panel genérico, sin romper soluciones viejas.
+   */
+  view?: SolutionViewKind;
 };
 
 export type SolutionConfig = {
@@ -74,7 +81,15 @@ function parseFrontendSlots(raw: unknown): SolutionFrontendSlots | undefined {
   if (typeof f.accent === "string" && ACCENT_RE.test(f.accent.trim())) {
     slots.accent = f.accent.trim();
   }
-  return slots.brand || slots.subheading || slots.accent || slots.emptyText
+  const view = parseSolutionViewKind(f.view);
+  if (view) {
+    slots.view = view;
+  }
+  return slots.brand ||
+    slots.subheading ||
+    slots.accent ||
+    slots.emptyText ||
+    slots.view
     ? slots
     : undefined;
 }
@@ -139,6 +154,8 @@ type NodeLike = { data?: { config?: Record<string, unknown> } };
  * - solutionName: nombre de la solución.
  * - sources: "tiendanube=active, mercadolibre=inactive" (pares clave=estado).
  * - brand, subheading, accent (#RGB/#RRGGBB), emptyText: slots de diseño.
+ * - view: vista dedicada del caso (stock-alertas, envios-excepciones,
+ *   conciliacion-diferencias, avisos-borradores, soporte-consultas).
  */
 function parseSourcePairs(raw: unknown): Record<string, unknown> {
   const sources: Record<string, unknown> = {};
@@ -173,6 +190,7 @@ function configFromSolutionNode(
       subheading: c.subheading,
       accent: c.accent,
       emptyText: c.emptyText,
+      view: c.view,
     },
   });
 }

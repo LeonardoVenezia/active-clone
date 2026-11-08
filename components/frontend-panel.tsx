@@ -12,6 +12,8 @@ export type SolutionSlots = {
   subheading?: string;
   accent?: string;
   emptyText?: string;
+  /** Vista dedicada del caso (clave del registro cerrado de la solución). */
+  view?: string;
 };
 export type PanelView = {
   title: string;
@@ -69,7 +71,7 @@ const FUENTE_STATE_TONE: Record<PanelFuente["state"], string> = {
   desactivada: "text-muted-foreground",
 };
 
-function FuentesSection({ fuentes }: { fuentes: PanelFuente[] }) {
+export function FuentesSection({ fuentes }: { fuentes: PanelFuente[] }) {
   if (fuentes.length === 0) {
     return null;
   }
@@ -216,7 +218,7 @@ function FormBlock({
   );
 }
 
-function TableSkeleton() {
+export function TableSkeleton() {
   return (
     <output aria-busy="true" className="block space-y-2">
       <span className="sr-only">Cargando datos...</span>
@@ -235,7 +237,7 @@ function TableSkeleton() {
   );
 }
 
-function EmptyState({ text }: { text: string }) {
+export function EmptyState({ text }: { text: string }) {
   return (
     <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed px-6 py-10 text-center">
       <Inbox aria-hidden className="size-6 text-muted-foreground" />
@@ -244,7 +246,7 @@ function EmptyState({ text }: { text: string }) {
   );
 }
 
-function LiveNote() {
+export function LiveNote() {
   return (
     <p className="flex items-center gap-2 text-muted-foreground text-xs">
       <span

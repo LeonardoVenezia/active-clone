@@ -6,6 +6,7 @@ import {
   type PanelFuente,
   type PanelView,
 } from "@/components/frontend-panel";
+import { CaseFrontend, hasCaseView } from "@/components/frontend-views";
 
 type View = PanelView;
 type Rec = {
@@ -145,25 +146,41 @@ export default function FrontendPage({
   }
 
   // Superficie cliente: header mínimo de marca, sin la navegación del backoffice.
+  // Si la solución declara una vista dedicada (slot `view` del nodo Solución),
+  // el caso define su experiencia; si no, el panel genérico sigue siendo el fallback.
+  const caseView = view && hasCaseView(view) ? view : null;
   return (
     <main className="pointer-events-auto fixed inset-0 z-20 flex flex-col bg-background">
       <div className="flex-1 overflow-auto">
-        <FrontendPanel
-          actionBusy={actionBusy}
-          blocked={blocked}
-          canRun={canRun}
-          fields={fields}
-          formMessage={formMessage}
-          fuentes={fuentes}
-          message={message}
-          onAction={act}
-          onRun={run}
-          onSubmit={submit}
-          records={records}
-          running={running}
-          submitting={submitting}
-          view={view}
-        />
+        {caseView ? (
+          <CaseFrontend
+            blocked={blocked}
+            canRun={canRun}
+            fuentes={fuentes}
+            message={message}
+            onRun={run}
+            records={records}
+            running={running}
+            view={caseView}
+          />
+        ) : (
+          <FrontendPanel
+            actionBusy={actionBusy}
+            blocked={blocked}
+            canRun={canRun}
+            fields={fields}
+            formMessage={formMessage}
+            fuentes={fuentes}
+            message={message}
+            onAction={act}
+            onRun={run}
+            onSubmit={submit}
+            records={records}
+            running={running}
+            submitting={submitting}
+            view={view}
+          />
+        )}
       </div>
     </main>
   );
