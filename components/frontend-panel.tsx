@@ -518,7 +518,8 @@ export function FrontendPanel({
             <EmptyState text={emptyText} />
           )}
           {!rowsField && !!records?.length && (
-            <div className="overflow-x-auto rounded-xl border">
+            // Celdas más compactas que el modo reporte: con acciones son 7+ columnas en max-w-3xl.
+            <div className="overflow-x-auto rounded-xl border [&_td]:px-2 [&_th]:px-2">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b bg-muted/40">
@@ -573,10 +574,10 @@ export function FrontendPanel({
                               const busy = actionBusy === `${r.key}:${a.id}`;
                               return (
                                 <Button
+                                  className="h-7 px-2 text-xs"
                                   disabled={!onAction || busy}
                                   key={a.id}
                                   onClick={() => onAction?.(r.key, a.id)}
-                                  size="sm"
                                   variant="outline"
                                 >
                                   {busy ? "Aplicando..." : a.label}
