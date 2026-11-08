@@ -128,7 +128,7 @@ async function stepHandler(input: SupportAssistInput) {
 
   const vista = buildVistaRespuestas(respuestas, yaPreparadas);
   const advertencias: string[] = [
-    "Solo prepara borradores y marcas internas: no envía nada. El envío requiere aprobación humana en el paso siguiente.",
+    "Solo prepara borradores y marcas internas: estos borradores no se envían desde esta demo.",
     "Solo responde con el contexto provisto; lo que no tiene dato se deriva a una persona, nunca se inventa.",
   ];
 

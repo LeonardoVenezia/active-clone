@@ -22,7 +22,7 @@ export function EnviosExcepcionesView(props: CaseViewProps) {
         items={[
           { label: "Envíos revisados", value: r.enviosRevisados ?? 0 },
           { label: "Alertas nuevas", value: r.alertasNuevas ?? 0 },
-          { label: "Ya avisadas", value: r.yaAvisadas ?? 0 },
+          { label: "Ya detectadas", value: r.yaAvisadas ?? 0 },
         ].filter((k) => k.value !== 0 || reporte.rows.length > 0)}
       />
       <Advertencias items={reporte.advertencias} />

@@ -132,7 +132,7 @@ async function stepHandler(input: PostpurchaseNoticesInput) {
 
   const vista = buildVistaAvisos(avisos, yaPreparados);
   const advertencias: string[] = [
-    "Solo prepara borradores y marcas internas: no envía nada. El envío requiere aprobación humana en el paso siguiente.",
+    "Solo prepara borradores y marcas internas: estos borradores no se envían desde esta demo.",
     "Solo eventos transaccionales de postcompra (pago, despacho, entrega): no prepara mensajes de marketing.",
   ];
 
