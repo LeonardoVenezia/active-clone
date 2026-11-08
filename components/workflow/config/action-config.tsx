@@ -751,6 +751,51 @@ function AlertasStockFields({
   );
 }
 
+// Preparar Avisos fields: drafts permitted post-purchase notices for human
+// approval; never sends anything.
+function PrepararAvisosFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="notices-eventos">Eventos de pedidos</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="notices-eventos"
+          onChange={(value) => onUpdateConfig("eventos", value)}
+          placeholder="Salida del paso con eventos (pedidoId, referencia, evento, canal, cliente)"
+          value={(config?.eventos as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Usá @ para referenciar la salida del paso con los eventos. Solo
+          prepara borradores: el envío requiere un paso de aprobación humana.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="notices-habilitados">Eventos habilitados</Label>
+        <Input
+          disabled={disabled}
+          id="notices-habilitados"
+          onChange={(e) => onUpdateConfig("eventosHabilitados", e.target.value)}
+          placeholder="pago_confirmado, despachado, entregado"
+          value={(config?.eventosHabilitados as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Separados por coma. Solo eventos transaccionales de postcompra;
+          vacío = los tres. Cualquier otro evento se omite y se reporta.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Datos fields component (generic per-company records; prototype)
 function DatosFields({
   config,
@@ -1216,6 +1261,14 @@ function SystemActionFields({
           onUpdateConfig={onUpdateConfig}
         />
       );
+    case "Preparar Avisos":
+      return (
+        <PrepararAvisosFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
     case "Datos":
       return (
         <DatosFields
@@ -1275,6 +1328,7 @@ const SYSTEM_ACTIONS: Array<{ id: string; label: string }> = [
   { id: "Conciliar Pagos", label: "Conciliar Pagos" },
   { id: "Revisar Envíos", label: "Revisar Envíos" },
   { id: "Alertas de Stock", label: "Alertas de Stock" },
+  { id: "Preparar Avisos", label: "Preparar Avisos" },
   { id: "Frontend", label: "Frontend" },
 ];
 

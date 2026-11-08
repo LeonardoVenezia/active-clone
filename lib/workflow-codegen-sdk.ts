@@ -682,7 +682,7 @@ ${stepBody}
           // Conditions handle their own next nodes
           return lines;
         }
-        if (actionType === "Datos" || actionType === "Frontend" || actionType === "Comparar Stock" || actionType === "Conciliar Pagos" || actionType === "Revisar Envíos" || actionType === "Alertas de Stock") {
+        if (actionType === "Datos" || actionType === "Frontend" || actionType === "Comparar Stock" || actionType === "Conciliar Pagos" || actionType === "Revisar Envíos" || actionType === "Alertas de Stock" || actionType === "Preparar Avisos") {
           lines.push(
             `${indent}// ${actionType} "${node.data.label}": NOT exported. It depends on the platform (data store / workflow page).`,
             `${indent}const result_${sanitizeVarName(nodeId)} = { status: "not-exported", actionType: "${actionType}" };`
@@ -778,7 +778,7 @@ ${stepBody}
   const functionName = sanitizeFunctionName(workflowName);
 
   const hasUnir = nodes.some((n) => n.data.type === "action" && n.data.config?.actionType === "Unir");
-  const hasPlatformOnly = nodes.some((n) => n.data.type === "action" && (n.data.config?.actionType === "Datos" || n.data.config?.actionType === "Frontend" || n.data.config?.actionType === "Comparar Stock" || n.data.config?.actionType === "Conciliar Pagos" || n.data.config?.actionType === "Revisar Envíos" || n.data.config?.actionType === "Alertas de Stock"));
+  const hasPlatformOnly = nodes.some((n) => n.data.type === "action" && (n.data.config?.actionType === "Datos" || n.data.config?.actionType === "Frontend" || n.data.config?.actionType === "Comparar Stock" || n.data.config?.actionType === "Conciliar Pagos" || n.data.config?.actionType === "Revisar Envíos" || n.data.config?.actionType === "Alertas de Stock" || n.data.config?.actionType === "Preparar Avisos"));
   const PLATFORM_ONLY_GUARD = `\n  // EXPORT BLOCKED: this flow has a Datos or Frontend node. They depend on the platform (per-company data store and workflow page);\n  // this exported code cannot reproduce them, so it refuses to run instead of silently behaving differently.\n  const platformOnlyNotSupported: boolean = true;\n  if (platformOnlyNotSupported) {\n    throw new Error("Export not supported: this flow uses a Datos or Frontend node. Run it on the platform.");\n  }\n`;
   const UNIR_GUARD = `\n  // EXPORT BLOCKED: this flow has a Unir (join) node. The platform engine waits there for parallel branches (or a timeout);\n  // this exported code cannot reproduce that, so it refuses to run instead of silently behaving differently.\n  const unirNotSupported: boolean = true;\n  if (unirNotSupported) {\n    throw new Error("Export not supported: this flow uses a Unir node (join of parallel branches). Run it on the platform.");\n  }\n`;
 

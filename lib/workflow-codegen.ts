@@ -32,7 +32,7 @@ const CONST_ASSIGNMENT_PATTERN = /^(\s*)(const\s+\w+\s*=\s*)(.*)$/;
 /**
  * Generate TypeScript code from workflow JSON with "use workflow" directive
  */
-const PLATFORM_ONLY_ACTIONS = ["Datos", "Frontend", "Comparar Stock", "Conciliar Pagos", "Revisar Envíos", "Alertas de Stock"];
+const PLATFORM_ONLY_ACTIONS = ["Datos", "Frontend", "Comparar Stock", "Conciliar Pagos", "Revisar Envíos", "Alertas de Stock", "Preparar Avisos"];
 const PLATFORM_ONLY_GUARD_LINES: string[] = ["  // EXPORT BLOCKED: this flow has a Datos or Frontend node. They depend on the platform (per-company data store and workflow page);", "  // this exported code cannot reproduce them, so it refuses to run instead of silently behaving differently.", "  const platformOnlyNotSupported: boolean = true;", "  if (platformOnlyNotSupported) {", "    throw new Error(\"Export not supported: this flow uses a Datos or Frontend node. Run it on the platform.\");", "  }"];
 const UNIR_GUARD_LINES: string[] = ["  // EXPORT BLOCKED: this flow has a Unir (join) node. The platform engine waits there for parallel branches (or a timeout);", "  // this exported code cannot reproduce that, so it refuses to run instead of silently behaving differently.", "  const unirNotSupported: boolean = true;", "  if (unirNotSupported) {", "    throw new Error(\"Export not supported: this flow uses a Unir node (join of parallel branches). Run it on the platform.\");", "  }"];
 
@@ -856,7 +856,7 @@ export function generateWorkflowCode(
       return removeVariableAssignment(actionLines);
     };
 
-    if (hasErrorPolicy && !["Delay", "Approval", "Unir", "Datos", "Frontend", "Loop", "Comparar Stock", "Conciliar Pagos", "Revisar Envíos", "Alertas de Stock"].includes(actionType)) {
+    if (hasErrorPolicy && !["Delay", "Approval", "Unir", "Datos", "Frontend", "Loop", "Comparar Stock", "Conciliar Pagos", "Revisar Envíos", "Alertas de Stock", "Preparar Avisos"].includes(actionType)) {
       if (!actionType || (!findActionById(actionType) && !["HTTP Request", "Database Query", "Fórmula"].includes(actionType))) {
         return [`${indent}const ${varName} = {success:false,error:${JSON.stringify("Unknown action type: " + actionType)}};`];
       }

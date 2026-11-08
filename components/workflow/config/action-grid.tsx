@@ -108,6 +108,12 @@ const SYSTEM_ACTIONS: ActionType[] = [
     category: "System",
   },
   {
+    id: "Preparar Avisos",
+    label: "Preparar Avisos",
+    description: "Prepará avisos de postcompra (pago, despacho, entrega) para aprobación humana; no envía nada",
+    category: "System",
+  },
+  {
     id: "Delay",
     label: "Delay",
     description: "Espera un tiempo antes de seguir (hasta 24 h)",
