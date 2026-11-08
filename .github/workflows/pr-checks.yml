@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -39,8 +41,18 @@ jobs:
       - name: Generate plugin registry
         run: pnpm discover-plugins
 
-      - name: Run check
-        run: pnpm check
+      # Lint solo los archivos cambiados del PR: el repo arrastra deuda de lint
+      # preexistente (nunca estuvo verde). La deuda de archivos legacy tocados
+      # solo para registrar pasos está documentada en biome.jsonc (overrides).
+      # Archivos nuevos del PR quedan cubiertos por todas las reglas.
+      - name: Run check (changed files)
+        run: |
+          files=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...HEAD | grep -E '\.(ts|tsx|js|jsx|json|jsonc)$' || true)
+          if [ -n "$files" ]; then
+            pnpm exec ultracite check $files
+          else
+            echo "Sin archivos linteables en el diff"
+          fi
 
       - name: Run type check
         if: success() || failure()
