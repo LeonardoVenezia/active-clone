@@ -69,6 +69,7 @@ export async function prepareReconnect(
     throw new Error("Reconnect not enabled");
   }
   const { ctx, row } = await scope(request, integrationId);
+  assertIntegrationConfigReadable(row.config as string);
   const id = randomUUID();
   await db.insert(consoleReconnects).values({
     id,
@@ -209,6 +210,8 @@ export async function completeProviderCallback(
   ) {
     throw new Error("Invalid callback");
   }
+  // Reject before calling the provider, which might invalidate prior tokens.
+  assertIntegrationConfigReadable(row.config as string);
   const reserved = await db
     .update(consoleReconnects)
     .set({ status: "exchanging" })
