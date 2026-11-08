@@ -61,12 +61,22 @@ jobs:
       - name: Run pack tests
         if: success() || failure()
         run: |
-          files=$(ls tests/support/*.test.ts tests/notices/*.test.ts tests/stock-alerts/*.test.ts tests/stock-compare/*.test.ts tests/shipments/*.test.ts tests/payments/*.test.ts tests/workflows/*.test.ts tests/mercadolibre/*.test.ts 2>/dev/null || true)
-          if [ -n "$files" ]; then
-            npx tsx --test $files
-          else
-            echo "Sin suites de pack en esta rama"
+          dirs="tests/support tests/notices tests/stock-alerts tests/stock-compare tests/shipments tests/payments tests/workflows tests/mercadolibre"
+          present=""; missing=""
+          for d in $dirs; do
+            if ls "$d"/*.test.ts >/dev/null 2>&1; then present="$present $d"; else missing="$missing $d"; fi
+          done
+          if [ -z "$present" ]; then
+            echo "Sin suites de pack en esta rama; paso omitido"
+            exit 0
           fi
+          if [ -n "$missing" ]; then
+            echo "ERROR: faltan suites esperadas del pack:$missing" >&2
+            exit 1
+          fi
+          files=""
+          for d in $present; do files="$files $d/*.test.ts"; done
+          npx tsx --test $files
 
       - name: Run type check
         if: success() || failure()
