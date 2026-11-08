@@ -120,6 +120,64 @@ Agregar una fuente (ej. Amazon en el futuro — **hoy no existe como plugin**)
 = crear el plugin + declararla como fuente posible en la solución + su
 sección de config. Las soluciones que no la declaren no se tocan.
 
+### 3.7 Customización estructural por caso (más allá de los slots)
+
+El encargo pide "gran capacidad de customización por diseño": que cada caso
+(cliente + problema) tenga un frontend distinto y útil, no sólo cambios de
+color. La arquitectura separa tres niveles:
+
+**Nivel 1 — Slots cosméticos (IMPLEMENTADO).** `brand`, `subheading`,
+`accent`, `emptyText` por solución. Sanitizados en servidor. Cubre identidad
+básica; no cambia la estructura.
+
+**Nivel 2 — Estructura declarativa por solución (IMPLEMENTADO en parte).**
+La vista de cada solución se compone de bloques que la config enciende,
+apaga y parametriza, sin código por cliente:
+
+- `showRun` / `runOnSubmit`: si el caso expone ejecución manual y cuándo.
+- `showForm` + `fields` (tipados: texto, número, booleano, fecha, con
+  requeridos): el formulario del caso, distinto por solución.
+- `columns` + `labels`: qué columnas del reporte ve el cliente y con qué
+  nombre.
+- `rowsField`: modo reporte (un registro = una tabla fresca por run, sin
+  filas viejas acumuladas).
+- `keyField`: cómo se deduplica/actualiza cada fila.
+- Sección **Fuentes** (45208e3 + 1c8a58a): bloque estructural nuevo, no un
+  slot: surge de las fuentes declaradas y muestra estado y fecha reales.
+
+Lo que falta de este nivel (PROPUESTO, no implementado):
+
+- **Orden y composición de bloques** declarados en la config (hoy el orden
+  es fijo en el componente).
+- **Visibilidad condicional** de bloques (ej. mostrar el formulario sólo si
+  hay borrador pendiente).
+- **Acciones por caso** más allá de ejecutar/enviar formulario: aprobar,
+  derivar, marcar revisado (hoy no existen).
+- **Varios paneles por solución** (ej. uno operativo para el cliente y uno
+  de control para Leo).
+
+**Nivel 3 — Layout libre por cliente (DESCARTADO por ahora).** HTML/layout
+arbitrario por cliente rompe la mantenibilidad del pack: cada caso sería
+código a medida. La puerta queda en el Nivel 2 ampliable: agregar un bloque
+o parámetro nuevo NO rompe las soluciones existentes (defaults defensivos,
+testeado en `solution-config.test.ts`).
+
+**Ejemplo concreto del pack (caso QA real):** la solución "conciliación de
+pagos" para el cliente Distribuidora Andina declara tres fuentes
+(Tiendanube activa, Stripe activa, Mercado Libre desactivada por decisión
+del caso). Su panel muestra: encabezado con marca, estado de cada fuente
+con fecha de última consulta, el reporte de conciliación en modo `rowsField`
+(tabla fresca por run) y el formulario de ajuste manual con los campos de
+ese caso. Otro cliente con el mismo pack pero sólo Mercado Libre activa
+recibe la MISMA solución con otra config: distintas fuentes visibles,
+distintas columnas y textos, sin un fork de código. Eso es la customización
+estructural: la estructura visible deriva de la config persistida en el
+nodo `Solución`, no de ramas de código por cliente.
+
+**Experiencia persistente:** la config vive en el workflow (persistida con
+él), las decisiones en este doc + la card Trello, y el frontend siempre
+refleja la config actual: cambiar la solución cambia el panel sin deploy.
+
 ## 4. Decisiones técnicas adoptadas (delegadas por Leo, 8-nov 14:05)
 
 Leo delega diseño/UI/UX y decisiones técnicas sin costo; sólo se le escala un
@@ -216,3 +274,22 @@ persistente; Trello linkea acá.
 - Alcance honesto: la rama activa con éxito E2E se demostró con `Fórmula`,
   no con un conector real; triggers de integración omitidos validados sólo
   por tests unitarios, no E2E.
+
+### 8-nov-2026: frescura visible y copy de cliente (commit 1c8a58a)
+
+- Cada fuente consultada muestra la **fecha real de su última consulta**
+  (formato es-AR): "Al día" ya no promete frescura, la exhibe. La fecha
+  sale del timestamp del log del último run (`/api/datos` lo propaga como
+  `at` ISO por outcome).
+- Errores de configuración con **copy para el cliente**: "Falta conectar
+  Stripe." en lugar del mensaje crudo interno (`STRIPE_SECRET_KEY is not
+  configured`); el detalle interno queda para la vista Sistema. Regla:
+  nunca nombres internos (variables de entorno, claves) en la vista del
+  cliente.
+- Texto de fuentes omitidas acotado a la configuración (sin hablar de
+  "borradores" en fuentes).
+- Fixture de demostración con subtítulos sin promesas de frescura ("Tus
+  fuentes y precios en un solo lugar."), re-verificado visualmente en
+  desktop y mobile.
+- Nueva sección 3.7: customización estructural por caso (niveles,
+  implementado vs. propuesto, ejemplo concreto del pack).
