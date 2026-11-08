@@ -107,6 +107,7 @@ export type VistaRow = {
   estado: string;
   motivo: string;
   detalle: string;
+  referencia: string;
 };
 
 const MOTIVO_LABELS: Record<Motivo, string> = {
@@ -122,5 +123,6 @@ export function buildVista(alertas: Alerta[], yaAvisadas: Set<string>): VistaRow
     estado: a.estado,
     motivo: MOTIVO_LABELS[a.motivo],
     detalle: a.detalle,
+    referencia: a.referencia,
   }));
 }
