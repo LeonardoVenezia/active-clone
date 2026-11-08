@@ -47,11 +47,25 @@ jobs:
       # Archivos nuevos del PR quedan cubiertos por todas las reglas.
       - name: Run check (changed files)
         run: |
-          files=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...HEAD | grep -E '\.(ts|tsx|js|jsx|json|jsonc)$' || true)
-          if [ -n "$files" ]; then
-            pnpm exec ultracite check $files
+          # Solo archivos presentes (sin borrados), robusto a espacios y renombres, base exacta del PR.
+          git diff --name-only --diff-filter=d "${{ github.event.pull_request.base.sha }}...HEAD" -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.json' '*.jsonc' > /tmp/changed.txt
+          if [ -s /tmp/changed.txt ]; then
+            xargs -d '\n' -a /tmp/changed.txt pnpm exec ultracite check
           else
             echo "Sin archivos linteables en el diff"
+          fi
+
+      # Suites del pack ecommerce + positions (validación de este trabajo).
+      # Acotadas a los directorios del pack; los tests de consola con fallas
+      # preexistentes (import server-only en node) quedan fuera a propósito.
+      - name: Run pack tests
+        if: success() || failure()
+        run: |
+          files=$(ls tests/support/*.test.ts tests/notices/*.test.ts tests/stock-alerts/*.test.ts tests/stock-compare/*.test.ts tests/shipments/*.test.ts tests/payments/*.test.ts tests/workflows/*.test.ts tests/mercadolibre/*.test.ts 2>/dev/null || true)
+          if [ -n "$files" ]; then
+            npx tsx --test $files
+          else
+            echo "Sin suites de pack en esta rama"
           fi
 
       - name: Run type check
