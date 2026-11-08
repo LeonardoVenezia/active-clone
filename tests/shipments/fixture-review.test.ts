@@ -82,13 +82,13 @@ test("parseEstadosAlerta acepta lista o string separado por comas", () => {
   assert.deepEqual(parseEstadosAlerta(null), []);
 });
 
-test("vista: Nuevo vs Ya avisado según marcas, motivos en español", () => {
+test("vista: Nuevo vs Ya detectado según marcas, motivos en español", () => {
   const alertas = revisarEnvios(enviosFixture, { estadosAlerta: ["shipped/delayed"], umbralDias: 7 });
   const yaAvisadas = new Set(["CA-222:sin_movimiento:en_transito"]);
   const vista = buildVista(alertas, yaAvisadas);
   const porEnvio = new Map(vista.map((v) => [v.envio, v]));
   assert.equal(porEnvio.get("ME2-111")?.aviso, "Nuevo");
   assert.equal(porEnvio.get("ME2-111")?.motivo, "Estado de alerta");
-  assert.equal(porEnvio.get("CA-222")?.aviso, "Ya avisado");
+  assert.equal(porEnvio.get("CA-222")?.aviso, "Ya detectado");
   assert.equal(porEnvio.get("CA-222")?.motivo, "Sin movimiento");
 });

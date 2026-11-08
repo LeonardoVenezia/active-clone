@@ -117,7 +117,7 @@ const MOTIVO_LABELS: Record<Motivo, string> = {
 
 export function buildVista(alertas: Alerta[], yaAvisadas: Set<string>): VistaRow[] {
   return alertas.map((a) => ({
-    aviso: yaAvisadas.has(a.marcaKey) ? "Ya avisado" : "Nuevo",
+    aviso: yaAvisadas.has(a.marcaKey) ? "Ya detectado" : "Nuevo",
     envio: a.envioId,
     canal: a.canal,
     estado: a.estado,
