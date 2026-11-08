@@ -636,6 +636,63 @@ function ConciliarPagosFields({
   );
 }
 
+// Revisar Envíos fields: flags delayed/alert-state shipments, deduped
+function RevisarEnviosFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="review-envios">Envíos</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="review-envios"
+          onChange={(value) => onUpdateConfig("envios", value)}
+          placeholder="Salida del paso de envíos (envioId, canal, estado, subestado, diasEnEstado)"
+          value={(config?.envios as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Usá @ para referenciar la salida del paso con los envíos.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="review-estados">Estados de alerta</Label>
+        <Input
+          disabled={disabled}
+          id="review-estados"
+          onChange={(e) => onUpdateConfig("estadosAlerta", e.target.value)}
+          placeholder="shipped/delayed, devolucion"
+          value={(config?.estadosAlerta as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Separados por coma. Cada courier nombra los estados distinto; podés
+          usar estado solo o estado/subestado.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="review-umbral">Días sin movimiento</Label>
+        <Input
+          disabled={disabled}
+          id="review-umbral"
+          onChange={(e) => onUpdateConfig("umbralDias", e.target.value)}
+          placeholder="7"
+          value={(config?.umbralDias as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Avisa si un envío lleva al menos esa cantidad de días en el mismo
+          estado. Vacío = no avisar por demora.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Datos fields component (generic per-company records; prototype)
 function DatosFields({
   config,
@@ -1085,6 +1142,14 @@ function SystemActionFields({
           onUpdateConfig={onUpdateConfig}
         />
       );
+    case "Revisar Envíos":
+      return (
+        <RevisarEnviosFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
     case "Datos":
       return (
         <DatosFields
@@ -1142,6 +1207,7 @@ const SYSTEM_ACTIONS: Array<{ id: string; label: string }> = [
   { id: "Datos", label: "Datos" },
   { id: "Comparar Stock", label: "Comparar Stock" },
   { id: "Conciliar Pagos", label: "Conciliar Pagos" },
+  { id: "Revisar Envíos", label: "Revisar Envíos" },
   { id: "Frontend", label: "Frontend" },
 ];
 

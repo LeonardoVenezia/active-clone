@@ -11,6 +11,7 @@ import { datosSave } from "../datos/core";
 import { pgDatosRepo } from "../datos/repo";
 import {
   buildVista,
+  FUERA_DE_ALCANCE,
   reconcilePayments,
   type PagoShape,
   type VentaShape,
@@ -78,7 +79,7 @@ async function stepHandler(input: PaymentReconcileInput) {
 
   // Anything that makes the reconciliation partial must be visible in the
   // saved report, never look like a full answer.
-  const advertencias: string[] = [];
+  const advertencias: string[] = [...FUERA_DE_ALCANCE];
   if (input.ventasTruncadas === true || input.ventasTruncadas === "true") {
     advertencias.push("La lista de ventas está incompleta: el reporte no cubre todas las ventas.");
   }
@@ -96,6 +97,7 @@ async function stepHandler(input: PaymentReconcileInput) {
         resumen: report.resumen,
         filas: vista,
         advertencias,
+        fueraDeAlcance: FUERA_DE_ALCANCE,
       },
     });
     if (!saved.success) return { success: false as const, error: saved.error };
