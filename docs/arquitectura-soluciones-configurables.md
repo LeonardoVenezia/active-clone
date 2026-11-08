@@ -189,3 +189,30 @@ persistente; Trello linkea acá.
     `Fórmula` (paso sin credenciales).
   - Evidencia visual: capturas del canvas y del panel Ejecuciones de ambos
     fixtures (adjuntas al reporte del encargo).
+
+### 8-nov-2026: frontend por solución con estados de fuente (commit 45208e3)
+
+- El panel del cliente (`/frontend/[workflowId]`) muestra una sección
+  "Fuentes de esta solución" con cuatro estados distinguibles por fuente:
+  **Al día** (última consulta correcta), **Error** (activa con fallo, p.ej.
+  credencial faltante, con el detalle redactado), **Sin datos todavía**
+  (activa sin consulta en el último run) y **Desactivada** (decisión de la
+  solución, explicada siempre). Cuando TODAS las fuentes están desactivadas,
+  el panel lo dice explícitamente ("esto es una configuración, no un
+  error"): nunca un vacío que parezca éxito.
+- Cálculo en servidor (`/api/datos`): config del nodo "Solución" + logs del
+  último run del workflow (`nodeType` = actionType ⇒ integración). Nombres
+  visibles desde el registro de plugins. Implementación pura en
+  `lib/soluciones/fuentes-view.ts` con 8 tests
+  (`tests/workflows/fuentes-view.test.ts`).
+- Validación visual: render SSR del componente real `FrontendPanel` con
+  fixtures + CSS Tailwind real de la app, inspeccionado en browser a 1280px
+  y 390px (capturas adjuntas al reporte). El panel EN VIVO no se puede
+  demostrar en el preview de la rama porque `DATOS_STORAGE_ENABLED` está
+  apagado para previews (`/api/datos` responde `enabled:false`); habilitarlo
+  es un cambio de env en Vercel (cuenta de Leo), pendiente de su OK si se
+  quiere la demo en vivo antes de mergear. No requiere migración ni toca
+  producción.
+- Alcance honesto: la rama activa con éxito E2E se demostró con `Fórmula`,
+  no con un conector real; triggers de integración omitidos validados sólo
+  por tests unitarios, no E2E.
