@@ -21,20 +21,33 @@ export type FuenteView = {
   state: FuenteState;
   /** Explicación corta, segura para mostrar al cliente. */
   detail: string;
+  /** ISO de la última consulta registrada (frescura visible; ausente si nunca). */
+  lastRunAt?: string;
 };
 
 /** Resultado de la última consulta de una fuente, o null si no se consultó. */
 export type FuenteOutcome = {
   status: "success" | "error";
   error?: string;
+  /** ISO de la consulta (timestamp del log). */
+  at?: string;
 } | null;
 
-const MAX_DETAIL = 140;
-
-function cleanDetail(raw: unknown): string {
-  return typeof raw === "string" && raw.trim()
-    ? raw.trim().slice(0, MAX_DETAIL)
-    : "La última consulta falló.";
+/**
+ * Detalle de error para el CLIENTE: nunca nombres internos (variables de
+ * entorno, claves). Un error de credencial/conexión se traduce a
+ * "Falta conectar <label>"; cualquier otro fallo, al genérico.
+ */
+export function clientErrorDetail(label: string, error?: string): string {
+  const e = (error || "").toLowerCase();
+  if (
+    e.includes("not configured") ||
+    e.includes("not connected") ||
+    e.includes("not_configured")
+  ) {
+    return `Falta conectar ${label}.`;
+  }
+  return "La última consulta falló.";
 }
 
 function humanize(key: string): string {
@@ -82,7 +95,8 @@ export function fuentesView(
         integration,
         label,
         state: "error",
-        detail: cleanDetail(outcome.error),
+        detail: clientErrorDetail(label, outcome.error),
+        ...(outcome.at ? { lastRunAt: outcome.at } : {}),
       });
     } else {
       out.push({
@@ -90,6 +104,7 @@ export function fuentesView(
         label,
         state: "al_dia",
         detail: "Última consulta correcta.",
+        ...(outcome.at ? { lastRunAt: outcome.at } : {}),
       });
     }
   }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   allSourcesInactive,
+  clientErrorDetail,
   type FuenteOutcome,
   fuentesView,
 } from "../../lib/soluciones/fuentes-view";
@@ -30,21 +31,60 @@ describe("fuentesView", () => {
     assert.strictEqual(f.state, "sin_datos");
   });
 
-  test("activa con error: estado error con el detalle acotado", () => {
+  test("activa con error de credencial: copy de cliente, sin nombres internos", () => {
     const outcome = (): FuenteOutcome => ({
       status: "error",
-      error: `STRIPE_SECRET_KEY is not configured. ${"x".repeat(300)}`,
+      error: "STRIPE_SECRET_KEY is not configured. Please add it.",
+      at: "2026-11-08T17:00:00.000Z",
+    });
+    const [f] = fuentesView(
+      { sources: { stripe: "active" } },
+      outcome,
+      { stripe: "Stripe" }
+    );
+    assert.strictEqual(f.state, "error");
+    assert.strictEqual(f.detail, "Falta conectar Stripe.");
+    assert.ok(!f.detail.includes("STRIPE_SECRET_KEY"));
+    assert.strictEqual(f.lastRunAt, "2026-11-08T17:00:00.000Z");
+  });
+
+  test("activa con error genérico: detalle genérico, nunca el mensaje crudo", () => {
+    const outcome = (): FuenteOutcome => ({
+      status: "error",
+      error: "connect ETIMEDOUT 10.0.0.1:443",
     });
     const [f] = fuentesView({ sources: { stripe: "active" } }, outcome);
     assert.strictEqual(f.state, "error");
-    assert.ok(f.detail.length <= 140);
-    assert.ok(f.detail.includes("STRIPE_SECRET_KEY"));
+    assert.strictEqual(f.detail, "La última consulta falló.");
   });
 
-  test("activa con éxito: al_dia", () => {
-    const outcome = (): FuenteOutcome => ({ status: "success" });
+  test("activa con éxito: al_dia con fecha de la consulta", () => {
+    const outcome = (): FuenteOutcome => ({
+      status: "success",
+      at: "2026-11-08T16:30:00.000Z",
+    });
     const [f] = fuentesView({ sources: { stripe: "active" } }, outcome);
     assert.strictEqual(f.state, "al_dia");
+    assert.strictEqual(f.lastRunAt, "2026-11-08T16:30:00.000Z");
+  });
+
+  test("clientErrorDetail: not configured / not connected / otros", () => {
+    assert.strictEqual(
+      clientErrorDetail("Stripe", "STRIPE_SECRET_KEY is not configured."),
+      "Falta conectar Stripe."
+    );
+    assert.strictEqual(
+      clientErrorDetail("Mercado Libre", "Mercado Libre is not connected."),
+      "Falta conectar Mercado Libre."
+    );
+    assert.strictEqual(
+      clientErrorDetail("Stripe", "timeout"),
+      "La última consulta falló."
+    );
+    assert.strictEqual(
+      clientErrorDetail("Stripe", undefined),
+      "La última consulta falló."
+    );
   });
 
   test("mezcla: conserva el orden de la config y distingue los 4 estados", () => {
@@ -69,13 +109,6 @@ describe("fuentesView", () => {
     );
   });
 
-  test("error sin mensaje usa detalle genérico", () => {
-    const [f] = fuentesView({ sources: { stripe: "active" } }, () => ({
-      status: "error",
-    }));
-    assert.strictEqual(f.state, "error");
-    assert.strictEqual(f.detail, "La última consulta falló.");
-  });
 });
 
 describe("allSourcesInactive", () => {

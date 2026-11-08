@@ -31,6 +31,8 @@ export type PanelFuente = {
   label: string;
   state: "al_dia" | "sin_datos" | "error" | "desactivada";
   detail: string;
+  /** ISO de la última consulta: la frescura se muestra, no se promete. */
+  lastRunAt?: string;
 };
 
 const FUENTE_STATE_TEXT: Record<PanelFuente["state"], string> = {
@@ -67,6 +69,8 @@ function FuentesSection({ fuentes }: { fuentes: PanelFuente[] }) {
               <span className="font-medium">{f.label}</span>
               <span className="block text-muted-foreground text-xs">
                 {f.detail}
+                {f.lastRunAt &&
+                  ` ${new Date(f.lastRunAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}`}
               </span>
             </span>
           </li>

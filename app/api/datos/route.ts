@@ -111,11 +111,12 @@ async function sourcesViewForWorkflow(
       return null;
     }
     if (log.status === "success") {
-      return { status: "success" };
+      return { status: "success", at: log.timestamp.toISOString() };
     }
     return {
       status: "error",
       error: redactSensitiveData(log.error || ""),
+      at: log.timestamp.toISOString(),
     };
   };
   return fuentesView(solution, outcomeFor, getIntegrationLabels());
