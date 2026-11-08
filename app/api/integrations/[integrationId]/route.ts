@@ -5,6 +5,7 @@ import {
   getIntegration,
   updateIntegration,
 } from "@/lib/db/integrations";
+import { IntegrationConfigUnreadableError } from "@/lib/integrations/crypto";
 import type { IntegrationConfig } from "@/lib/types/integration";
 
 export type GetIntegrationResponse = {
@@ -114,6 +115,9 @@ export async function PUT(
 
     return NextResponse.json(response);
   } catch (error) {
+    if (error instanceof IntegrationConfigUnreadableError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     console.error("Failed to update integration:", error);
     return NextResponse.json(
       {

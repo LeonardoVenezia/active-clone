@@ -6,7 +6,7 @@ import {integrations} from '@/lib/db/schema';
 import {consoleReconnects,consoleAudit} from './schema';
 import {consoleContext} from './context';
 import {visibleWorkflows} from './data';
-import {encrypt} from '@/lib/db/integrations';
+import {canDecryptHere,encrypt,IntegrationConfigUnreadableError} from '@/lib/integrations/crypto';
 async function scope(request:Request,integrationId:string){
  const ctx=await consoleContext(request);if(!ctx||!['owner','admin'].includes(ctx.grant.role))throw Error('Not authorized');
  const flows=await visibleWorkflows(ctx.grant,null);const [row]=await db.select().from(integrations).where(eq(integrations.id,integrationId));
@@ -31,6 +31,11 @@ export async function finishReconnect(request:Request,ticketId:string,verified:{
  const [candidate]=await db.select().from(consoleReconnects).where(eq(consoleReconnects.id,ticketId));if(!candidate)throw Error('Invalid reconnect');
  const {ctx,row}=await scope(request,candidate.integrationId);
  if(candidate.actorId!==ctx.user.id||candidate.organizationId!==ctx.grant.organizationId||candidate.ownerId!==row.userId||verified.providerType!==row.type)throw Error('Invalid reconnect');
+ // Guard anti re-cifrado cruzado (mismo criterio que updateIntegration): si el
+ // config actual no se descifra con la clave de este entorno, sobrescribirlo acá
+ // lo haría ilegible en su entorno original.
+ const [current]=await db.select({config:integrations.config}).from(integrations).where(eq(integrations.id,candidate.integrationId));
+ if(current&&!canDecryptHere(current.config as string))throw new IntegrationConfigUnreadableError();
  const ciphertext=encrypt(JSON.stringify(verified.config));
  return db.transaction(async tx=>{
   const [ticket]=await tx.select().from(consoleReconnects).where(eq(consoleReconnects.id,ticketId)).for('update');
