@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
+export type SolutionSlots = {
+  brand?: string;
+  subheading?: string;
+  accent?: string;
+  emptyText?: string;
+};
 export type PanelView = {
   title: string;
   collection: string;
@@ -11,6 +17,8 @@ export type PanelView = {
   runOnSubmit?: boolean;
   rowsField?: string;
   labels?: Record<string, string>;
+  /** Slots declarativos de diseño de la solución (config por cliente). */
+  solution?: SolutionSlots;
 };
 export type PanelRecord = { key: string; value: unknown; updatedAt: string };
 export type PanelField = {
@@ -138,6 +146,10 @@ export function FrontendPanel({
   const columns = view?.columns ?? [];
   const labels = view?.labels ?? {};
   const labelOf = (c: string) => labels[c] ?? c;
+  // Slots de diseño de la solución (config por cliente, sanitizados en servidor).
+  const slots = view?.solution;
+  const accentStyle = slots?.accent ? { color: slots.accent } : undefined;
+  const emptyText = slots?.emptyText || "No hay datos todavía.";
   // rowsField mode: the latest record holds the report; its value[rowsField]
   // array is the table. One overwritten record = no stale rows across runs.
   const rowsField = view?.rowsField ?? "";
@@ -174,7 +186,20 @@ export function FrontendPanel({
     : [];
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
-      <h1 className="font-bold text-2xl">{view?.title || "Panel"}</h1>
+      {slots?.brand && (
+        <p
+          className="font-semibold text-xs uppercase tracking-wide"
+          style={accentStyle}
+        >
+          {slots.brand}
+        </p>
+      )}
+      <h1 className="font-bold text-2xl" style={accentStyle}>
+        {view?.title || "Panel"}
+      </h1>
+      {slots?.subheading && (
+        <p className="text-muted-foreground text-sm">{slots.subheading}</p>
+      )}
       <div className="flex items-center gap-3">
         {canRun && view?.showRun && (
           <Button disabled={running} onClick={onRun}>
@@ -212,7 +237,7 @@ export function FrontendPanel({
           </p>
           {records === null && <p>Cargando...</p>}
           {rowsField && records !== null && !reportRows?.length && (
-            <p className="text-muted-foreground">No hay datos todavía.</p>
+            <p className="text-muted-foreground">{emptyText}</p>
           )}
           {rowsField && reportAdvertencias.length > 0 && (
             <div className="rounded border border-amber-300 bg-amber-50 p-2 text-amber-900 text-xs dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
@@ -291,7 +316,7 @@ export function FrontendPanel({
             </div>
           )}
           {!rowsField && records?.length === 0 && (
-            <p className="text-muted-foreground">No hay datos todavía.</p>
+            <p className="text-muted-foreground">{emptyText}</p>
           )}
           {!rowsField && !!records?.length && (
             <div className="overflow-x-auto">

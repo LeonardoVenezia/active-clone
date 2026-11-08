@@ -19,6 +19,15 @@ import {
   failedStepOutput,
 } from "./node-error-policy";
 import {
+  integrationFromActionType,
+  isOmittedOutput,
+  isSourceInactive,
+  omittedSourceOutput,
+  SOLUTION_NODE_ACTION,
+  type SolutionConfig,
+  solutionConfigFromNodes,
+} from "./soluciones/config";
+import {
   getActionLabel,
   getStepImporter,
   type StepImporter,
@@ -29,6 +38,7 @@ import {
 } from "./steps/approval";
 import { markExecutionStartErrorStep } from "./steps/execution-status";
 import { joinStep } from "./steps/join";
+import { solutionOmittedStep } from "./steps/solution-omitted";
 import type { StepContext } from "./steps/step-handler";
 import { triggerStep } from "./steps/trigger";
 import {
@@ -575,6 +585,12 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
 
   const outputs: NodeOutputs = {};
   const results: Record<string, ExecutionResult> = {};
+
+  // Solución cerrada configurable: la config por cliente se declara en un
+  // nodo "Solución" del propio workflow (vive en workflows.nodes, sin
+  // migraciones ni columnas nuevas). Fuentes explícitamente inactivas se
+  // omiten REGISTRADAS; nunca se omite una fuente activa aunque falle.
+  const solutionConfig: SolutionConfig | null = solutionConfigFromNodes(nodes);
 
   // Build node and edge maps
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
@@ -1127,6 +1143,46 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
 
         const config = node.data.config || {};
         const triggerType = config.triggerType as string;
+
+        // Solución: un disparador de integración cuya fuente está
+        // explícitamente inactiva se omite REGISTRADO (sin consulta, sin
+        // espera, sin error). Se entrega como rama inactiva: lo que cuelga
+        // de él se salta sin fallar.
+        const triggerIntegration =
+          triggerType === "Integration" &&
+          typeof config.integrationTrigger === "string"
+            ? integrationFromActionType(config.integrationTrigger)
+            : integrationFromActionType(triggerType || "");
+        if (
+          triggerIntegration &&
+          isSourceInactive(solutionConfig, triggerIntegration)
+        ) {
+          console.log(
+            "[Workflow Executor] Trigger omitted by solution config:",
+            triggerIntegration
+          );
+          const omittedTrigger = await solutionOmittedStep({
+            result: {
+              success: true,
+              data: omittedSourceOutput(triggerIntegration),
+            },
+            _context: {
+              executionId,
+              workflowId,
+              nodeId: node.id,
+              nodeName: `${getNodeName(node)} (omitido por solución)`,
+              nodeType: `trigger:${triggerType || "unknown"}`,
+            },
+          });
+          results[nodeId] = omittedTrigger;
+          outputs[nodeId.replace(/[^a-zA-Z0-9]/g, "_")] = {
+            label: node.data.label || nodeId,
+            data: null,
+          };
+          await resolveChildren(nodeId, false, visited);
+          return;
+        }
+
         let triggerData: Record<string, unknown> = {
           triggered: true,
           timestamp: Date.now(),
@@ -1190,6 +1246,60 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           return;
         }
 
+        // El nodo "Solución" sólo DECLARA configuración: no llama
+        // proveedores ni transforma datos. Pasa como no-op exitoso.
+        if (actionType === SOLUTION_NODE_ACTION) {
+          result = {
+            success: true,
+            data: { solucion: solutionConfig?.name ?? true },
+          };
+          results[nodeId] = result;
+          outputs[nodeId.replace(/[^a-zA-Z0-9]/g, "_")] = {
+            label: node.data.label || nodeId,
+            data: result.data,
+          };
+          await resolveChildren(nodeId, true, visited);
+          return;
+        }
+
+        // Solución: un paso de una fuente explícitamente inactiva se omite
+        // REGISTRADO (sin consulta, sin espera, sin error). La omisión se
+        // entrega como rama inactiva: Unir la lista aparte y los
+        // consumidores en cadena se saltan sin fallar. Las acciones de
+        // sistema (sin "/") nunca se omiten. Una fuente ACTIVA sin
+        // credencial sigue fallando visible dentro del paso: jamás se
+        // confunde con una omisión.
+        const stepIntegration = integrationFromActionType(actionType);
+        if (
+          stepIntegration &&
+          isSourceInactive(solutionConfig, stepIntegration)
+        ) {
+          console.log(
+            "[Workflow Executor] Step omitted by solution config:",
+            stepIntegration
+          );
+          const omitted = await solutionOmittedStep({
+            result: {
+              success: true,
+              data: omittedSourceOutput(stepIntegration),
+            },
+            _context: {
+              executionId,
+              workflowId,
+              nodeId: node.id,
+              nodeName: `${getNodeName(node)} (omitido por solución)`,
+              nodeType: actionType,
+            },
+          });
+          results[nodeId] = omitted;
+          outputs[nodeId.replace(/[^a-zA-Z0-9]/g, "_")] = {
+            label: node.data.label || nodeId,
+            data: null,
+          };
+          await resolveChildren(nodeId, false, visited);
+          return;
+        }
+
         // Loop nodes resolve their own source and run inner steps per item
         if (actionType === "Loop") {
           result = await executeLoopNode(node, config, outputs);
@@ -1214,11 +1324,16 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           const completed: string[] = [];
           const failed: string[] = [];
           const skipped: string[] = [];
+          // Ramas omitidas por configuración de solución: se listan aparte
+          // de las salteadas por condición; nunca son fallo ni datos.
+          const omitted: string[] = [];
           for (const [pid, status] of st.status) {
             if (status === "ok") {
               completed.push(label(pid));
               inputs[key(pid)] = outputs[key(pid)]?.data ?? null;
             } else if (status === "failed") failed.push(label(pid));
+            else if (isOmittedOutput(results[pid]?.data))
+              omitted.push(label(pid));
             else skipped.push(label(pid));
           }
           const timedOut = st.timedOut.map(label);
@@ -1227,6 +1342,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
             completed,
             failed,
             skipped,
+            omitted,
             timedOut,
             hasTimedOut: timedOut.length > 0,
           };
