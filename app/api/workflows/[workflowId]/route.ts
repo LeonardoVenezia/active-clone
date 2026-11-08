@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { validateWorkflowIntegrations } from "@/lib/db/integrations";
+import { ensureNodePositions } from "@/lib/workflows/positions";
 import {
   workflowExecutionLogs,
   workflowExecutions,
@@ -204,6 +205,12 @@ export async function PATCH(
         { error: "Only the workflow owner can change visibility" },
         { status: 403 }
       );
+    }
+
+    // Never persist a node without a valid position: the canvas crashes
+    // reading position.x. Default it here so every save path is safe.
+    if (Array.isArray(body.nodes)) {
+      body.nodes = ensureNodePositions(body.nodes);
     }
 
     // Validate that all integrationIds in nodes belong to the workflow owner

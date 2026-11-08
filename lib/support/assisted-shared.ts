@@ -9,7 +9,8 @@
  *   unknown or uncovered topic is routed to a human, never answered with an
  *   invented template.
  * - A draft never states a status the context does not include (sin dato).
- * - One answer per consultaId (send-once).
+ * - One draft per consultaId per run; the internal mark records that a
+ *   draft was prepared, never that anything was sent.
  * - Deterministic ordering.
  */
 

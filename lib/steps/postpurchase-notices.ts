@@ -1,8 +1,9 @@
 /**
  * Executable step for the "Preparar Avisos" action (pack ecommerce).
- * Drafts permitted post-purchase notices + send-once marks only: NEVER sends
- * anything. A human Approval node downstream decides delivery, through the
- * channel the company already uses.
+ * Drafts permitted post-purchase notices only: NEVER sends anything.
+ * A human Approval node downstream decides delivery, through the channel
+ * the company already uses. Marks only record that a draft was prepared:
+ * they never mean "sent" and never block re-preparing an unsent draft.
  */
 import "server-only";
 
@@ -80,7 +81,9 @@ async function stepHandler(input: PostpurchaseNoticesInput) {
     parseEventosHabilitados(input.eventosHabilitados),
   );
 
-  // Send-once: una marca por pedido+evento, creada solo la primera vez.
+  // Marca de borrador por pedido+evento: registra que se preparó un
+  // borrador; NO significa enviado y no impide volver a prepararlo
+  // (cada corrida regenera los borradores desde la entrada).
   const yaPreparados = new Set<string>();
   let nuevos = 0;
   try {

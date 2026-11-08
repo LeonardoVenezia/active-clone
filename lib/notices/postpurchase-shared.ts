@@ -1,14 +1,16 @@
 /**
  * Shared post-purchase notice logic for the "Preparar Avisos" step (pack
- * ecommerce). Pure functions, no I/O. Prepares drafts + send-once marks only:
- * never sends anything. A human approval step downstream decides delivery.
+ * ecommerce). Pure functions, no I/O. Prepares drafts only: never sends
+ * anything. A human approval step downstream decides delivery.
  *
  * Scope: transactional post-purchase events only (pago confirmado, despacho,
  * entrega). No marketing, no cross-sell: only events the buyer expects about
  * an order they already made.
  *
  * Safety rules mirror the other pack steps:
- * - One notice per order+event (send-once mark per pedido+evento).
+ * - One draft per order+event per run; the internal mark records that a
+ *   draft was prepared, never that anything was sent, and never blocks
+ *   re-preparing or editing an unsent draft.
  * - Only events on the allowed list produce drafts; anything else is skipped
  *   and reported as such, never silently mapped to another template.
  * - Deterministic ordering.

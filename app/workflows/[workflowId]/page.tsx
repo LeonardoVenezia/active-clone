@@ -17,6 +17,7 @@ import {
   integrationsVersionAtom,
 } from "@/lib/integrations-store";
 import type { IntegrationType } from "@/lib/types/integration";
+import { ensureNodePositions } from "@/lib/workflows/positions";
 import {
   currentWorkflowIdAtom,
   currentWorkflowNameAtom,
@@ -319,8 +320,11 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
       try {
         const workflowData = await api.ai.generate(prompt);
 
-        // Clear selection on all nodes
-        const nodesWithoutSelection = (workflowData.nodes || []).map(
+        // Clear selection on all nodes; default position so the canvas
+        // never crashes on a node saved without one
+        const nodesWithoutSelection = ensureNodePositions(
+          workflowData.nodes || []
+        ).map(
           (node: WorkflowNode) => ({ ...node, selected: false })
         );
         setNodes(nodesWithoutSelection);
@@ -360,8 +364,10 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
         return;
       }
 
-      // Reset node statuses to idle and clear selection when loading from database
-      const nodesWithIdleStatus = workflow.nodes.map((node: WorkflowNode) => ({
+      // Reset node statuses to idle and clear selection when loading from
+      // database; default position so a node saved without one cannot crash
+      // the canvas (React Flow reads position.x)
+      const nodesWithIdleStatus = ensureNodePositions(workflow.nodes).map((node: WorkflowNode) => ({
         ...node,
         selected: false,
         data: {

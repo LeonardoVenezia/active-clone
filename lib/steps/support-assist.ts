@@ -1,7 +1,8 @@
 /**
  * Executable step for the "Preparar Respuestas" action (pack ecommerce).
- * Drafts support answers from workflow-provided context + send-once marks:
- * NEVER sends anything. A human Approval node downstream decides delivery.
+ * Drafts support answers from workflow-provided context: NEVER sends
+ * anything. A human Approval node downstream decides delivery. Marks only
+ * record that a draft was prepared: never "sent", never blocking re-work.
  */
 import "server-only";
 
@@ -83,7 +84,8 @@ async function stepHandler(input: SupportAssistInput) {
 
   const respuestas = prepararRespuestas(consultas as Consulta[], contexto);
 
-  // Send-once: una marca por consulta, creada solo la primera vez.
+  // Marca de borrador por consulta: registra que se preparó un borrador;
+  // NO significa enviado y no impide volver a prepararlo o editarlo.
   const yaPreparadas = new Set<string>();
   let nuevas = 0;
   try {
