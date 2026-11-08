@@ -58,3 +58,4 @@ lib/output-display-configs.ts
 
 # Eval harness artifacts (model output) never go to the public repo
 evals/runs/harness/
+.render-harness/

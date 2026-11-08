@@ -9,7 +9,7 @@
  * Módulo puro (sin server-only) para pruebas offline.
  */
 
-import type { SolutionConfig } from "./config";
+import type { SolutionConfig, SourceState } from "./config";
 
 export type FuenteState = "al_dia" | "sin_datos" | "error" | "desactivada";
 
@@ -72,43 +72,52 @@ export function fuentesView(
   const out: FuenteView[] = [];
   for (const [integration, state] of Object.entries(config.sources)) {
     const label = labels[integration] || humanize(integration);
-    if (state === "inactive") {
-      out.push({
-        integration,
-        label,
-        state: "desactivada",
-        detail:
-          "Desactivada en la configuración de esta solución: no se consulta.",
-      });
-      continue;
-    }
-    const outcome = outcomeFor(integration);
-    if (!outcome) {
-      out.push({
-        integration,
-        label,
-        state: "sin_datos",
-        detail: "Sin datos todavía: la última ejecución no la consultó.",
-      });
-    } else if (outcome.status === "error") {
-      out.push({
-        integration,
-        label,
-        state: "error",
-        detail: clientErrorDetail(label, outcome.error),
-        ...(outcome.at ? { lastRunAt: outcome.at } : {}),
-      });
-    } else {
-      out.push({
-        integration,
-        label,
-        state: "al_dia",
-        detail: "Datos de la última consulta",
-        ...(outcome.at ? { lastRunAt: outcome.at } : {}),
-      });
-    }
+    out.push(fuenteViewFor(integration, state, outcomeFor, label));
   }
   return out;
+}
+
+/** Vista de UNA fuente: inactiva explicada siempre; activa según su último outcome. */
+function fuenteViewFor(
+  integration: string,
+  sourceState: SourceState,
+  outcomeFor: (source: string) => FuenteOutcome,
+  label: string
+): FuenteView {
+  if (sourceState === "inactive") {
+    return {
+      integration,
+      label,
+      state: "desactivada",
+      detail:
+        "Desactivada en la configuración de esta solución: no se consulta.",
+    };
+  }
+  const outcome = outcomeFor(integration);
+  if (!outcome) {
+    return {
+      integration,
+      label,
+      state: "sin_datos",
+      detail: "Sin datos todavía: la última ejecución no la consultó.",
+    };
+  }
+  if (outcome.status === "error") {
+    return {
+      integration,
+      label,
+      state: "error",
+      detail: clientErrorDetail(label, outcome.error),
+      ...(outcome.at ? { lastRunAt: outcome.at } : {}),
+    };
+  }
+  return {
+    integration,
+    label,
+    state: "al_dia",
+    detail: "Datos de la última consulta",
+    ...(outcome.at ? { lastRunAt: outcome.at } : {}),
+  };
 }
 
 /** true si TODAS las fuentes declaradas están desactivadas. */

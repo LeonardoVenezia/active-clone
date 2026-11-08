@@ -107,7 +107,9 @@ export default function FrontendPage({
         }
       );
       const d = await r.json().catch(() => ({}));
-      const okMessage = d.started ? "Guardado. Workflow iniciado." : "Guardado.";
+      const okMessage = d.started
+        ? "Guardado. Workflow iniciado."
+        : "Guardado.";
       setFormMessage(r.ok ? okMessage : d.error || "No se pudo enviar.");
       setTimeout(load, 500);
       setSubmitting(false);

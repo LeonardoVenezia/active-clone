@@ -37,11 +37,9 @@ describe("fuentesView", () => {
       error: "STRIPE_SECRET_KEY is not configured. Please add it.",
       at: "2026-11-08T17:00:00.000Z",
     });
-    const [f] = fuentesView(
-      { sources: { stripe: "active" } },
-      outcome,
-      { stripe: "Stripe" }
-    );
+    const [f] = fuentesView({ sources: { stripe: "active" } }, outcome, {
+      stripe: "Stripe",
+    });
     assert.strictEqual(f.state, "error");
     assert.strictEqual(f.detail, "Falta conectar Stripe.");
     assert.ok(!f.detail.includes("STRIPE_SECRET_KEY"));
@@ -108,7 +106,6 @@ describe("fuentesView", () => {
       ["desactivada", "error", "al_dia", "sin_datos"]
     );
   });
-
 });
 
 describe("allSourcesInactive", () => {
