@@ -34,6 +34,7 @@ export default function FrontendPage({
   const [fuentes, setFuentes] = useState<PanelFuente[] | undefined>(undefined);
   const [formMessage, setFormMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = "Panel | Active-clone";
@@ -120,17 +121,42 @@ export default function FrontendPage({
     }
   }
 
+  async function act(key: string, actionId: string) {
+    setActionBusy(`${key}:${actionId}`);
+    setMessage("");
+    try {
+      const r = await fetch(
+        `/api/frontend/${encodeURIComponent(workflowId)}/action`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ key, action: actionId }),
+        }
+      );
+      const d = await r.json().catch(() => ({}));
+      setMessage(
+        r.ok ? "Acción aplicada." : d.error || "No se pudo aplicar la acción."
+      );
+      setTimeout(load, 500);
+    } catch {
+      setMessage("No se pudo aplicar la acción.");
+    }
+    setActionBusy(null);
+  }
+
   // Superficie cliente: header mínimo de marca, sin la navegación del backoffice.
   return (
     <main className="pointer-events-auto fixed inset-0 z-20 flex flex-col bg-background">
       <div className="flex-1 overflow-auto">
         <FrontendPanel
+          actionBusy={actionBusy}
           blocked={blocked}
           canRun={canRun}
           fields={fields}
           formMessage={formMessage}
           fuentes={fuentes}
           message={message}
+          onAction={act}
           onRun={run}
           onSubmit={submit}
           records={records}

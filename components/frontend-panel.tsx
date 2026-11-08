@@ -1,6 +1,11 @@
 import { AlertTriangle, Inbox } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  DEFAULT_PANEL_BLOCKS,
+  type PanelAction,
+  type PanelBlockKey,
+} from "@/lib/datos/frontend";
 
 export type SolutionSlots = {
   brand?: string;
@@ -18,6 +23,12 @@ export type PanelView = {
   runOnSubmit?: boolean;
   rowsField?: string;
   labels?: Record<string, string>;
+  /** Orden de los bloques de contenido declarado por el caso (config). */
+  blocks?: PanelBlockKey[];
+  /** Acciones por fila declaradas por el caso: cada una escribe actionField=<id> en el registro. */
+  actions?: PanelAction[];
+  /** Campo del registro que escribe cada acción (default "estado"). */
+  actionField?: string;
   /** Slots declarativos de diseño de la solución (config por cliente). */
   solution?: SolutionSlots;
 };
@@ -260,6 +271,8 @@ export function FrontendPanel({
   submitting,
   onSubmit,
   fuentes,
+  onAction,
+  actionBusy,
 }: {
   blocked?: boolean;
   view: PanelView | null;
@@ -273,6 +286,10 @@ export function FrontendPanel({
   submitting?: boolean;
   onSubmit?: (values: Record<string, string>) => Promise<boolean>;
   fuentes?: PanelFuente[];
+  /** Aplica una acción declarada sobre el registro de la fila. */
+  onAction?: (key: string, actionId: string) => void;
+  /** "<key>:<actionId>" de la acción en curso (deshabilita ese botón). */
+  actionBusy?: string | null;
 }) {
   const columns = view?.columns ?? [];
   const labels = view?.labels ?? {};
@@ -318,8 +335,17 @@ export function FrontendPanel({
   const TH_CLASS =
     "px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider";
   const TD_CLASS = "break-words px-3 py-2.5";
+  // Orden de bloques declarado por el caso; desconocidos/ausentes caen al final
+  // en el orden original, así un panel sin config nueva no cambia.
+  const rowActions = view?.actions ?? [];
+  const blockOrder = new Map<PanelBlockKey, number>(
+    (view?.blocks?.length ? view.blocks : DEFAULT_PANEL_BLOCKS).map(
+      (b, i) => [b, i + 1] as const
+    )
+  );
+  const ord = (k: PanelBlockKey) => blockOrder.get(k) ?? 99;
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
+    <div className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
       <header className="space-y-1.5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h1
@@ -361,9 +387,13 @@ export function FrontendPanel({
           <p className="text-muted-foreground text-sm">{message}</p>
         )}
       </div>
-      {fuentes && fuentes.length > 0 && <FuentesSection fuentes={fuentes} />}
+      {fuentes && fuentes.length > 0 && (
+        <div style={{ order: ord("fuentes") }}>
+          <FuentesSection fuentes={fuentes} />
+        </div>
+      )}
       {!blocked && view?.showForm && (
-        <section className="space-y-2">
+        <section className="space-y-2" style={{ order: ord("formulario") }}>
           {fields?.length && onSubmit ? (
             <FormBlock
               busy={!!submitting}
@@ -391,7 +421,7 @@ export function FrontendPanel({
         </section>
       )}
       {!blocked && (
-        <section className="space-y-2.5">
+        <section className="space-y-2.5" style={{ order: ord("tabla") }}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="font-medium">
               {view ? "Datos" : "Esta página todavía no está configurada."}
@@ -503,6 +533,9 @@ export function FrontendPanel({
                       <th className={TH_CLASS}>Valor</th>
                     )}
                     <th className={TH_CLASS}>Actualizado</th>
+                    {rowActions.length > 0 && (
+                      <th className={TH_CLASS}>Acciones</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -533,6 +566,26 @@ export function FrontendPanel({
                           timeStyle: "short",
                         })}
                       </td>
+                      {rowActions.length > 0 && (
+                        <td className="px-3 py-2.5">
+                          <div className="flex flex-wrap gap-1.5">
+                            {rowActions.map((a) => {
+                              const busy = actionBusy === `${r.key}:${a.id}`;
+                              return (
+                                <Button
+                                  disabled={!onAction || busy}
+                                  key={a.id}
+                                  onClick={() => onAction?.(r.key, a.id)}
+                                  size="sm"
+                                  variant="outline"
+                                >
+                                  {busy ? "Aplicando..." : a.label}
+                                </Button>
+                              );
+                            })}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
