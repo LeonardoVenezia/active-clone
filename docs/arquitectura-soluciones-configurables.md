@@ -252,7 +252,8 @@ persistente; Trello linkea acá.
 
 - El panel del cliente (`/frontend/[workflowId]`) muestra una sección
   "Fuentes de esta solución" con cuatro estados distinguibles por fuente:
-  **Al día** (última consulta correcta), **Error** (activa con fallo, p.ej.
+  **Consulta exitosa** (con la fecha de esa consulta; renombrado desde
+  "Al día" para no prometer frescura por un éxito pasado), **Error** (activa con fallo, p.ej.
   credencial faltante, con el detalle redactado), **Sin datos todavía**
   (activa sin consulta en el último run) y **Desactivada** (decisión de la
   solución, explicada siempre). Cuando TODAS las fuentes están desactivadas,
@@ -278,9 +279,11 @@ persistente; Trello linkea acá.
 ### 8-nov-2026: frescura visible y copy de cliente (commit 1c8a58a)
 
 - Cada fuente consultada muestra la **fecha real de su última consulta**
-  (formato es-AR): "Al día" ya no promete frescura, la exhibe. La fecha
-  sale del timestamp del log del último run (`/api/datos` lo propaga como
-  `at` ISO por outcome).
+  (formato es-AR). La fecha sale del timestamp del log del último run
+  (`/api/datos` lo propaga como `at` ISO por outcome).
+- Chip renombrado: **"Consulta exitosa"** (antes "Al día") con detalle
+  "Datos de la última consulta <fecha>": un éxito pasado con fecha no
+  garantiza frescura actual, y el estado nunca lo sugiere.
 - Errores de configuración con **copy para el cliente**: "Falta conectar
   Stripe." en lugar del mensaje crudo interno (`STRIPE_SECRET_KEY is not
   configured`); el detalle interno queda para la vista Sistema. Regla:

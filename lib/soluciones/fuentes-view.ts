@@ -103,7 +103,7 @@ export function fuentesView(
         integration,
         label,
         state: "al_dia",
-        detail: "Última consulta correcta.",
+        detail: "Datos de la última consulta",
         ...(outcome.at ? { lastRunAt: outcome.at } : {}),
       });
     }

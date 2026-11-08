@@ -9,7 +9,7 @@ const baseView = {
   showRun: true,
   solution: {
     brand: "Distribuidora Andina",
-    subheading: "Precios mayoristas actualizados con cada ejecución.",
+    subheading: "Tus fuentes y precios en un solo lugar.",
     accent: "#0f766e",
   },
 };
@@ -29,7 +29,7 @@ const escenarioMixto = h(FrontendPanel, {
       integration: "tiendanube",
       label: "Tiendanube",
       state: "al_dia",
-      detail: "Última consulta correcta.",
+      detail: "Datos de la última consulta",
       lastRunAt: ahora,
     },
     {
@@ -50,7 +50,11 @@ const escenarioMixto = h(FrontendPanel, {
 });
 
 const escenarioTodasOff = h(FrontendPanel, {
-  view: { ...baseView, title: "Panel de stock" },
+  view: {
+    ...baseView,
+    title: "Panel de stock",
+    solution: { ...baseView.solution, subheading: "Stock de tus depósitos." },
+  },
   records: [],
   message: "",
   canRun: true,

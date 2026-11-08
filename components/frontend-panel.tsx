@@ -36,7 +36,7 @@ export type PanelFuente = {
 };
 
 const FUENTE_STATE_TEXT: Record<PanelFuente["state"], string> = {
-  al_dia: "Al día",
+  al_dia: "Consulta exitosa",
   sin_datos: "Sin datos todavía",
   error: "Error",
   desactivada: "Desactivada",
