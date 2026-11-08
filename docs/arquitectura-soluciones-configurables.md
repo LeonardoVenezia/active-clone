@@ -165,5 +165,27 @@ persistente; Trello linkea acá.
   8 tests dentro del gate CI del pack):
   parse defensivo, identificación de fuente por paso, inactividad explícita
   vs. activa vs. no declarada, contrato de ausencia, config desde nodos.
-- Pendiente de validación end-to-end en preview con fixtures QA: fan-in mixto
-  (activa + inactiva), todas inactivas, rama activa con error.
+- Validación end-to-end en preview (cuenta QA aislada, 8-nov-2026):
+  - **Fan-in mixto** (run `rqj3eoztb4e5ytteqzs4z`, workflow fixture
+    `ma94hwgh9i9k74bpl4prx`): rama activa con éxito (`Fórmula`), rama activa
+    sin credencial (`stripe/get-payment`) y rama inactiva
+    (`tiendanube/search-orders`). Resultado: la inactiva quedó registrada en
+    el log como "Pedidos TN (omitido por solución)" con el motivo y el
+    marcador `__solutionOmitted`, sin consulta al proveedor; la activa sin
+    credencial falló visible (`STRIPE_SECRET_KEY is not configured`); `Unir`
+    corrió con `completed=[Ventas QA]`, `failed=[Pago Stripe]`,
+    `omitted=[Pedidos TN]`; el consumidor posterior recibió la salida del
+    `Unir` (incluida la lista de omitidos) y terminó OK.
+  - **Todas inactivas** (run `tbz9e5ba0h4rq8de4l8pc`, workflow
+    `0obnr3o08qv133akaf77v`): dos fuentes declaradas inactivas. Resultado:
+    ambas omitidas y registradas, `Unir` y el consumidor nunca corrieron, el
+    run terminó en éxito sin errores y sin esperas.
+  - **Rama activa con error** (run `b2f1yjufqtuhb9bhx1qc2`): `Unir` lista el
+    fallo aparte de los omitidos y propaga el error visible.
+  - Hallazgo QA sin impacto en el diseño: la integración Mercado Libre de la
+    cuenta QA figura en el listado pero no tiene tokens guardados, así que
+    sus pasos responden "not connected" (fallo visible correcto, no
+    relacionado con el gating). La rama activa con éxito se demostró con
+    `Fórmula` (paso sin credenciales).
+  - Evidencia visual: capturas del canvas y del panel Ejecuciones de ambos
+    fixtures (adjuntas al reporte del encargo).
