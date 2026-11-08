@@ -1,13 +1,14 @@
 // Fixture-driven assisted support: drafts only with real context, human
 // routing for anything uncovered. Validates lib/support/assisted-shared.ts.
 // No real sending.
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
   buildVistaRespuestas,
+  type Consulta,
   clasificarTema,
   prepararRespuestas,
-  type Consulta,
 } from "../../lib/support/assisted-shared";
 
 const contexto = {
@@ -16,12 +17,42 @@ const contexto = {
 };
 
 const consultasFixture: Consulta[] = [
-  { consultaId: "C-1", cliente: "Ana", texto: "Hola, ¿cómo viene mi pedido?", pedidoId: "TN-1001" },
-  { consultaId: "C-2", cliente: "Bruno", texto: "¿Dónde está el envío? ¿Tienen tracking?", pedidoId: "TN-1002" },
-  { consultaId: "C-3", cliente: "Carla", texto: "El paquete no llega, viene con demora", pedidoId: "TN-1002" },
-  { consultaId: "C-4", cliente: "Damián", texto: "Quiero devolver el producto", pedidoId: "TN-1001" },
-  { consultaId: "C-5", cliente: "Elsa", texto: "¿Hacen envíos a Tierra del Fuego?", pedidoId: "" },
-  { consultaId: "C-6", cliente: "Fede", texto: "¿Cómo viene mi pedido?", pedidoId: "TN-9999" },
+  {
+    consultaId: "C-1",
+    cliente: "Ana",
+    texto: "Hola, ¿cómo viene mi pedido?",
+    pedidoId: "TN-1001",
+  },
+  {
+    consultaId: "C-2",
+    cliente: "Bruno",
+    texto: "¿Dónde está el envío? ¿Tienen tracking?",
+    pedidoId: "TN-1002",
+  },
+  {
+    consultaId: "C-3",
+    cliente: "Carla",
+    texto: "El paquete no llega, viene con demora",
+    pedidoId: "TN-1002",
+  },
+  {
+    consultaId: "C-4",
+    cliente: "Damián",
+    texto: "Quiero devolver el producto",
+    pedidoId: "TN-1001",
+  },
+  {
+    consultaId: "C-5",
+    cliente: "Elsa",
+    texto: "¿Hacen envíos a Tierra del Fuego?",
+    pedidoId: "",
+  },
+  {
+    consultaId: "C-6",
+    cliente: "Fede",
+    texto: "¿Cómo viene mi pedido?",
+    pedidoId: "TN-9999",
+  },
 ];
 
 test("clasificación conservadora por palabras clave", () => {
@@ -62,7 +93,9 @@ test("marcaKey una por consulta, estable y válida", () => {
   const respuestas = prepararRespuestas(consultasFixture, contexto);
   const keys = respuestas.map((r) => r.marcaKey);
   assert.equal(new Set(keys).size, keys.length);
-  for (const k of keys) assert.match(k, /^[A-Za-z0-9._:@-]+$/);
+  for (const k of keys) {
+    assert.match(k, /^[A-Za-z0-9._:@-]+$/);
+  }
 });
 
 test("vista distingue Nuevo / Ya preparado y muestra derivación", () => {

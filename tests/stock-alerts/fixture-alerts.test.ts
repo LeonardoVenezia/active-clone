@@ -1,19 +1,26 @@
 // Fixture-driven stock alerts: threshold, per-product override, sin_dato.
 // Validates lib/stock/alerts-shared.ts. No real stock APIs.
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
   buildVistaStock,
   decidirMarca,
-  revisarStock,
   type MarcaStock,
   type ProductoShape,
+  revisarStock,
 } from "../../lib/stock/alerts-shared";
 
 const productosFixture: ProductoShape[] = [
   { productoId: "P-1", sku: "SKU-ROJO", nombre: "Remera roja", stock: 2 },
   { productoId: "P-2", sku: "SKU-AZUL", nombre: "Remera azul", stock: 20 },
-  { productoId: "P-3", sku: "SKU-VERDE", nombre: "Remera verde", stock: 8, umbral: 10 },
+  {
+    productoId: "P-3",
+    sku: "SKU-VERDE",
+    nombre: "Remera verde",
+    stock: 8,
+    umbral: 10,
+  },
   { productoId: "P-4", sku: "SKU-SIN", nombre: "Sin dato", stock: "no se" },
   { sku: "SKU-SINID", stock: 0 },
 ];
@@ -45,7 +52,7 @@ test("stock igual al umbral NO alerta", () => {
 test("marcaKey estable y con caracteres válidos para Datos", () => {
   const alertas = revisarStock(
     [{ productoId: "prod éxito/1 (a)", stock: 1 }],
-    5,
+    5
   );
   assert.equal(alertas.length, 1);
   const key = alertas[0].marcaKey;
@@ -58,22 +65,46 @@ test("marcaKey estable y con caracteres válidos para Datos", () => {
 
 test("episodio nuevo tras recuperación: no se silencia para siempre", () => {
   const alerta = revisarStock([{ productoId: "P-9", stock: 1 }], 5)[0];
-  const activa: MarcaStock = { productoId: "P-9", motivo: "bajo_stock", stock: 1, umbral: 5, estado: "activa" };
+  const activa: MarcaStock = {
+    productoId: "P-9",
+    motivo: "bajo_stock",
+    stock: 1,
+    umbral: 5,
+    estado: "activa",
+  };
   const resuelta: MarcaStock = { ...activa, estado: "resuelta" };
   // Primera caída: crear / Nuevo
-  assert.deepEqual(decidirMarca(alerta, null), { accion: "crear", deteccion: "Nuevo" });
+  assert.deepEqual(decidirMarca(alerta, null), {
+    accion: "crear",
+    deteccion: "Nuevo",
+  });
   // Repetición con episodio activo: mantener / Ya detectado
-  assert.deepEqual(decidirMarca(alerta, activa), { accion: "mantener", deteccion: "Ya detectado" });
+  assert.deepEqual(decidirMarca(alerta, activa), {
+    accion: "mantener",
+    deteccion: "Ya detectado",
+  });
   // Recuperación (alerta=null) con marca activa: resolver
-  assert.deepEqual(decidirMarca(null, activa), { accion: "resolver", deteccion: null });
+  assert.deepEqual(decidirMarca(null, activa), {
+    accion: "resolver",
+    deteccion: null,
+  });
   // Nueva caída tras recuperación: reactivar / Nuevo (NO silenciada)
-  assert.deepEqual(decidirMarca(alerta, resuelta), { accion: "reactivar", deteccion: "Nuevo" });
+  assert.deepEqual(decidirMarca(alerta, resuelta), {
+    accion: "reactivar",
+    deteccion: "Nuevo",
+  });
   // Sano sin marca: no escribe nada
-  assert.deepEqual(decidirMarca(null, null), { accion: "nada", deteccion: null });
+  assert.deepEqual(decidirMarca(null, null), {
+    accion: "nada",
+    deteccion: null,
+  });
   // Cambio de motivo con episodio activo: episodio nuevo
   const otra = revisarStock([{ productoId: "P-9", stock: "???" }], 5)[0];
   assert.equal(otra.motivo, "sin_dato");
-  assert.deepEqual(decidirMarca(otra, activa), { accion: "reactivar", deteccion: "Nuevo" });
+  assert.deepEqual(decidirMarca(otra, activa), {
+    accion: "reactivar",
+    deteccion: "Nuevo",
+  });
 });
 
 test("vista marca Ya detectado solo en claves conocidas", () => {

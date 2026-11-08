@@ -29,9 +29,13 @@ export function defaultPosition(index: number): { x: number; y: number } {
 }
 
 // Devuelve los nodos con position válida garantizada. No muta la entrada.
-export function ensureNodePositions<T extends NodeWithMaybePosition>(nodes: T[]): T[] {
+export function ensureNodePositions<T extends NodeWithMaybePosition>(
+  nodes: T[]
+): T[] {
   return nodes.map((node, index) => {
-    if (isValidPosition(node.position)) return node;
+    if (isValidPosition(node.position)) {
+      return node;
+    }
     return { ...node, position: defaultPosition(index) };
   });
 }

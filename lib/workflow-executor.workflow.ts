@@ -1,32 +1,40 @@
-import {companyVariableKeys} from "@/lib/company-variables";
 import { companyVariablesDeniedForRun } from "@/lib/company/run-policy";
+import { companyVariableKeys } from "@/lib/company-variables";
+
 /**
  * Workflow-based executor using "use workflow" and "use step" directives
  * This executor captures step executions through the workflow SDK for better observability
  */
 
+import { createHook, sleep } from "workflow";
 import {
   preValidateConditionExpression,
   validateConditionExpression,
 } from "@/lib/condition-validator";
+import { resolveFieldValue } from "./field-path";
+import { exposeStepOutput } from "./loop-output";
+import {
+  canContinueAfterError,
+  explicitErrorPolicy,
+  failedStepOutput,
+} from "./node-error-policy";
 import {
   getActionLabel,
   getStepImporter,
   type StepImporter,
 } from "./step-registry";
-import { diagnoseFormulaAction, diagnoseTemplateReferences } from "./template-diagnostics";
-import { resolveFieldValue } from "./field-path";
-import { exposeStepOutput } from "./loop-output";
-import { canContinueAfterError, explicitErrorPolicy, failedStepOutput } from "./node-error-policy";
-import type { StepContext } from "./steps/step-handler";
-import { createHook, sleep } from "workflow";
-import { markExecutionStartErrorStep } from "./steps/execution-status";
-import { triggerStep } from "./steps/trigger";
-import { joinStep } from "./steps/join";
 import {
   recordApprovalDecisionStep,
   recordPendingApprovalStep,
 } from "./steps/approval";
+import { markExecutionStartErrorStep } from "./steps/execution-status";
+import { joinStep } from "./steps/join";
+import type { StepContext } from "./steps/step-handler";
+import { triggerStep } from "./steps/trigger";
+import {
+  diagnoseFormulaAction,
+  diagnoseTemplateReferences,
+} from "./template-diagnostics";
 import { getErrorMessageAsync } from "./utils";
 import type { WorkflowEdge, WorkflowNode } from "./workflow-store";
 
@@ -47,7 +55,7 @@ const SYSTEM_ACTIONS: Record<string, StepImporter> = {
     importer: () => import("./steps/condition") as Promise<any>,
     stepFunction: "conditionStep",
   },
-  "Fórmula": {
+  Fórmula: {
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic module import
     importer: () => import("./steps/formula") as Promise<any>,
     stepFunction: "formulaStep",
@@ -113,7 +121,6 @@ export type WorkflowExecutionInput = {
   dataOrganizationId?: string; // Server-resolved organization for the Datos action (never from node config)
   dataCanDefineFields?: boolean; // Server-decided: the runner is owner/admin of that organization (never from node config)
 };
-
 
 /**
  * Helper to replace template variables in conditions
@@ -246,11 +253,14 @@ function evaluateConditionExpression(
   return { result: Boolean(conditionExpression), resolvedValues: {} };
 }
 
+const SOURCE_PATTERN = /^\s*\{\{@([^:]+):([^}]+)\}\}\s*$/;
+
 /**
  * Execute a single action step with logging via stepHandler
  * IMPORTANT: Steps receive only the integration ID as a reference to fetch credentials.
  * This prevents credentials from being logged in Vercel's workflow observability.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: orquestador con ramas por tipo de paso; refactor fuera de alcance
 async function executeActionStep(input: {
   actionType: string;
   config: Record<string, unknown>;
@@ -268,9 +278,19 @@ async function executeActionStep(input: {
   };
   // Datos: the organization is injected by the server after the config spread,
   // so a node config can never choose it. Other actions never receive it.
+  // biome-ignore lint/performance/noDelete: el tipo Record exige delete para retirar la key interna
   delete stepInput._dataOrganizationId;
+  // biome-ignore lint/performance/noDelete: el tipo Record exige delete para retirar la key interna
   delete stepInput._dataCanDefineFields;
-  if (actionType === "Datos" || actionType === "Comparar Stock" || actionType === "Conciliar Pagos" || actionType === "Revisar Envíos" || actionType === "Alertas de Stock" || actionType === "Preparar Avisos" || actionType === "Preparar Respuestas") {
+  if (
+    actionType === "Datos" ||
+    actionType === "Comparar Stock" ||
+    actionType === "Conciliar Pagos" ||
+    actionType === "Revisar Envíos" ||
+    actionType === "Alertas de Stock" ||
+    actionType === "Preparar Avisos" ||
+    actionType === "Preparar Respuestas"
+  ) {
     stepInput._dataOrganizationId = input.dataOrganizationId;
     stepInput._dataCanDefineFields = input.dataCanDefineFields === true;
   }
@@ -294,7 +314,6 @@ async function executeActionStep(input: {
       _context: context,
     });
   }
-
 
   // Special handling for Delay action - durable sleep in the workflow context
   if (actionType === "Delay") {
@@ -415,15 +434,20 @@ const JSON_STRING_CONFIG_KEYS = new Set([
 ]);
 
 function escapeForJsonString(raw: string): string {
-  return raw
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/\r/g, "\\r")
-    .replace(/\n/g, "\\n")
-    .replace(/\t/g, "\\t")
-    // Remaining control characters (and the JS line separators) are not valid raw inside a JSON string.
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional
-    .replace(/[\u0000-\u001f\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  return (
+    raw
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/\r/g, "\\r")
+      .replace(/\n/g, "\\n")
+      .replace(/\t/g, "\\t")
+      // Remaining control characters (and the JS line separators) are not valid raw inside a JSON string.
+      .replace(
+        // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional escaping of control chars in JSON strings
+        /[\u0000-\u001f\u2028\u2029]/g,
+        (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`
+      )
+  );
 }
 
 function processTemplates(
@@ -441,6 +465,7 @@ function processTemplates(
       processedValue = processedValue.replace(
         templatePattern,
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Template processing requires nested logic
+        // biome-ignore lint/nursery/useMaxParams: firma fija del callback de String.replace
         (match, nodeId, rest, offset, whole) => {
           // Is the template inside a JSON string literal? Scan the original
           // (pre-replacement) value counting unescaped quotes up to offset.
@@ -450,8 +475,13 @@ function processTemplates(
             let inside = false;
             for (let i = 0; i < before.length; i++) {
               const ch = before[i];
-              if (ch === "\\") { i++; continue; }
-              if (ch === '"') inside = !inside;
+              if (ch === "\\") {
+                i += 1;
+                continue;
+              }
+              if (ch === '"') {
+                inside = !inside;
+              }
             }
             inJsonString = inside;
           }
@@ -510,6 +540,7 @@ function processTemplates(
 /**
  * Main workflow executor function
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: orquestador principal con ramas por tipo de paso; refactor fuera de alcance
 export async function executeWorkflow(input: WorkflowExecutionInput) {
   "use workflow";
 
@@ -539,7 +570,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
       executionId,
       error: "Company variable execution is not enabled",
     });
-    throw Error("Company variable execution is not enabled");
+    throw new Error("Company variable execution is not enabled");
   }
 
   const outputs: NodeOutputs = {};
@@ -578,17 +609,28 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
       state.set(id, 1);
       reachable.add(id);
       for (const t of edgesBySource.get(id) || []) {
-        if (state.get(t) === 1) backEdges.add(`${id}->${t}`);
-        else if (!state.has(t)) dfs(t);
+        if (state.get(t) === 1) {
+          backEdges.add(`${id}->${t}`);
+        } else if (!state.has(t)) {
+          dfs(t);
+        }
       }
       state.set(id, 2);
     };
-    for (const trigger of triggerNodes) if (!state.has(trigger.id)) dfs(trigger.id);
+    for (const trigger of triggerNodes) {
+      if (!state.has(trigger.id)) {
+        dfs(trigger.id);
+      }
+    }
   }
   const waitingOn = new Map<string, Set<string>>();
   for (const edge of edges) {
-    if (!(reachable.has(edge.source) && nodeMap.has(edge.target))) continue;
-    if (backEdges.has(`${edge.source}->${edge.target}`)) continue;
+    if (!(reachable.has(edge.source) && nodeMap.has(edge.target))) {
+      continue;
+    }
+    if (backEdges.has(`${edge.source}->${edge.target}`)) {
+      continue;
+    }
     const set = waitingOn.get(edge.target) || new Set<string>();
     set.add(edge.source);
     waitingOn.set(edge.target, set);
@@ -596,11 +638,19 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
   const resolvedParents = new Map<string, Set<string>>();
   const propagated = new Set<string>();
   // Tell every child of `nodeId` whether this parent delivered (active) or will never deliver (inactive).
-  async function resolveChildren(nodeId: string, active: boolean, visited: Set<string>) {
-    if (propagated.has(nodeId)) return;
+  async function resolveChildren(
+    nodeId: string,
+    active: boolean,
+    visited: Set<string>
+  ) {
+    if (propagated.has(nodeId)) {
+      return;
+    }
     propagated.add(nodeId);
     const children = [...new Set(edgesBySource.get(nodeId) || [])];
-    await Promise.all(children.map((child) => arrive(nodeId, child, active, visited)));
+    await Promise.all(
+      children.map((child) => arrive(nodeId, child, active, visited))
+    );
   }
   const isJoinNode = (id: string) => {
     const n = nodeMap.get(id);
@@ -623,55 +673,109 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
       const gate = new Promise<void>((res) => {
         release = res;
       });
-      st = { status: new Map(), open: true, leader: false, timedOut: [], release, gate };
+      st = {
+        status: new Map(),
+        open: true,
+        leader: false,
+        timedOut: [],
+        release,
+        gate,
+      };
       joinStates.set(id, st);
     }
     return st;
   }
   function joinTimeoutMs(id: string): number | null {
     const cfg = nodeMap.get(id)?.data.config || {};
-    if (cfg.joinMode !== "timeout") return null;
+    if (cfg.joinMode !== "timeout") {
+      return null;
+    }
     const secs = Number(cfg.timeoutSeconds);
-    if (!Number.isFinite(secs) || secs <= 0) return null;
+    if (!Number.isFinite(secs) || secs <= 0) {
+      return null;
+    }
     return Math.min(Math.round(secs), 24 * 60 * 60) * 1000;
   }
-  async function arriveAtJoin(parentId: string, childId: string, active: boolean, visited: Set<string>) {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: lógica de join con ramas de timeout/llegada tardía; refactor fuera de alcance
+  async function arriveAtJoin(
+    parentId: string,
+    childId: string,
+    active: boolean,
+    visited: Set<string>
+  ) {
     const st = joinStateFor(childId);
-    if (!st.open || st.status.has(parentId)) return; // late arrival after the deadline: ignored
-    st.status.set(parentId, results[parentId]?.success === false ? "failed" : active ? "ok" : "skipped");
+    if (!st.open || st.status.has(parentId)) {
+      return; // late arrival after the deadline: ignored
+    }
+    let arrival: "failed" | "ok" | "skipped";
+    if (results[parentId]?.success === false) {
+      arrival = "failed";
+    } else if (active) {
+      arrival = "ok";
+    } else {
+      arrival = "skipped";
+    }
+    st.status.set(parentId, arrival);
     const needed = waitingOn.get(childId);
-    if (!needed || st.status.size >= needed.size) st.release();
-    if (st.leader) return;
+    if (!needed || st.status.size >= needed.size) {
+      st.release();
+    }
+    if (st.leader) {
+      return;
+    }
     st.leader = true; // the first branch to arrive carries the wait; the others just report in and return
     const ms = joinTimeoutMs(childId);
-    if (ms === null) await st.gate;
-    else await Promise.race([st.gate, sleep(ms)]);
+    if (ms === null) {
+      await st.gate;
+    } else {
+      await Promise.race([st.gate, sleep(ms)]);
+    }
     st.open = false;
     st.timedOut = [...(needed || [])].filter((p) => !st.status.has(p));
     const anyOk = [...st.status.values()].includes("ok");
-    if (anyOk || st.timedOut.length > 0 || [...st.status.values()].includes("failed")) {
+    if (
+      anyOk ||
+      st.timedOut.length > 0 ||
+      [...st.status.values()].includes("failed")
+    ) {
       await executeNode(childId, visited);
     } else {
       await resolveChildren(childId, false, visited);
     }
   }
-  async function arrive(parentId: string, childId: string, active: boolean, visited: Set<string>) {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: recorrido de ejecución con ramas de back-edge/join; refactor fuera de alcance
+  async function arrive(
+    parentId: string,
+    childId: string,
+    active: boolean,
+    visited: Set<string>
+  ) {
     if (backEdges.has(`${parentId}->${childId}`)) {
-      if (active) await executeNode(childId, visited);
+      if (active) {
+        await executeNode(childId, visited);
+      }
       return;
     }
-    if (isJoinNode(childId)) return arriveAtJoin(parentId, childId, active, visited);
+    if (isJoinNode(childId)) {
+      return arriveAtJoin(parentId, childId, active, visited);
+    }
     const done = resolvedParents.get(childId) || new Set<string>();
     resolvedParents.set(childId, done);
-    if (done.has(parentId)) return;
+    if (done.has(parentId)) {
+      return;
+    }
     done.add(parentId);
     if (active) {
       await executeNode(childId, visited); // first live parent runs it, once (visited)
       return;
     }
     const needed = waitingOn.get(childId);
-    if (needed && done.size < needed.size) return;
-    if (!visited.has(childId)) await resolveChildren(childId, false, visited);
+    if (needed && done.size < needed.size) {
+      return;
+    }
+    if (!visited.has(childId)) {
+      await resolveChildren(childId, false, visited);
+    }
   }
 
   // Helper to get a meaningful node name
@@ -713,7 +817,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
     const label = node.data.label || node.id;
     const source = typeof config.source === "string" ? config.source : "";
     let list: unknown;
-    const sourceMatch = source.match(/^\s*\{\{@([^:]+):([^}]+)\}\}\s*$/);
+    const sourceMatch = source.match(SOURCE_PATTERN);
     if (sourceMatch) {
       const sanitizedSourceId = sourceMatch[1].replace(/[^a-zA-Z0-9]/g, "_");
       const sourceOutput = baseOutputs[sanitizedSourceId];
@@ -814,7 +918,13 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
         }
         // Accept parameters both nested under config and (as the AI
         // builder sometimes emits them) at the step's top level
-        const { id: _bodyId, actionType: _bodyAction, steps: _bodySteps, config: bodyConfig, ...topLevelParams } = bodyStep;
+        const {
+          id: _bodyId,
+          actionType: _bodyAction,
+          steps: _bodySteps,
+          config: bodyConfig,
+          ...topLevelParams
+        } = bodyStep;
         const rawBodyConfig = { ...topLevelParams, ...(bodyConfig || {}) };
         const processedBodyConfig = processTemplates(
           rawBodyConfig,
@@ -855,13 +965,15 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
                     `Inner step "${stepAction}" failed`,
             });
             itemFailed = true;
+            // biome-ignore lint/style/noNonNullAssertion: el loop garantiza al menos un paso fallido en esta rama
             const errorOutput = failedStepOutput(failed.at(-1)!.error);
             if (loopPolicy === "continue" && stepAction !== "Approval") {
               stepOutputs[stepId] = errorOutput;
               itemOutputs[stepId] = { label: stepAction, data: errorOutput };
               continue;
             }
-            if (loopPolicy && stepAction === "Approval") stoppedOnRefusal = true;
+            if (loopPolicy && stepAction === "Approval")
+              stoppedOnRefusal = true;
             break;
           }
           itemResult = bodyResult;
@@ -894,6 +1006,7 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
           });
           itemFailed = true;
           if (loopPolicy === "continue" && stepAction !== "Approval") {
+            // biome-ignore lint/style/noNonNullAssertion: el loop garantiza al menos un paso fallido en esta rama
             const errorOutput = failedStepOutput(failed.at(-1)!.error);
             stepOutputs[stepId] = errorOutput;
             itemOutputs[stepId] = { label: stepAction, data: errorOutput };
@@ -931,7 +1044,13 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
         failed,
         filtered,
         count: items.length,
-        ...(loopPolicy ? { processed: processedItems, stopped: processedItems < items.length, stoppedOnRefusal } : {}),
+        ...(loopPolicy
+          ? {
+              processed: processedItems,
+              stopped: processedItems < items.length,
+              stoppedOnRefusal,
+            }
+          : {}),
         completed: loopResults.length,
         failedCount: failed.length,
         filteredCount: filtered.length,
@@ -952,9 +1071,16 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
       // Keep the failed result and log. Continuing never makes a failed run green.
       outputs[nodeId.replace(/[^a-zA-Z0-9]/g, "_")] = {
         label: node.data.label || nodeId,
-        data: { ...(result.data && typeof result.data === "object" ? result.data : {}), ...failedStepOutput(result.error || "El paso falló.") },
+        data: {
+          ...(result.data && typeof result.data === "object"
+            ? result.data
+            : {}),
+          ...failedStepOutput(result.error || "El paso falló."),
+        },
       };
-      const refused = (result.data as { stoppedOnRefusal?: boolean } | undefined)?.stoppedOnRefusal;
+      const refused = (
+        result.data as { stoppedOnRefusal?: boolean } | undefined
+      )?.stoppedOnRefusal;
       if (!refused && canContinueAfterError(node.data.config)) {
         await resolveChildren(nodeId, true, visited);
       }
@@ -989,7 +1115,6 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
         data: null,
       };
 
-      const nextNodes = edgesBySource.get(nodeId) || [];
       await resolveChildren(nodeId, true, visited);
       return;
     }
@@ -1075,7 +1200,6 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
             data: result.data,
           };
           if (result.success) {
-            const nextNodes = edgesBySource.get(nodeId) || [];
             await resolveChildren(nodeId, true, visited);
           }
           return;
@@ -1098,18 +1222,35 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
             else skipped.push(label(pid));
           }
           const timedOut = st.timedOut.map(label);
-          const data = { inputs, completed, failed, skipped, timedOut, hasTimedOut: timedOut.length > 0 };
+          const data = {
+            inputs,
+            completed,
+            failed,
+            skipped,
+            timedOut,
+            hasTimedOut: timedOut.length > 0,
+          };
           const cfg2 = config as Record<string, unknown>;
           let error: string | undefined;
-          if (failed.length > 0 && (Boolean(explicitErrorPolicy(cfg2)) || cfg2.onParentFailure !== "continue")) {
+          if (
+            failed.length > 0 &&
+            (Boolean(explicitErrorPolicy(cfg2)) ||
+              cfg2.onParentFailure !== "continue")
+          ) {
             error = `Unir: fallaron ramas de entrada: ${failed.join(", ")}.`;
-          } else if (timedOut.length > 0 && (Boolean(explicitErrorPolicy(cfg2)) || cfg2.onTimeout !== "continue")) {
+          } else if (
+            timedOut.length > 0 &&
+            (Boolean(explicitErrorPolicy(cfg2)) ||
+              cfg2.onTimeout !== "continue")
+          ) {
             error = `Unir: se agotó el tiempo de espera; faltaron: ${timedOut.join(", ")}.`;
           } else if (completed.length === 0) {
             error = "Unir: ninguna rama de entrada terminó con datos.";
           }
           result = await joinStep({
-            result: error ? { success: false, error, data } : { success: true, data },
+            result: error
+              ? { success: false, error, data }
+              : { success: true, data },
             _context: {
               executionId,
               workflowId,
@@ -1119,7 +1260,10 @@ export async function executeWorkflow(input: WorkflowExecutionInput) {
             },
           });
           results[nodeId] = result;
-          outputs[nodeId.replace(/[^a-zA-Z0-9]/g, "_")] = { label: node.data.label || nodeId, data };
+          outputs[nodeId.replace(/[^a-zA-Z0-9]/g, "_")] = {
+            label: node.data.label || nodeId,
+            data,
+          };
           if (result.success) await resolveChildren(nodeId, true, visited);
           return;
         }

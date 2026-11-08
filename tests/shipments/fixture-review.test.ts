@@ -1,21 +1,45 @@
 // Fixture-driven shipment review: alert states and no-movement threshold.
 // Validates lib/shipments/review-shared.ts. No real courier APIs.
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
   buildVista,
+  type EnvioShape,
   parseEstadosAlerta,
   revisarEnvios,
-  type EnvioShape,
 } from "../../lib/shipments/review-shared";
 
 // Shapes reducidas al contrato: ML get-shipment (status/substatus) y un envío
 // de courier con días sin movimiento.
 const enviosFixture: EnvioShape[] = [
-  { envioId: "ME2-111", canal: "mercadolibre", estado: "shipped", subestado: "delayed", referencia: "ML-2001" },
-  { envioId: "CA-222", canal: "correoargentino", estado: "en_transito", diasEnEstado: 9, referencia: "TN-1001" },
-  { envioId: "ZN-333", canal: "zipnova", estado: "en_transito", diasEnEstado: 2, referencia: "TN-1002" },
-  { envioId: "EP-444", canal: "enviopack", estado: "delivered", referencia: "TN-1003" },
+  {
+    envioId: "ME2-111",
+    canal: "mercadolibre",
+    estado: "shipped",
+    subestado: "delayed",
+    referencia: "ML-2001",
+  },
+  {
+    envioId: "CA-222",
+    canal: "correoargentino",
+    estado: "en_transito",
+    diasEnEstado: 9,
+    referencia: "TN-1001",
+  },
+  {
+    envioId: "ZN-333",
+    canal: "zipnova",
+    estado: "en_transito",
+    diasEnEstado: 2,
+    referencia: "TN-1002",
+  },
+  {
+    envioId: "EP-444",
+    canal: "enviopack",
+    estado: "delivered",
+    referencia: "TN-1003",
+  },
 ];
 
 test("estado alerta (con subestado compuesto) y demora por umbral", () => {
@@ -28,14 +52,25 @@ test("estado alerta (con subestado compuesto) y demora por umbral", () => {
   assert.equal(porEnvio.get("ME2-111")?.motivo, "estado_alerta");
   assert.equal(porEnvio.get("ME2-111")?.estado, "shipped/delayed");
   assert.equal(porEnvio.get("CA-222")?.motivo, "sin_movimiento");
-  assert.equal(porEnvio.get("CA-222")?.marcaKey, "CA-222:sin_movimiento:en_transito");
+  assert.equal(
+    porEnvio.get("CA-222")?.marcaKey,
+    "CA-222:sin_movimiento:en_transito"
+  );
   assert.equal(porEnvio.has("ZN-333"), false);
   assert.equal(porEnvio.has("EP-444"), false);
 });
 
 test("un envío genera una sola alerta: estado alerta prevalece sobre demora", () => {
   const alertas = revisarEnvios(
-    [{ envioId: "X1", canal: "ml", estado: "shipped", subestado: "delayed", diasEnEstado: 30 }],
+    [
+      {
+        envioId: "X1",
+        canal: "ml",
+        estado: "shipped",
+        subestado: "delayed",
+        diasEnEstado: 30,
+      },
+    ],
     { estadosAlerta: ["shipped/delayed"], umbralDias: 7 }
   );
   assert.equal(alertas.length, 1);
@@ -43,8 +78,13 @@ test("un envío genera una sola alerta: estado alerta prevalece sobre demora", (
 });
 
 test("match de estado solo (sin subestado) también alerta", () => {
-  const alertas = revisarEnvios(enviosFixture, { estadosAlerta: ["delivered"] });
-  assert.deepEqual(alertas.map((a) => a.envioId), ["EP-444"]);
+  const alertas = revisarEnvios(enviosFixture, {
+    estadosAlerta: ["delivered"],
+  });
+  assert.deepEqual(
+    alertas.map((a) => a.envioId),
+    ["EP-444"]
+  );
 });
 
 test("días no numéricos o sin dato no disparan demora", () => {
@@ -69,7 +109,10 @@ test("sin umbral configurado no hay alertas de demora", () => {
 
 test("envíos sin id se ignoran", () => {
   const alertas = revisarEnvios(
-    [{ estado: "shipped", subestado: "delayed" }, { envioId: " ", estado: "shipped" }],
+    [
+      { estado: "shipped", subestado: "delayed" },
+      { envioId: " ", estado: "shipped" },
+    ],
     { estadosAlerta: ["shipped/delayed", "shipped"] }
   );
   assert.equal(alertas.length, 0);
@@ -83,7 +126,10 @@ test("parseEstadosAlerta acepta lista o string separado por comas", () => {
 });
 
 test("vista: Nuevo vs Ya detectado según marcas, motivos en español", () => {
-  const alertas = revisarEnvios(enviosFixture, { estadosAlerta: ["shipped/delayed"], umbralDias: 7 });
+  const alertas = revisarEnvios(enviosFixture, {
+    estadosAlerta: ["shipped/delayed"],
+    umbralDias: 7,
+  });
   const yaAvisadas = new Set(["CA-222:sin_movimiento:en_transito"]);
   const vista = buildVista(alertas, yaAvisadas);
   const porEnvio = new Map(vista.map((v) => [v.envio, v]));

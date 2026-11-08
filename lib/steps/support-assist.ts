@@ -10,9 +10,9 @@ import { datosSave, datosSaveIfAbsent } from "../datos/core";
 import { pgDatosRepo } from "../datos/repo";
 import {
   buildVistaRespuestas,
-  prepararRespuestas,
   type Consulta,
   type ContextoPedido,
+  prepararRespuestas,
 } from "../support/assisted-shared";
 import { type StepInput, withStepLogging } from "./step-handler";
 
@@ -29,10 +29,14 @@ const DEFAULT_REPORTE_COLLECTION = "reporte_soporte";
 const REPORTE_KEY = "ultimo";
 
 function parseList(value: unknown): unknown[] | null {
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value)) {
+    return value;
+  }
   if (typeof value === "string") {
     const trimmed = value.trim();
-    if (trimmed === "") return [];
+    if (trimmed === "") {
+      return [];
+    }
     try {
       const parsed = JSON.parse(trimmed);
       return Array.isArray(parsed) ? parsed : null;
@@ -67,20 +71,31 @@ function cleanCollectionName(value: unknown, fallback: string): string {
 async function stepHandler(input: SupportAssistInput) {
   const org = input._dataOrganizationId;
   if (!org) {
-    return { success: false as const, error: "Preparar Respuestas no está disponible para este workflow todavía." };
+    return {
+      success: false as const,
+      error:
+        "Preparar Respuestas no está disponible para este workflow todavía.",
+    };
   }
 
   const consultas = parseList(input.consultas);
   if (consultas === null) {
     return {
       success: false as const,
-      error: "No se pudieron leer las entradas: esperaba la lista de consultas (JSON).",
+      error:
+        "No se pudieron leer las entradas: esperaba la lista de consultas (JSON).",
     };
   }
 
   const contexto = parseContexto(input.contextoPedidos);
-  const marcasCollection = cleanCollectionName(input.marcasCollection, DEFAULT_MARCAS_COLLECTION);
-  const reporteCollection = cleanCollectionName(input.reporteCollection, DEFAULT_REPORTE_COLLECTION);
+  const marcasCollection = cleanCollectionName(
+    input.marcasCollection,
+    DEFAULT_MARCAS_COLLECTION
+  );
+  const reporteCollection = cleanCollectionName(
+    input.reporteCollection,
+    DEFAULT_REPORTE_COLLECTION
+  );
 
   const respuestas = prepararRespuestas(consultas as Consulta[], contexto);
 
@@ -95,12 +110,20 @@ async function stepHandler(input: SupportAssistInput) {
         key: r.marcaKey,
         value: { consultaId: r.consultaId, tema: r.tema, estado: r.estado },
       });
-      if (!marca.success) return { success: false as const, error: marca.error };
-      if (marca.creado) nuevas += 1;
-      else yaPreparadas.add(r.marcaKey);
+      if (!marca.success) {
+        return { success: false as const, error: marca.error };
+      }
+      if (marca.creado) {
+        nuevas += 1;
+      } else {
+        yaPreparadas.add(r.marcaKey);
+      }
     }
   } catch {
-    return { success: false as const, error: "No pudimos acceder a los datos. Probá de nuevo." };
+    return {
+      success: false as const,
+      error: "No pudimos acceder a los datos. Probá de nuevo.",
+    };
   }
 
   const vista = buildVistaRespuestas(respuestas, yaPreparadas);
@@ -110,7 +133,9 @@ async function stepHandler(input: SupportAssistInput) {
   ];
 
   const resumen = {
-    consultasRecibidas: (consultas as Consulta[]).filter((c) => typeof c?.consultaId === "string" && c.consultaId.trim()).length,
+    consultasRecibidas: (consultas as Consulta[]).filter(
+      (c) => typeof c?.consultaId === "string" && c.consultaId.trim()
+    ).length,
     borradoresNuevos: nuevas,
     yaPreparadas: yaPreparadas.size,
     derivadas: respuestas.filter((r) => r.estado === "derivar_humano").length,
@@ -128,9 +153,14 @@ async function stepHandler(input: SupportAssistInput) {
         advertencias,
       },
     });
-    if (!saved.success) return { success: false as const, error: saved.error };
+    if (!saved.success) {
+      return { success: false as const, error: saved.error };
+    }
   } catch {
-    return { success: false as const, error: "No pudimos acceder a los datos. Probá de nuevo." };
+    return {
+      success: false as const,
+      error: "No pudimos acceder a los datos. Probá de nuevo.",
+    };
   }
 
   return {
@@ -142,7 +172,7 @@ async function stepHandler(input: SupportAssistInput) {
   };
 }
 
-export async function supportAssistStep(input: SupportAssistInput) {
+export function supportAssistStep(input: SupportAssistInput) {
   "use step";
 
   return withStepLogging(input, () => stepHandler(input));

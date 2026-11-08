@@ -50,28 +50,48 @@ function asText(value: unknown): string {
 
 // Las claves de Datos solo aceptan letras, números y . _ : @ - (máx 120).
 function marcaKey(consultaId: string): string {
-  const clean = (s: string) => s.replace(/[^A-Za-z0-9._:@-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  const clean = (s: string) =>
+    s
+      .replace(/[^A-Za-z0-9._:@-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
   return clean(consultaId).slice(0, 120);
 }
 
 // Clasificación por palabras clave, conservadora: ante la duda, "otro".
+const RE_DEVOLUCION = /devol|cambio|arrepent/;
+const RE_DEMORA = /demora|tarde|no llega|no llegó|cu[aá]ndo llega/;
+const RE_ENVIO = /env[ií]o|paquete|tracking|seguimiento|d[oó]nde est[aá]/;
+const RE_PEDIDO = /pedido|orden|compra|pago/;
+
 export function clasificarTema(texto: string): TemaSoporte {
   const t = texto.toLowerCase();
-  if (/devol|cambio|arrepent/.test(t)) return "devolucion";
-  if (/demora|tarde|no llega|no llegó|cu[aá]ndo llega/.test(t)) return "demora_envio";
-  if (/env[ií]o|paquete|tracking|seguimiento|d[oó]nde est[aá]/.test(t)) return "estado_envio";
-  if (/pedido|orden|compra|pago/.test(t)) return "estado_pedido";
+  if (RE_DEVOLUCION.test(t)) {
+    return "devolucion";
+  }
+  if (RE_DEMORA.test(t)) {
+    return "demora_envio";
+  }
+  if (RE_ENVIO.test(t)) {
+    return "estado_envio";
+  }
+  if (RE_PEDIDO.test(t)) {
+    return "estado_pedido";
+  }
   return "otro";
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: clasificación conservadora con ramas por tema; las ramas son la regla de negocio
 export function prepararRespuestas(
   consultas: Consulta[],
-  contextoPorPedido: Record<string, ContextoPedido>,
+  contextoPorPedido: Record<string, ContextoPedido>
 ): Respuesta[] {
   const respuestas: Respuesta[] = [];
   for (const c of consultas) {
     const consultaId = asText(c.consultaId);
-    if (!consultaId) continue;
+    if (!consultaId) {
+      continue;
+    }
     const cliente = asText(c.cliente);
     const pedidoId = asText(c.pedidoId);
     const texto = asText(c.texto);
@@ -100,11 +120,12 @@ export function prepararRespuestas(
         ...base,
         borrador: "",
         estado: "derivar_humano",
-        motivoDerivacion: "Devoluciones requieren decisión humana (política de la tienda)",
+        motivoDerivacion:
+          "Devoluciones requieren decisión humana (política de la tienda)",
       });
       continue;
     }
-    if (!pedidoId || !ctx) {
+    if (!(pedidoId && ctx)) {
       respuestas.push({
         ...base,
         borrador: "",
@@ -117,11 +138,14 @@ export function prepararRespuestas(
     }
     const estado = ctx.estado?.trim() || "sin dato";
     const detalle = ctx.detalle?.trim();
-    const cuerpo = tema === "estado_pedido"
-      ? `tu pedido ${pedidoId} está en estado: ${estado}${detalle ? ` (${detalle})` : ""}.`
-      : tema === "estado_envio"
-        ? `el envío de tu pedido ${pedidoId} está en estado: ${estado}${detalle ? ` (${detalle})` : ""}.`
-        : `el envío de tu pedido ${pedidoId} registra estado: ${estado}${detalle ? ` (${detalle})` : ""}.`;
+    let cuerpo: string;
+    if (tema === "estado_pedido") {
+      cuerpo = `tu pedido ${pedidoId} está en estado: ${estado}${detalle ? ` (${detalle})` : ""}.`;
+    } else if (tema === "estado_envio") {
+      cuerpo = `el envío de tu pedido ${pedidoId} está en estado: ${estado}${detalle ? ` (${detalle})` : ""}.`;
+    } else {
+      cuerpo = `el envío de tu pedido ${pedidoId} registra estado: ${estado}${detalle ? ` (${detalle})` : ""}.`;
+    }
     respuestas.push({
       ...base,
       borrador: `${saludo}${cuerpo}`,
@@ -148,13 +172,28 @@ const TEMA_LABELS: Record<TemaSoporte, string> = {
   otro: "Otro",
 };
 
-export function buildVistaRespuestas(respuestas: Respuesta[], yaPreparadas: Set<string>): VistaRespuestaRow[] {
-  return respuestas.map((r) => ({
-    preparacion: yaPreparadas.has(r.marcaKey) ? (r.estado === "derivar_humano" ? "Derivación registrada" : "Ya preparado") : "Nuevo",
-    consulta: r.consultaId,
-    cliente: r.cliente,
-    tema: TEMA_LABELS[r.tema],
-    estado: r.estado === "pendiente_aprobacion" ? "Pendiente de aprobación" : `Deriva a humano: ${r.motivoDerivacion ?? ""}`,
-    borrador: r.borrador || "(sin borrador)",
-  }));
+export function buildVistaRespuestas(
+  respuestas: Respuesta[],
+  yaPreparadas: Set<string>
+): VistaRespuestaRow[] {
+  return respuestas.map((r) => {
+    let preparacion = "Nuevo";
+    if (yaPreparadas.has(r.marcaKey)) {
+      preparacion =
+        r.estado === "derivar_humano"
+          ? "Derivación registrada"
+          : "Ya preparado";
+    }
+    return {
+      preparacion,
+      consulta: r.consultaId,
+      cliente: r.cliente,
+      tema: TEMA_LABELS[r.tema],
+      estado:
+        r.estado === "pendiente_aprobacion"
+          ? "Pendiente de aprobación"
+          : `Deriva a humano: ${r.motivoDerivacion ?? ""}`,
+      borrador: r.borrador || "(sin borrador)",
+    };
+  });
 }

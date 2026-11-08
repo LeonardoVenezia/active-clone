@@ -3,13 +3,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { validateWorkflowIntegrations } from "@/lib/db/integrations";
-import { ensureNodePositions } from "@/lib/workflows/positions";
 import {
   workflowExecutionLogs,
   workflowExecutions,
   workflowShares,
   workflows,
 } from "@/lib/db/schema";
+import { ensureNodePositions } from "@/lib/workflows/positions";
 
 // A user can edit a workflow they own or one explicitly shared with them
 async function hasShareAccess(
@@ -82,7 +82,7 @@ export async function GET(
         : false;
 
     // If not owner and not shared, check if workflow is public
-    if (!isOwner && !isSharedWithUser && workflow.visibility !== "public") {
+    if (!(isOwner || isSharedWithUser) && workflow.visibility !== "public") {
       return NextResponse.json(
         { error: "Workflow not found" },
         { status: 404 }
@@ -136,7 +136,7 @@ function buildUpdateData(
   }
   if (body.nodes !== undefined) {
     // Same normalization as create: never persist nodes without data.type.
-    updateData.nodes = (body.nodes as Array<Record<string, unknown>>).map((n) => ({
+    updateData.nodes = (body.nodes as Record<string, unknown>[]).map((n) => ({
       ...n,
       data: {
         ...(n.data as Record<string, unknown>),
@@ -157,6 +157,7 @@ function buildUpdateData(
   return updateData;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: handler de API con validaciones ramificadas; refactor queda fuera del alcance del pack
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ workflowId: string }> }
@@ -253,7 +254,9 @@ export async function PATCH(
     if (body.active === true) {
       const nodesToCheck = (
         Array.isArray(body.nodes) ? body.nodes : existingWorkflow.nodes
-      ) as Array<{ data?: { type?: string; config?: Record<string, unknown> } }>;
+      ) as Array<{
+        data?: { type?: string; config?: Record<string, unknown> };
+      }>;
       const trigger = nodesToCheck.find((n) => n.data?.type === "trigger");
       const config = trigger?.data?.config;
       if (
@@ -351,7 +354,9 @@ export async function DELETE(
         .delete(workflowExecutions)
         .where(eq(workflowExecutions.workflowId, workflowId));
     }
-    await db.delete(workflowShares).where(eq(workflowShares.workflowId, workflowId));
+    await db
+      .delete(workflowShares)
+      .where(eq(workflowShares.workflowId, workflowId));
 
     await db.delete(workflows).where(eq(workflows.id, workflowId));
 

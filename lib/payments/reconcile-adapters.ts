@@ -19,7 +19,9 @@ function asText(value: unknown): string {
 }
 
 function asNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
   if (typeof value === "string" && value.trim() !== "") {
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
@@ -30,13 +32,25 @@ function asNumber(value: unknown): number | null {
 type Adapted<T> = { items: T[]; advertencias: string[] };
 
 /** True when the value looks like a connector envelope ({orders: [...]}). */
-export function isOrdersEnvelope(value: unknown): value is { orders: unknown[] } {
-  return typeof value === "object" && value !== null && Array.isArray((value as { orders?: unknown }).orders);
+export function isOrdersEnvelope(
+  value: unknown
+): value is { orders: unknown[] } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Array.isArray((value as { orders?: unknown }).orders)
+  );
 }
 
 /** True when the value looks like the MP connector envelope ({payments: [...]}). */
-export function isPaymentsEnvelope(value: unknown): value is { payments: unknown[] } {
-  return typeof value === "object" && value !== null && Array.isArray((value as { payments?: unknown }).payments);
+export function isPaymentsEnvelope(
+  value: unknown
+): value is { payments: unknown[] } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Array.isArray((value as { payments?: unknown }).payments)
+  );
 }
 
 export function adaptVentasTN(env: { orders: unknown[] }): Adapted<VentaShape> {
@@ -45,7 +59,10 @@ export function adaptVentasTN(env: { orders: unknown[] }): Adapted<VentaShape> {
   ];
   const items = env.orders.map((o) => {
     const r = o as Record<string, unknown>;
-    const numero = typeof r.number === "number" && Number.isFinite(r.number) ? String(r.number) : asText(r.number);
+    const numero =
+      typeof r.number === "number" && Number.isFinite(r.number)
+        ? String(r.number)
+        : asText(r.number);
     return {
       ordenId: numero,
       referencia: numero,
@@ -75,14 +92,19 @@ export function adaptVentasML(env: { orders: unknown[] }): Adapted<VentaShape> {
   return { items, advertencias };
 }
 
-export function adaptCobrosMP(env: { payments: unknown[] }): Adapted<PagoShape> {
+export function adaptCobrosMP(env: {
+  payments: unknown[];
+}): Adapted<PagoShape> {
   const advertencias = [
     "El conector de Mercado Pago no expone comisión ni neto: bruto es el monto de la transacción y el neto queda sin dato.",
   ];
   const items = env.payments.map((p) => {
     const r = p as Record<string, unknown>;
     return {
-      pagoId: typeof r.id === "number" && Number.isFinite(r.id) ? String(r.id) : asText(r.id),
+      pagoId:
+        typeof r.id === "number" && Number.isFinite(r.id)
+          ? String(r.id)
+          : asText(r.id),
       referencia: asText(r.externalReference),
       bruto: asNumber(r.amount),
       moneda: asText(r.currency),

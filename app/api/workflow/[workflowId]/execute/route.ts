@@ -1,17 +1,22 @@
-import {companyVariableKeys} from "@/lib/company-variables";
-import { canRunWithCompanyVariables } from "@/lib/company/run-policy";
-import { managementWorkflowScopes } from "@/lib/console/schema";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { start } from "workflow/api";
 import { auth } from "@/lib/auth";
+import { canRunWithCompanyVariables } from "@/lib/company/run-policy";
+import { companyVariableKeys } from "@/lib/company-variables";
+import { managementWorkflowScopes } from "@/lib/console/schema";
+import { orgForWorkflowRead } from "@/lib/datos/access";
+import { datosEnabled } from "@/lib/datos/core";
+import { canDefineDatosFields } from "@/lib/datos/frontend";
 import { db } from "@/lib/db";
 import { validateWorkflowIntegrations } from "@/lib/db/integrations";
 import { workflowExecutions, workflowShares, workflows } from "@/lib/db/schema";
-import { MANUAL_INPUT_MAX_VALUE, manualInputConfigProblems, manualInputFields, prepareInput } from "@/lib/manual-input";
-import { orgForWorkflowRead } from "@/lib/datos/access";
-import { canDefineDatosFields } from "@/lib/datos/frontend";
-import { datosEnabled } from "@/lib/datos/core";
+import {
+  MANUAL_INPUT_MAX_VALUE,
+  manualInputConfigProblems,
+  manualInputFields,
+  prepareInput,
+} from "@/lib/manual-input";
 import { executeWorkflow } from "@/lib/workflow-executor.workflow";
 import type { WorkflowEdge, WorkflowNode } from "@/lib/workflow-store";
 
@@ -74,6 +79,7 @@ async function executeWorkflowBackground(
   }
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: orquestador de ejecución con ramificaciones por tipo de paso; refactor queda fuera del alcance del pack
 export async function POST(
   request: Request,
   context: { params: Promise<{ workflowId: string }> }
@@ -124,12 +130,14 @@ export async function POST(
         .from(managementWorkflowScopes)
         .where(eq(managementWorkflowScopes.workflowId, workflowId));
       if (
-        !runScope ||
-        !canRunWithCompanyVariables({
-          userId: workflow.userId,
-          organizationId: runScope.organizationId,
-          workflowId,
-        })
+        !(
+          runScope &&
+          canRunWithCompanyVariables({
+            userId: workflow.userId,
+            organizationId: runScope.organizationId,
+            workflowId,
+          })
+        )
       ) {
         return NextResponse.json(
           {
@@ -148,13 +156,26 @@ export async function POST(
     // never from the request or the node config. Closed unless enabled.
     let dataOrganizationId: string | undefined;
     let dataCanDefineFields = false;
-    if ((workflow.nodes as WorkflowNode[]).some((n) => {
-      const at = (n as { data?: { config?: { actionType?: unknown } } }).data?.config?.actionType;
-      return at === "Datos" || at === "Comparar Stock" || at === "Conciliar Pagos" || at === "Revisar Envíos" || at === "Alertas de Stock" || at === "Preparar Avisos" || at === "Preparar Respuestas";
-    })) {
+    if (
+      (workflow.nodes as WorkflowNode[]).some((n) => {
+        const at = (n as { data?: { config?: { actionType?: unknown } } }).data
+          ?.config?.actionType;
+        return (
+          at === "Datos" ||
+          at === "Comparar Stock" ||
+          at === "Conciliar Pagos" ||
+          at === "Revisar Envíos" ||
+          at === "Alertas de Stock" ||
+          at === "Preparar Avisos" ||
+          at === "Preparar Respuestas"
+        );
+      })
+    ) {
       // Same server decision as reading: owner/share AND membership of the
       // organization the workflow is scoped to (a share alone is not enough).
-      const dataCtx = datosEnabled() ? await orgForWorkflowRead(request, workflowId) : null;
+      const dataCtx = datosEnabled()
+        ? await orgForWorkflowRead(request, workflowId)
+        : null;
       if (!dataCtx) {
         return NextResponse.json(
           {
@@ -189,24 +210,39 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     let input: Record<string, unknown> = body.input || {};
     // A Manual trigger that asks for data: keep only the declared keys and refuse a run that lacks a required one.
-    if (manualInputConfigProblems(workflow.nodes as WorkflowNode[] as never).length) {
+    if (
+      manualInputConfigProblems(workflow.nodes as WorkflowNode[] as never)
+        .length
+    ) {
       return NextResponse.json(
-        { error: "El disparador Manual tiene mal definidos los datos que pide (inputFields). No se ejecutó nada: corregilo desde el chat o el panel del disparador.", invalidInputFields: true },
+        {
+          error:
+            "El disparador Manual tiene mal definidos los datos que pide (inputFields). No se ejecutó nada: corregilo desde el chat o el panel del disparador.",
+          invalidInputFields: true,
+        },
         { status: 400 }
       );
     }
-    const askedFields = manualInputFields(workflow.nodes as WorkflowNode[] as never);
+    const askedFields = manualInputFields(
+      workflow.nodes as WorkflowNode[] as never
+    );
     if (askedFields.length) {
       const prepared = prepareInput(askedFields, input);
       if (prepared.missing.length) {
         return NextResponse.json(
-          { error: `Falta completar: ${prepared.missing.join(", ")}`, missingInput: prepared.missing },
+          {
+            error: `Falta completar: ${prepared.missing.join(", ")}`,
+            missingInput: prepared.missing,
+          },
           { status: 400 }
         );
       }
       if (prepared.tooLong.length) {
         return NextResponse.json(
-          { error: `Demasiado largo (máximo ${MANUAL_INPUT_MAX_VALUE} caracteres): ${prepared.tooLong.join(", ")}`, tooLongInput: prepared.tooLong },
+          {
+            error: `Demasiado largo (máximo ${MANUAL_INPUT_MAX_VALUE} caracteres): ${prepared.tooLong.join(", ")}`,
+            tooLongInput: prepared.tooLong,
+          },
           { status: 400 }
         );
       }

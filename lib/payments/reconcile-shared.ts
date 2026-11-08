@@ -115,7 +115,9 @@ function asText(value: unknown): string {
 }
 
 function asNumber(value: unknown): number | null {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
   if (typeof value === "string" && value.trim() !== "") {
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
@@ -140,11 +142,18 @@ function sortRows(rows: ReconcileRow[]): ReconcileRow[] {
     conciliado: 6,
   };
   return [...rows].sort(
-    (a, b) => order[a.estado] - order[b.estado] || a.referencia.localeCompare(b.referencia)
+    (a, b) =>
+      order[a.estado] - order[b.estado] ||
+      a.referencia.localeCompare(b.referencia)
   );
 }
 
-function baseRow(v: VentaShape): Omit<ReconcileRow, "estado" | "detalle" | "pagoId" | "bruto" | "comision" | "neto"> {
+function baseRow(
+  v: VentaShape
+): Omit<
+  ReconcileRow,
+  "estado" | "detalle" | "pagoId" | "bruto" | "comision" | "neto"
+> {
   return {
     referencia: asText(v.referencia),
     canal: asText(v.canal),
@@ -162,6 +171,7 @@ function pagoCampos(p: PagoShape) {
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: conciliación con reglas por prioridad; las ramas son la regla de negocio
 export function reconcilePayments(
   ventas: VentaShape[],
   pagos: PagoShape[],
@@ -244,7 +254,15 @@ export function reconcilePayments(
     }
 
     if (!pago) {
-      filas.push({ ...baseRow(venta), pagoId: "", bruto: null, comision: null, neto: null, estado: "venta_sin_cobro", detalle: "" });
+      filas.push({
+        ...baseRow(venta),
+        pagoId: "",
+        bruto: null,
+        comision: null,
+        neto: null,
+        estado: "venta_sin_cobro",
+        detalle: "",
+      });
       continue;
     }
 
@@ -267,7 +285,8 @@ export function reconcilePayments(
         ...baseRow(venta),
         ...pagoCampos(pago),
         estado: "sin_datos_monto",
-        detalle: "Falta el total de la venta o el bruto del cobro, o no es un número finito.",
+        detalle:
+          "Falta el total de la venta o el bruto del cobro, o no es un número finito.",
       });
       continue;
     }
@@ -275,14 +294,19 @@ export function reconcilePayments(
     filas.push({
       ...baseRow(venta),
       ...pagoCampos(pago),
-      estado: Math.abs(bruto - totalVenta) > tolerancia ? "diferencia_monto" : "conciliado",
+      estado:
+        Math.abs(bruto - totalVenta) > tolerancia
+          ? "diferencia_monto"
+          : "conciliado",
       detalle: "",
     });
   }
 
   // Cobros cuya referencia no aparece en ninguna venta.
   for (const [ref, grupoPagos] of pagosPorRef) {
-    if (ventasPorRef.has(ref)) continue;
+    if (ventasPorRef.has(ref)) {
+      continue;
+    }
     for (const p of grupoPagos) {
       filas.push({
         referencia: ref,
@@ -291,13 +315,16 @@ export function reconcilePayments(
         ...pagoCampos(p),
         totalVenta: null,
         estado: pagoAcreditado(p) ? "cobro_sin_venta" : "pago_no_acreditado",
-        detalle: pagoAcreditado(p) ? "" : `Estado del cobro: ${asText(p.estado) || "sin declarar"}.`,
+        detalle: pagoAcreditado(p)
+          ? ""
+          : `Estado del cobro: ${asText(p.estado) || "sin declarar"}.`,
       });
     }
   }
 
   const ordenadas = sortRows(filas);
-  const cuenta = (e: ReconcileEstado) => ordenadas.filter((f) => f.estado === e).length;
+  const cuenta = (e: ReconcileEstado) =>
+    ordenadas.filter((f) => f.estado === e).length;
   return {
     filas: ordenadas,
     resumen: {

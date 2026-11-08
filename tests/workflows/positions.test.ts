@@ -1,6 +1,7 @@
 // Position safety net: loading never crashes, saving never drops positions.
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
   defaultPosition,
   ensureNodePositions,
@@ -14,7 +15,10 @@ test("preserva posiciones válidas y completa las ausentes", () => {
     { id: "d", position: { x: "10" } },
     { id: "e", position: null },
   ] as never[];
-  const out = ensureNodePositions(nodes) as Array<{ id: string; position: { x: number; y: number } }>;
+  const out = ensureNodePositions(nodes) as Array<{
+    id: string;
+    position: { x: number; y: number };
+  }>;
   assert.deepEqual(out[0].position, { x: 10, y: 20 }); // intacta
   for (const n of out) {
     assert.equal(typeof n.position.x, "number");

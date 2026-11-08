@@ -10,19 +10,19 @@ import "server-only";
 import { datosSave } from "../datos/core";
 import { pgDatosRepo } from "../datos/repo";
 import {
-  buildVista,
-  FUERA_DE_ALCANCE,
-  reconcilePayments,
-  type PagoShape,
-  type VentaShape,
-} from "../payments/reconcile-shared";
-import {
   adaptCobrosMP,
   adaptVentasML,
   adaptVentasTN,
   isOrdersEnvelope,
   isPaymentsEnvelope,
 } from "../payments/reconcile-adapters";
+import {
+  buildVista,
+  FUERA_DE_ALCANCE,
+  type PagoShape,
+  reconcilePayments,
+  type VentaShape,
+} from "../payments/reconcile-shared";
 import { type StepInput, withStepLogging } from "./step-handler";
 
 export type PaymentReconcileInput = StepInput & {
@@ -41,10 +41,14 @@ const REPORTE_KEY = "ultimo";
 const DEFAULT_TOLERANCIA = 1;
 
 function parseList(value: unknown): unknown[] | null {
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value)) {
+    return value;
+  }
   if (typeof value === "string") {
     const trimmed = value.trim();
-    if (trimmed === "") return [];
+    if (trimmed === "") {
+      return [];
+    }
     try {
       const parsed = JSON.parse(trimmed);
       return Array.isArray(parsed) ? parsed : null;
@@ -56,9 +60,13 @@ function parseList(value: unknown): unknown[] | null {
 }
 
 function maybeParseJson(value: unknown): unknown {
-  if (typeof value !== "string") return value;
+  if (typeof value !== "string") {
+    return value;
+  }
   const trimmed = value.trim();
-  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) {
+    return value;
+  }
   try {
     return JSON.parse(trimmed);
   } catch {
@@ -71,14 +79,23 @@ function cleanCollectionName(value: unknown, fallback: string): string {
 }
 
 function parseTolerancia(value: unknown): number {
-  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  let n = Number.NaN;
+  if (typeof value === "number") {
+    n = value;
+  } else if (typeof value === "string") {
+    n = Number(value);
+  }
   return Number.isFinite(n) && n >= 0 ? n : DEFAULT_TOLERANCIA;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: orquesta adaptación de entradas por canal; las ramas son la regla de negocio
 async function stepHandler(input: PaymentReconcileInput) {
   const org = input._dataOrganizationId;
   if (!org) {
-    return { success: false as const, error: "Conciliar Pagos no está disponible para este workflow todavía." };
+    return {
+      success: false as const,
+      error: "Conciliar Pagos no está disponible para este workflow todavía.",
+    };
   }
 
   const advertencias: string[] = [...FUERA_DE_ALCANCE];
@@ -88,19 +105,34 @@ async function stepHandler(input: PaymentReconcileInput) {
   // reconcile-adapters.ts. Nunca inventa campos que el conector no expone.
   let ventasRaw = maybeParseJson(input.ventas);
   if (isOrdersEnvelope(ventasRaw)) {
-    const canalCfg = typeof input.canalVentas === "string" ? input.canalVentas.trim().toLowerCase() : "";
+    const canalCfg =
+      typeof input.canalVentas === "string"
+        ? input.canalVentas.trim().toLowerCase()
+        : "";
     const first = ventasRaw.orders[0] as Record<string, unknown> | undefined;
-    const detectado = first && typeof first === "object"
-      ? "number" in first ? "tiendanube" : "id" in first ? "mercadolibre" : ""
-      : "";
-    const canal = canalCfg === "tiendanube" || canalCfg === "mercadolibre" ? canalCfg : detectado;
+    let detectado = "";
+    if (first && typeof first === "object") {
+      if ("number" in first) {
+        detectado = "tiendanube";
+      } else if ("id" in first) {
+        detectado = "mercadolibre";
+      }
+    }
+    const canal =
+      canalCfg === "tiendanube" || canalCfg === "mercadolibre"
+        ? canalCfg
+        : detectado;
     if (!canal) {
       return {
         success: false as const,
-        error: "No pude saber si las órdenes son de Tiendanube o Mercado Libre: configurá el canal de ventas.",
+        error:
+          "No pude saber si las órdenes son de Tiendanube o Mercado Libre: configurá el canal de ventas.",
       };
     }
-    const adapted = canal === "mercadolibre" ? adaptVentasML(ventasRaw) : adaptVentasTN(ventasRaw);
+    const adapted =
+      canal === "mercadolibre"
+        ? adaptVentasML(ventasRaw)
+        : adaptVentasTN(ventasRaw);
     ventasRaw = adapted.items;
     advertencias.push(...adapted.advertencias);
   }
@@ -117,20 +149,32 @@ async function stepHandler(input: PaymentReconcileInput) {
   if (ventas === null || pagos === null) {
     return {
       success: false as const,
-      error: "No se pudieron leer las entradas: esperaba la lista de ventas y la de cobros (JSON).",
+      error:
+        "No se pudieron leer las entradas: esperaba la lista de ventas y la de cobros (JSON).",
     };
   }
 
-  const reporteCollection = cleanCollectionName(input.reporteCollection, DEFAULT_REPORTE_COLLECTION);
+  const reporteCollection = cleanCollectionName(
+    input.reporteCollection,
+    DEFAULT_REPORTE_COLLECTION
+  );
   const tolerancia = parseTolerancia(input.tolerancia);
 
-  const report = reconcilePayments(ventas as VentaShape[], pagos as PagoShape[], tolerancia);
+  const report = reconcilePayments(
+    ventas as VentaShape[],
+    pagos as PagoShape[],
+    tolerancia
+  );
   const vista = buildVista(report.filas);
   if (input.ventasTruncadas === true || input.ventasTruncadas === "true") {
-    advertencias.push("La lista de ventas está incompleta: el reporte no cubre todas las ventas.");
+    advertencias.push(
+      "La lista de ventas está incompleta: el reporte no cubre todas las ventas."
+    );
   }
   if (input.pagosTruncados === true || input.pagosTruncados === "true") {
-    advertencias.push("La lista de cobros está incompleta: el reporte no cubre todos los cobros.");
+    advertencias.push(
+      "La lista de cobros está incompleta: el reporte no cubre todos los cobros."
+    );
   }
 
   try {
@@ -146,10 +190,15 @@ async function stepHandler(input: PaymentReconcileInput) {
         fueraDeAlcance: FUERA_DE_ALCANCE,
       },
     });
-    if (!saved.success) return { success: false as const, error: saved.error };
+    if (!saved.success) {
+      return { success: false as const, error: saved.error };
+    }
   } catch {
     // Never surface SQL or parameters (they can include the organization id).
-    return { success: false as const, error: "No pudimos acceder a los datos. Probá de nuevo." };
+    return {
+      success: false as const,
+      error: "No pudimos acceder a los datos. Probá de nuevo.",
+    };
   }
 
   return {
@@ -161,7 +210,7 @@ async function stepHandler(input: PaymentReconcileInput) {
   };
 }
 
-export async function paymentReconcileStep(input: PaymentReconcileInput) {
+export function paymentReconcileStep(input: PaymentReconcileInput) {
   "use step";
 
   return withStepLogging(input, () => stepHandler(input));

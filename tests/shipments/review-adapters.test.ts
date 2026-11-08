@@ -1,7 +1,8 @@
 // Contract adaptation tests for shipment connector outputs (field names from
 // plugins/mercadolibre|zipnova|enviopack get-shipment steps).
-import test from "node:test";
+
 import assert from "node:assert/strict";
+import test from "node:test";
 import { adaptEnvios } from "../../lib/shipments/review-adapters";
 import { revisarEnvios } from "../../lib/shipments/review-shared";
 
@@ -20,7 +21,13 @@ const mlShipment = {
 };
 
 // Salida real de zipnova/get-shipment
-const zipnovaShipment = { success: true, status: "in_transit", statusDetail: "delayed_at_branch", tracking: "ZN-333", raw: {} };
+const zipnovaShipment = {
+  success: true,
+  status: "in_transit",
+  statusDetail: "delayed_at_branch",
+  tracking: "ZN-333",
+  raw: {},
+};
 
 // Salida real de enviopack/get-shipment: cruda sin taxonomía verificada
 const enviopackRaw = { success: true, shipment: { cualquier: "forma" } };
@@ -28,7 +35,13 @@ const enviopackRaw = { success: true, shipment: { cualquier: "forma" } };
 test("ML get-shipment se adapta a EnvioShape", () => {
   const { envios, omitidos } = adaptEnvios([mlShipment]);
   assert.equal(omitidos, 0);
-  assert.deepEqual(envios[0], { envioId: "4466778899", canal: "mercadolibre", estado: "shipped", subestado: "delayed", referencia: "ME2-111" });
+  assert.deepEqual(envios[0], {
+    envioId: "4466778899",
+    canal: "mercadolibre",
+    estado: "shipped",
+    subestado: "delayed",
+    referencia: "ME2-111",
+  });
 });
 
 test("zipnova get-shipment se adapta con statusDetail como subestado", () => {

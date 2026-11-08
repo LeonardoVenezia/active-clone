@@ -37,7 +37,9 @@ function asText(value: unknown): string {
 }
 
 function asNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
   if (typeof value === "string" && value.trim() !== "") {
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
@@ -47,15 +49,24 @@ function asNumber(value: unknown): number | null {
 
 // Las claves de Datos solo aceptan letras, números y . _ : @ - (máx 120).
 function marcaKey(productoId: string, motivo: string): string {
-  const clean = (s: string) => s.replace(/[^A-Za-z0-9._:@-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  const clean = (s: string) =>
+    s
+      .replace(/[^A-Za-z0-9._:@-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
   return `${clean(productoId)}:${clean(motivo)}`.slice(0, 120);
 }
 
-export function revisarStock(productos: ProductoShape[], umbralDefault: number): AlertaStock[] {
+export function revisarStock(
+  productos: ProductoShape[],
+  umbralDefault: number
+): AlertaStock[] {
   const alertas: AlertaStock[] = [];
   for (const p of productos) {
     const productoId = asText(p.productoId) || asText(p.sku);
-    if (!productoId) continue;
+    if (!productoId) {
+      continue;
+    }
     const sku = asText(p.sku);
     const nombre = asText(p.nombre);
     const umbral = asNumber(p.umbral) ?? umbralDefault;
@@ -120,9 +131,14 @@ export type DecisionMarca = {
 
 // Decisión pura dado el estado actual del producto y la marca guardada.
 // alerta=null significa producto sano (stock >= umbral).
-export function decidirMarca(alerta: AlertaStock | null, existente: MarcaStock | null): DecisionMarca {
+export function decidirMarca(
+  alerta: AlertaStock | null,
+  existente: MarcaStock | null
+): DecisionMarca {
   if (alerta) {
-    if (!existente) return { accion: "crear", deteccion: "Nuevo" };
+    if (!existente) {
+      return { accion: "crear", deteccion: "Nuevo" };
+    }
     if (existente.estado === "activa" && existente.motivo === alerta.motivo) {
       return { accion: "mantener", deteccion: "Ya detectado" };
     }
@@ -140,7 +156,10 @@ const MOTIVO_LABELS: Record<AlertaStockMotivo, string> = {
   sin_dato: "Stock sin dato",
 };
 
-export function buildVistaStock(alertas: AlertaStock[], yaDetectadas: Set<string>): VistaStockRow[] {
+export function buildVistaStock(
+  alertas: AlertaStock[],
+  yaDetectadas: Set<string>
+): VistaStockRow[] {
   return alertas.map((a) => ({
     deteccion: yaDetectadas.has(a.marcaKey) ? "Ya detectado" : "Nuevo",
     producto: a.productoId,

@@ -32,7 +32,9 @@ function asText(value: unknown): string {
 }
 
 function asNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
   if (typeof value === "string" && value.trim() !== "") {
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
@@ -42,12 +44,21 @@ function asNumber(value: unknown): number | null {
 
 // Las claves de Datos solo aceptan letras, números y . _ : @ - (máx 120).
 function marcaKey(envioId: string, motivo: string, estado: string): string {
-  const clean = (s: string) => s.replace(/[^A-Za-z0-9._:@-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-  return `${clean(envioId)}:${clean(motivo)}:${clean(estado) || "sin-estado"}`.slice(0, 120);
+  const clean = (s: string) =>
+    s
+      .replace(/[^A-Za-z0-9._:@-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+  return `${clean(envioId)}:${clean(motivo)}:${clean(estado) || "sin-estado"}`.slice(
+    0,
+    120
+  );
 }
 
 export function parseEstadosAlerta(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map(asText).filter(Boolean);
+  if (Array.isArray(value)) {
+    return value.map(asText).filter(Boolean);
+  }
   return asText(value)
     .split(",")
     .map((s) => s.trim())
@@ -58,20 +69,30 @@ export function revisarEnvios(
   envios: EnvioShape[],
   opts: { estadosAlerta?: string[]; umbralDias?: number | null }
 ): Alerta[] {
-  const estados = new Set((opts.estadosAlerta ?? []).map((e) => e.toLowerCase()));
-  const umbral = typeof opts.umbralDias === "number" && opts.umbralDias > 0 ? opts.umbralDias : null;
+  const estados = new Set(
+    (opts.estadosAlerta ?? []).map((e) => e.toLowerCase())
+  );
+  const umbral =
+    typeof opts.umbralDias === "number" && opts.umbralDias > 0
+      ? opts.umbralDias
+      : null;
   const alertas: Alerta[] = [];
 
   for (const e of envios) {
     const envioId = asText(e.envioId);
-    if (!envioId) continue;
+    if (!envioId) {
+      continue;
+    }
     const estado = asText(e.estado);
     const subestado = asText(e.subestado);
     const canal = asText(e.canal);
     const referencia = asText(e.referencia);
     const compuesto = subestado ? `${estado}/${subestado}` : estado;
 
-    if (estados.has(compuesto.toLowerCase()) || estados.has(estado.toLowerCase())) {
+    if (
+      estados.has(compuesto.toLowerCase()) ||
+      estados.has(estado.toLowerCase())
+    ) {
       alertas.push({
         envioId,
         canal,
@@ -115,7 +136,10 @@ const MOTIVO_LABELS: Record<Motivo, string> = {
   sin_movimiento: "Sin movimiento",
 };
 
-export function buildVista(alertas: Alerta[], yaAvisadas: Set<string>): VistaRow[] {
+export function buildVista(
+  alertas: Alerta[],
+  yaAvisadas: Set<string>
+): VistaRow[] {
   return alertas.map((a) => ({
     aviso: yaAvisadas.has(a.marcaKey) ? "Ya detectado" : "Nuevo",
     envio: a.envioId,

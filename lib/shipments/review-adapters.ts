@@ -23,7 +23,11 @@ export type AdaptEnviosResult = {
 };
 
 function isMlShipment(r: Record<string, unknown>): boolean {
-  return typeof r.id === "string" && typeof r.status === "string" && "trackingNumber" in r;
+  return (
+    typeof r.id === "string" &&
+    typeof r.status === "string" &&
+    "trackingNumber" in r
+  );
 }
 
 function isZipnovaShipment(r: Record<string, unknown>): boolean {
@@ -36,7 +40,9 @@ function isEnviopackRaw(r: Record<string, unknown>): boolean {
 
 /** Maps one entry; returns null when it is already an EnvioShape candidate. */
 function adaptOne(entry: unknown): { envio?: EnvioShape; omitido?: boolean } {
-  if (typeof entry !== "object" || entry === null) return {};
+  if (typeof entry !== "object" || entry === null) {
+    return {};
+  }
   const r = entry as Record<string, unknown>;
   if (isMlShipment(r)) {
     return {
@@ -70,7 +76,9 @@ export function ADAPT_ADVERTENCIAS(enviopackOmitidos: number): string[] {
     "Ningún conector informa los días en el estado actual: la alerta por demora necesita ese dato calculado aparte; con datos reales solo avisa por estado.",
   ];
   if (enviopackOmitidos > 0) {
-    out.push(`Se omitieron ${enviopackOmitidos} envío(s) de Enviopack: su conector devuelve datos crudos sin taxonomía verificada y no se interpretan por las dudas.`);
+    out.push(
+      `Se omitieron ${enviopackOmitidos} envío(s) de Enviopack: su conector devuelve datos crudos sin taxonomía verificada y no se interpretan por las dudas.`
+    );
   }
   return out;
 }
@@ -80,9 +88,13 @@ export function adaptEnvios(entries: unknown[]): AdaptEnviosResult {
   let omitidos = 0;
   for (const entry of entries) {
     const { envio, omitido } = adaptOne(entry);
-    if (envio) envios.push(envio);
-    else if (omitido) omitidos += 1;
-    else envios.push(entry as EnvioShape);
+    if (envio) {
+      envios.push(envio);
+    } else if (omitido) {
+      omitidos += 1;
+    } else {
+      envios.push(entry as EnvioShape);
+    }
   }
   return { envios, omitidos, advertencias: ADAPT_ADVERTENCIAS(omitidos) };
 }

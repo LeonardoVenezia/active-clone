@@ -55,41 +55,58 @@ function asText(value: unknown): string {
 
 // Las claves de Datos solo aceptan letras, números y . _ : @ - (máx 120).
 function marcaKey(pedidoId: string, evento: string): string {
-  const clean = (s: string) => s.replace(/[^A-Za-z0-9._:@-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  const clean = (s: string) =>
+    s
+      .replace(/[^A-Za-z0-9._:@-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
   return `${clean(pedidoId)}:${clean(evento)}`.slice(0, 120);
 }
 
-const TEXTOS: Record<EventoPostcompra, (p: { pedidoId: string; referencia: string }) => string> = {
+const TEXTOS: Record<
+  EventoPostcompra,
+  (p: { pedidoId: string; referencia: string }) => string
+> = {
   pago_confirmado: ({ referencia }) =>
     `Recibimos tu pago del pedido ${referencia}.`,
-  despachado: ({ referencia }) =>
-    `Tu pedido ${referencia} ya está en camino.`,
+  despachado: ({ referencia }) => `Tu pedido ${referencia} ya está en camino.`,
   entregado: ({ referencia }) =>
     `Tu pedido ${referencia} fue entregado. ¡Gracias por tu compra!`,
 };
 
 export function prepararAvisos(
   eventos: PedidoEvento[],
-  eventosHabilitados?: EventoPostcompra[],
+  eventosHabilitados?: EventoPostcompra[]
 ): { avisos: Aviso[]; omitidos: Omitido[] } {
-  const habilitados = new Set(eventosHabilitados && eventosHabilitados.length > 0 ? eventosHabilitados : EVENTOS_PERMITIDOS);
+  const habilitados = new Set(
+    eventosHabilitados && eventosHabilitados.length > 0
+      ? eventosHabilitados
+      : EVENTOS_PERMITIDOS
+  );
   const avisos: Aviso[] = [];
   const omitidos: Omitido[] = [];
   for (const e of eventos) {
     const pedidoId = asText(e.pedidoId);
     const eventoRaw = asText(e.evento);
-    if (!pedidoId) continue;
+    if (!pedidoId) {
+      continue;
+    }
     const referencia = asText(e.referencia) || pedidoId;
     if (!EVENTOS_PERMITIDOS.includes(eventoRaw as EventoPostcompra)) {
       omitidos.push({
         pedidoId,
         evento: eventoRaw || "(vacío)",
-        motivo: "Evento no permitido: solo avisos transaccionales de postcompra",
+        motivo:
+          "Evento no permitido: solo avisos transaccionales de postcompra",
       });
       continue;
     }
     if (!habilitados.has(eventoRaw as EventoPostcompra)) {
-      omitidos.push({ pedidoId, evento: eventoRaw, motivo: "Evento no habilitado en la configuración del paso" });
+      omitidos.push({
+        pedidoId,
+        evento: eventoRaw,
+        motivo: "Evento no habilitado en la configuración del paso",
+      });
       continue;
     }
     const evento = eventoRaw as EventoPostcompra;
@@ -124,7 +141,10 @@ const EVENTO_LABELS: Record<EventoPostcompra, string> = {
   entregado: "Entregado",
 };
 
-export function buildVistaAvisos(avisos: Aviso[], yaPreparados: Set<string>): VistaAvisoRow[] {
+export function buildVistaAvisos(
+  avisos: Aviso[],
+  yaPreparados: Set<string>
+): VistaAvisoRow[] {
   return avisos.map((a) => ({
     preparacion: yaPreparados.has(a.marcaKey) ? "Ya preparado" : "Nuevo",
     pedido: a.pedidoId,

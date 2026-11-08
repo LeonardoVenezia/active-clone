@@ -10,9 +10,9 @@ import { pgDatosRepo } from "../datos/repo";
 import {
   buildVistaStock,
   decidirMarca,
-  revisarStock,
   type MarcaStock,
   type ProductoShape,
+  revisarStock,
 } from "../stock/alerts-shared";
 import { type StepInput, withStepLogging } from "./step-handler";
 
@@ -31,10 +31,14 @@ const REPORTE_KEY = "ultimo";
 const DEFAULT_UMBRAL = 5;
 
 function parseList(value: unknown): unknown[] | null {
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value)) {
+    return value;
+  }
   if (typeof value === "string") {
     const trimmed = value.trim();
-    if (trimmed === "") return [];
+    if (trimmed === "") {
+      return [];
+    }
     try {
       const parsed = JSON.parse(trimmed);
       return Array.isArray(parsed) ? parsed : null;
@@ -50,27 +54,43 @@ function cleanCollectionName(value: unknown, fallback: string): string {
 }
 
 function parseUmbral(value: unknown): number {
-  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+  let n = Number.NaN;
+  if (typeof value === "number") {
+    n = value;
+  } else if (typeof value === "string" && value.trim() !== "") {
+    n = Number(value);
+  }
   return Number.isFinite(n) && n >= 0 ? n : DEFAULT_UMBRAL;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: evaluación por producto con ramas de umbral y dedupe; las ramas son la regla de negocio
 async function stepHandler(input: StockAlertsInput) {
   const org = input._dataOrganizationId;
   if (!org) {
-    return { success: false as const, error: "Alertas de Stock no está disponible para este workflow todavía." };
+    return {
+      success: false as const,
+      error: "Alertas de Stock no está disponible para este workflow todavía.",
+    };
   }
 
   const productos = parseList(input.productos);
   if (productos === null) {
     return {
       success: false as const,
-      error: "No se pudieron leer las entradas: esperaba la lista de productos (JSON).",
+      error:
+        "No se pudieron leer las entradas: esperaba la lista de productos (JSON).",
     };
   }
 
   const umbral = parseUmbral(input.umbral);
-  const marcasCollection = cleanCollectionName(input.marcasCollection, DEFAULT_MARCAS_COLLECTION);
-  const reporteCollection = cleanCollectionName(input.reporteCollection, DEFAULT_REPORTE_COLLECTION);
+  const marcasCollection = cleanCollectionName(
+    input.marcasCollection,
+    DEFAULT_MARCAS_COLLECTION
+  );
+  const reporteCollection = cleanCollectionName(
+    input.reporteCollection,
+    DEFAULT_REPORTE_COLLECTION
+  );
 
   const lista = productos as ProductoShape[];
   const alertas = revisarStock(lista, umbral);
@@ -82,56 +102,112 @@ async function stepHandler(input: StockAlertsInput) {
   let nuevas = 0;
   try {
     for (const p of lista) {
-      const identidad = typeof p?.productoId === "string" && p.productoId.trim() ? p.productoId.trim() : typeof p?.sku === "string" && p.sku.trim() ? p.sku.trim() : "";
-      if (!identidad) continue;
+      let identidad = "";
+      if (typeof p?.productoId === "string" && p.productoId.trim()) {
+        identidad = p.productoId.trim();
+      } else if (typeof p?.sku === "string" && p.sku.trim()) {
+        identidad = p.sku.trim();
+      }
+      if (!identidad) {
+        continue;
+      }
       // La clave depende del motivo; para productos sanos probamos ambos motivos.
       const claves = ["bajo_stock", "sin_dato"].map((m) => {
-        const clean = (s: string) => s.replace(/[^A-Za-z0-9._:@-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+        const clean = (s: string) =>
+          s
+            .replace(/[^A-Za-z0-9._:@-]+/g, "-")
+            .replace(/-+/g, "-")
+            .replace(/^-|-$/g, "");
         return `${clean(identidad)}:${clean(m)}`.slice(0, 120);
       });
       for (const key of claves) {
         const alerta = alertaPorKey.get(key) ?? null;
-        const leida = await datosRead(pgDatosRepo, org, { collection: marcasCollection, key });
-        if (!leida.success) return { success: false as const, error: leida.error };
-        const existente = (leida.found ? (leida.record?.value as MarcaStock) : null) ?? null;
+        const leida = await datosRead(pgDatosRepo, org, {
+          collection: marcasCollection,
+          key,
+        });
+        if (!leida.success) {
+          return { success: false as const, error: leida.error };
+        }
+        const existente =
+          (leida.found ? (leida.record?.value as MarcaStock) : null) ?? null;
         const decision = decidirMarca(alerta, existente);
         if (decision.accion === "crear" && alerta) {
           const marca = await datosSaveIfAbsent(pgDatosRepo, org, {
             collection: marcasCollection,
             key,
-            value: { productoId: alerta.productoId, motivo: alerta.motivo, stock: alerta.stock, umbral: alerta.umbral, estado: "activa" } satisfies MarcaStock,
+            value: {
+              productoId: alerta.productoId,
+              motivo: alerta.motivo,
+              stock: alerta.stock,
+              umbral: alerta.umbral,
+              estado: "activa",
+            } satisfies MarcaStock,
           });
-          if (!marca.success) return { success: false as const, error: marca.error };
-          if (marca.creado) nuevas += 1;
-          else yaDetectadas.add(key); // carrera: otro proceso la creó activa
+          if (!marca.success) {
+            return { success: false as const, error: marca.error };
+          }
+          if (marca.creado) {
+            nuevas += 1;
+          } else {
+            yaDetectadas.add(key); // carrera: otro proceso la creó activa
+          }
         } else if (decision.accion === "mantener") {
           yaDetectadas.add(key);
         } else if (decision.accion === "reactivar" && alerta) {
-          const value: MarcaStock = { productoId: alerta.productoId, motivo: alerta.motivo, stock: alerta.stock, umbral: alerta.umbral, estado: "activa" };
-          const saved = await datosSave(pgDatosRepo, org, { collection: marcasCollection, key, value });
-          if (!saved.success) return { success: false as const, error: saved.error };
+          const value: MarcaStock = {
+            productoId: alerta.productoId,
+            motivo: alerta.motivo,
+            stock: alerta.stock,
+            umbral: alerta.umbral,
+            estado: "activa",
+          };
+          const saved = await datosSave(pgDatosRepo, org, {
+            collection: marcasCollection,
+            key,
+            value,
+          });
+          if (!saved.success) {
+            return { success: false as const, error: saved.error };
+          }
           nuevas += 1;
         } else if (decision.accion === "resolver" && existente) {
           const value: MarcaStock = { ...existente, estado: "resuelta" };
-          const saved = await datosSave(pgDatosRepo, org, { collection: marcasCollection, key, value });
-          if (!saved.success) return { success: false as const, error: saved.error };
+          const saved = await datosSave(pgDatosRepo, org, {
+            collection: marcasCollection,
+            key,
+            value,
+          });
+          if (!saved.success) {
+            return { success: false as const, error: saved.error };
+          }
         }
       }
     }
   } catch {
-    return { success: false as const, error: "No pudimos acceder a los datos. Probá de nuevo." };
+    return {
+      success: false as const,
+      error: "No pudimos acceder a los datos. Probá de nuevo.",
+    };
   }
 
   const vista = buildVistaStock(alertas, yaDetectadas);
   const advertencias: string[] = [
     "Solo reporte y marcas internas: no modifica stock ni envía avisos.",
   ];
-  if (input.productosTruncados === true || input.productosTruncados === "true") {
-    advertencias.push("La lista de productos está incompleta: puede haber alertas sin revisar.");
+  if (
+    input.productosTruncados === true ||
+    input.productosTruncados === "true"
+  ) {
+    advertencias.push(
+      "La lista de productos está incompleta: puede haber alertas sin revisar."
+    );
   }
 
   const resumen = {
-    productosRevisados: (productos as ProductoShape[]).filter((p) => typeof p?.productoId === "string" || typeof p?.sku === "string").length,
+    productosRevisados: (productos as ProductoShape[]).filter(
+      (p) => typeof p?.productoId === "string" || typeof p?.sku === "string"
+    ).length,
     alertasNuevas: nuevas,
     yaDetectadas: yaDetectadas.size,
   };
@@ -148,9 +224,14 @@ async function stepHandler(input: StockAlertsInput) {
         advertencias,
       },
     });
-    if (!saved.success) return { success: false as const, error: saved.error };
+    if (!saved.success) {
+      return { success: false as const, error: saved.error };
+    }
   } catch {
-    return { success: false as const, error: "No pudimos acceder a los datos. Probá de nuevo." };
+    return {
+      success: false as const,
+      error: "No pudimos acceder a los datos. Probá de nuevo.",
+    };
   }
 
   return {
@@ -162,7 +243,7 @@ async function stepHandler(input: StockAlertsInput) {
   };
 }
 
-export async function stockAlertsStep(input: StockAlertsInput) {
+export function stockAlertsStep(input: StockAlertsInput) {
   "use step";
 
   return withStepLogging(input, () => stepHandler(input));
