@@ -161,7 +161,8 @@ persistente; Trello linkea acá.
   (`NOT_CONFIGURED_ERROR`): jamás se omite en silencio.
 - Disparadores de integración inactivos: misma omisión registrada.
 - El nodo `Solución` se ejecuta como no-op (declara, no actúa).
-- Contratos cubiertos por tests (`tests/soluciones/`, 8 tests en el gate CI):
+- Contratos cubiertos por tests (`tests/workflows/solution-config.test.ts`,
+  8 tests dentro del gate CI del pack):
   parse defensivo, identificación de fuente por paso, inactividad explícita
   vs. activa vs. no declarada, contrato de ausencia, config desde nodos.
 - Pendiente de validación end-to-end en preview con fixtures QA: fan-in mixto
