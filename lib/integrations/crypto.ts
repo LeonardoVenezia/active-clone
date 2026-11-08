@@ -72,9 +72,8 @@ export function decrypt(ciphertext: string): string {
 
 /**
  * True when this environment's key can decrypt the stored ciphertext.
- * False means the config was encrypted elsewhere (another environment's key):
- * overwriting it here would re-encrypt it with the wrong key and make it
- * unreadable where it was created.
+ * False can mean another key, missing key, or damaged ciphertext.
+ * None of these conditions permits overwriting the original configuration.
  */
 export function canDecryptHere(ciphertext: string): boolean {
   try {
@@ -93,8 +92,20 @@ export function canDecryptHere(ciphertext: string): boolean {
 export class IntegrationConfigUnreadableError extends Error {
   constructor() {
     super(
-      "Esta conexión se creó cifrada con la clave de otro entorno. Editarla desde acá la haría ilegible en su entorno original, así que no se guardó ningún cambio. Editála desde el entorno donde fue creada."
+      "No se puede leer la configuración de esta conexión en este entorno. Para proteger los datos originales, no se guardó ningún cambio. Usá el entorno donde la conexión funciona para editarla o eliminarla."
     );
     this.name = "IntegrationConfigUnreadableError";
+  }
+}
+
+/** Reject before any write; JSON corruption must not become a silent {} either. */
+export function assertIntegrationConfigReadable(ciphertext: string): void {
+  try {
+    const config: unknown = JSON.parse(decrypt(ciphertext));
+    if (!config || typeof config !== "object" || Array.isArray(config)) {
+      throw new Error("Invalid integration config");
+    }
+  } catch {
+    throw new IntegrationConfigUnreadableError();
   }
 }

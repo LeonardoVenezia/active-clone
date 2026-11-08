@@ -4,6 +4,10 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { decrypt, encrypt } from "@/lib/db/integrations";
 import { accounts, integrations } from "@/lib/db/schema";
+import {
+  assertIntegrationConfigReadable,
+  IntegrationConfigUnreadableError,
+} from "@/lib/integrations/crypto";
 import { generateId } from "@/lib/utils/id";
 
 const API_KEY_PURPOSE = "ai-gateway";
@@ -249,15 +253,15 @@ export async function DELETE(request: Request) {
     return Response.json({ error: "Integration not found" }, { status: 404 });
   }
 
-  // Get managedKeyId and teamId from config (decrypt it first since it's stored encrypted)
-  let config: { managedKeyId?: string; teamId?: string } | null = null;
-  if (managedIntegration?.config) {
-    try {
-      const decrypted = decrypt(managedIntegration.config as string);
-      config = JSON.parse(decrypted);
-    } catch (e) {
-      console.error("[ai-gateway] Failed to decrypt config:", e);
-    }
+  let config: { managedKeyId?: string; teamId?: string };
+  try {
+    assertIntegrationConfigReadable(managedIntegration.config as string);
+    config = JSON.parse(decrypt(managedIntegration.config as string));
+  } catch {
+    return Response.json(
+      { error: new IntegrationConfigUnreadableError().message },
+      { status: 409 }
+    );
   }
 
   if (config?.managedKeyId && config?.teamId) {

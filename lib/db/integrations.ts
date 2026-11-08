@@ -2,18 +2,21 @@ import "server-only";
 
 import { and, eq, inArray } from "drizzle-orm";
 import {
-  canDecryptHere,
-  decrypt,
-  encrypt,
-  IntegrationConfigUnreadableError,
+  assertIntegrationConfigReadable,
+  decrypt as decryptValue,
+  encrypt as encryptValue,
 } from "@/lib/integrations/crypto";
 import type { IntegrationConfig, IntegrationType } from "../types/integration";
 import { db } from "./index";
 import { integrations, type NewIntegration } from "./schema";
 
-// encrypt/decrypt viven en @/lib/integrations/crypto (módulo puro, testeable);
-// se re-exportan acá para no romper importadores existentes.
-export { decrypt, encrypt } from "@/lib/integrations/crypto";
+// Compatibility for callers that already import these functions here.
+export function encrypt(plaintext: string): string {
+  return encryptValue(plaintext);
+}
+export function decrypt(ciphertext: string): string {
+  return decryptValue(ciphertext);
+}
 
 /**
  * Encrypt integration config object
@@ -35,12 +38,22 @@ function decryptConfig(encryptedConfig: string): Record<string, unknown> {
   }
 }
 
+function isConfigReadable(ciphertext: string): boolean {
+  try {
+    assertIntegrationConfigReadable(ciphertext);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export type DecryptedIntegration = {
   id: string;
   userId: string;
   name: string;
   type: IntegrationType;
   config: IntegrationConfig;
+  configReadable?: boolean;
   isManaged: boolean | null;
   createdAt: Date;
   updatedAt: Date;
@@ -67,6 +80,7 @@ export async function getIntegrations(
   return results.map((integration) => ({
     ...integration,
     config: decryptConfig(integration.config as string) as IntegrationConfig,
+    configReadable: isConfigReadable(integration.config as string),
   }));
 }
 
@@ -92,6 +106,7 @@ export async function getIntegration(
   return {
     ...result[0],
     config: decryptConfig(result[0].config as string) as IntegrationConfig,
+    configReadable: isConfigReadable(result[0].config as string),
   };
 }
 
@@ -114,6 +129,7 @@ export async function getIntegrationById(
   return {
     ...result[0],
     config: decryptConfig(result[0].config as string) as IntegrationConfig,
+    configReadable: isConfigReadable(result[0].config as string),
   };
 }
 
@@ -155,47 +171,43 @@ export async function updateIntegration(
     config?: IntegrationConfig;
   }
 ): Promise<DecryptedIntegration | null> {
-  const updateData: Partial<NewIntegration> = {
-    updatedAt: new Date(),
-  };
-
-  if (updates.name !== undefined) {
-    updateData.name = updates.name;
-  }
-
-  if (updates.config !== undefined) {
-    // Guard anti re-cifrado cruzado: si el config guardado no se puede
-    // descifrar con la clave de ESTE entorno, fue cifrado en otro entorno.
-    // Sobrescribirlo acá lo haría ilegible donde fue creado. Los cambios de
-    // solo nombre siguen permitidos.
-    const [current] = await db
-      .select({ config: integrations.config })
+  return await db.transaction(async (tx) => {
+    // Lock the exact owned row until commit. Never validate a stale ciphertext
+    // and then overwrite a newer config installed by another environment.
+    const [current] = await tx
+      .select()
       .from(integrations)
       .where(
         and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
-      );
-    if (current && !canDecryptHere(current.config as string)) {
-      throw new IntegrationConfigUnreadableError();
+      )
+      .for("update");
+    if (!current) {
+      return null;
     }
-    updateData.config = encryptConfig(updates.config);
-  }
+    assertIntegrationConfigReadable(current.config as string);
 
-  const [result] = await db
-    .update(integrations)
-    .set(updateData)
-    .where(
-      and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
-    )
-    .returning();
-
-  if (!result) {
-    return null;
-  }
-
-  return {
-    ...result,
-    config: decryptConfig(result.config as string) as IntegrationConfig,
-  };
+    const updateData: Partial<NewIntegration> = { updatedAt: new Date() };
+    if (updates.name !== undefined) {
+      updateData.name = updates.name;
+    }
+    if (updates.config !== undefined) {
+      updateData.config = encryptConfig(updates.config);
+    }
+    const [result] = await tx
+      .update(integrations)
+      .set(updateData)
+      .where(
+        and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
+      )
+      .returning();
+    return result
+      ? {
+          ...result,
+          config: decryptConfig(result.config as string) as IntegrationConfig,
+          configReadable: true,
+        }
+      : null;
+  });
 }
 
 /**
@@ -205,14 +217,26 @@ export async function deleteIntegration(
   integrationId: string,
   userId: string
 ): Promise<boolean> {
-  const result = await db
-    .delete(integrations)
-    .where(
-      and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
-    )
-    .returning();
-
-  return result.length > 0;
+  return await db.transaction(async (tx) => {
+    const [current] = await tx
+      .select()
+      .from(integrations)
+      .where(
+        and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
+      )
+      .for("update");
+    if (!current) {
+      return false;
+    }
+    assertIntegrationConfigReadable(current.config as string);
+    const result = await tx
+      .delete(integrations)
+      .where(
+        and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
+      )
+      .returning();
+    return result.length > 0;
+  });
 }
 
 /**
@@ -299,5 +323,6 @@ export async function getIntegrationsByType(
   return rows.map((row) => ({
     ...row,
     config: decryptConfig(row.config as string) as IntegrationConfig,
+    configReadable: isConfigReadable(row.config as string),
   }));
 }

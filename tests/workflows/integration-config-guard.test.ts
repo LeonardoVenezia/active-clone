@@ -4,8 +4,10 @@
 // origen). Contratos puros sobre @/lib/integrations/crypto, sin db ni red.
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import {
+  assertIntegrationConfigReadable,
   canDecryptHere,
   decrypt,
   encrypt,
@@ -58,7 +60,49 @@ test("texto que no es ciphertext válido también se detecta como no descifrable
 test("el error del guard explica qué pasó y que no se guardó nada", () => {
   const err = new IntegrationConfigUnreadableError();
   assert.equal(err.name, "IntegrationConfigUnreadableError");
-  assert.match(err.message, /otro entorno/);
+  assert.match(err.message, /este entorno/);
   assert.match(err.message, /no se guardó ningún cambio/i);
-  assert.match(err.message, /ilegible/);
+  assert.match(err.message, /proteger los datos originales/);
+});
+
+test("missing key and invalid decrypted JSON both block mutation", () => {
+  withKey(KEY_A, () => {
+    assert.throws(
+      () => assertIntegrationConfigReadable(encrypt("[]")),
+      IntegrationConfigUnreadableError
+    );
+    assert.throws(
+      () => assertIntegrationConfigReadable(encrypt("not JSON")),
+      IntegrationConfigUnreadableError
+    );
+    const ciphertext = encrypt("{}");
+    Reflect.deleteProperty(process.env, "INTEGRATION_ENCRYPTION_KEY");
+    assert.throws(
+      () => assertIntegrationConfigReadable(ciphertext),
+      IntegrationConfigUnreadableError
+    );
+  });
+});
+
+test("actual update/delete functions reject before writes; readable updates still work", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--conditions=react-server",
+      "--import",
+      "tsx",
+      "tests/workflows/fixtures/integration-mutations.fixture.test.ts",
+    ],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      timeout: 20_000,
+      env: {
+        ...process.env,
+        DATABASE_URL: "postgres://127.0.0.1:1/no_database",
+      },
+    }
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /8 mutation checks passed/);
 });

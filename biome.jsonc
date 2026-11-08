@@ -49,35 +49,6 @@
           }
         }
       }
-    },
-    {
-      // Deuda preexistente de lib/console/reconnect.ts (estilo compacto de una
-      // línea, throw Error, any). El pack solo agregó el guard anti re-cifrado;
-      // limpiar el estilo completo del archivo en un PR dedicado.
-      "includes": ["lib/console/reconnect.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useBlockStatements": "off",
-            "useThrowNewError": "off",
-            "useNumericSeparators": "off",
-            "useConsistentBuiltinInstantiation": "off"
-          },
-          "complexity": {
-            "useSimplifiedLogicExpression": "off"
-          },
-          "suspicious": {
-            "noExplicitAny": "off"
-          }
-        }
-      },
-      "assist": {
-        "actions": {
-          "source": {
-            "organizeImports": "off"
-          }
-        }
-      }
     }
   ]
 }

@@ -13,6 +13,7 @@ export type GetIntegrationResponse = {
   name: string;
   type: string;
   config: IntegrationConfig;
+  configReadable?: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -54,6 +55,7 @@ export async function GET(
       name: integration.name,
       type: integration.type,
       config: integration.config,
+      configReadable: integration.configReadable,
       createdAt: integration.createdAt.toISOString(),
       updatedAt: integration.updatedAt.toISOString(),
     };
@@ -109,6 +111,7 @@ export async function PUT(
       name: integration.name,
       type: integration.type,
       config: integration.config,
+      configReadable: integration.configReadable,
       createdAt: integration.createdAt.toISOString(),
       updatedAt: integration.updatedAt.toISOString(),
     };
@@ -158,6 +161,9 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof IntegrationConfigUnreadableError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     console.error("Failed to delete integration:", error);
     return NextResponse.json(
       {
