@@ -7,6 +7,7 @@ import { managementWorkflowScopes } from "@/lib/console/schema";
 import { datosEnabled, datosList } from "@/lib/datos/core";
 import { pgDatosRepo } from "@/lib/datos/repo";
 import { db } from "@/lib/db";
+import { isLeoConsoleFixture } from "@/lib/demo/console-scope";
 import { sourcesViewForWorkflow } from "@/lib/soluciones/workflow-sources";
 export async function GET(
   request: Request,
@@ -34,13 +35,25 @@ export async function GET(
           .from(managementWorkflowScopes)
           .where(eq(managementWorkflowScopes.workflowId, workflowId))
       : [];
+    const demo =
+      !!flow &&
+      isLeoConsoleFixture({
+        environment: process.env.VERCEL_ENV,
+        consoleOrigin: process.env.CONSOLE_ORIGIN,
+        userId: ctx.user.id,
+        organizationId: ctx.organization.id,
+        workflowId,
+        nodes: flow.nodes,
+        edges: flow.edges,
+      });
     const decision = consolePanelDecision({
       grant: ctx.grant,
-      flow,
+      flow: flow && demo ? { ...flow, active: true } : flow,
       assignment,
       dataOrganizationId: scope?.organizationId || null,
       dataEnabled: datosEnabled(),
-      executionEnabled: process.env.CONSOLE_EXECUTION_ENABLED === "true",
+      executionEnabled:
+        process.env.CONSOLE_EXECUTION_ENABLED === "true" || demo,
     });
     if (decision.status !== 200) {
       const errors: Record<number, string> = {

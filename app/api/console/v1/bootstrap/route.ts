@@ -8,6 +8,7 @@ import {
 import { canExecute } from "@/lib/console/policy";
 import { isManualConsoleWorkflow } from "@/lib/console/workflow-summary";
 import { frontendViewFromNodes } from "@/lib/datos/frontend";
+import { isLeoConsoleFixture } from "@/lib/demo/console-scope";
 import { manualInputFields } from "@/lib/manual-input";
 import { solutionConfigFromNodes } from "@/lib/soluciones/config";
 import { parseSolutionViewKind } from "@/lib/soluciones/views";
@@ -34,6 +35,16 @@ export async function GET(request: Request) {
         recentRunLimit: 100,
         workflows: rows.map((w) => {
           const manual = isManualConsoleWorkflow(w.nodes);
+          const demo = isLeoConsoleFixture({
+            environment: process.env.VERCEL_ENV,
+            consoleOrigin: process.env.CONSOLE_ORIGIN,
+            userId: ctx.user.id,
+            organizationId: ctx.organization.id,
+            workflowId: w.id,
+            nodes: w.nodes,
+            edges: w.edges,
+          });
+          const status = w.active ? "active" : "paused";
           return {
             id: w.id,
             panelAvailable:
@@ -49,14 +60,14 @@ export async function GET(request: Request) {
                   a.workflowId === w.id &&
                   a.organizationId === ctx.grant.organizationId
               )?.teamId || null,
-            status: w.active ? "active" : "paused",
+            status: demo ? "demo" : status,
             manual,
             canRun:
-              process.env.CONSOLE_EXECUTION_ENABLED === "true" &&
+              (process.env.CONSOLE_EXECUTION_ENABLED === "true" || demo) &&
               mapped.some(
                 (a) =>
                   a.workflowId === w.id &&
-                  canExecute(ctx.grant, a, manual, w.active)
+                  canExecute(ctx.grant, a, manual, w.active || demo)
               ),
             inputFields: manualInputFields(w.nodes as never).map((f) => ({
               key: f.key,
