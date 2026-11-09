@@ -69,9 +69,7 @@ export function PanelAccessRecovery({
             </AuthDialog>
           ) : (
             <Button disabled={busy} onClick={changeAccount}>
-              {busy
-                ? "Cerrando sesión..."
-                : "Cerrar sesión para cambiar de cuenta"}
+              {busy ? "Cerrando sesión..." : "Cerrar sesión"}
             </Button>
           )}
           <Button onClick={onRetry} variant="outline">

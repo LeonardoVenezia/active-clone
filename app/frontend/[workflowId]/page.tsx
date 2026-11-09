@@ -32,6 +32,7 @@ export default function FrontendPage({
   const userId = session?.user?.id;
   const signedIn = !!userId && !session?.user?.isAnonymous;
   const denied = useRef(false);
+  const loadVersion = useRef(0);
   const [accessDenied, setAccessDenied] = useState(false);
   const [view, setView] = useState<View | null>(null);
   const [canRun, setCanRun] = useState(false);
@@ -50,12 +51,16 @@ export default function FrontendPage({
   }, []);
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     try {
       const r = await fetch(
         `/api/datos?workflowId=${encodeURIComponent(workflowId)}`,
         { cache: "no-store" }
       );
       const d = await r.json();
+      if (version !== loadVersion.current) {
+        return;
+      }
       denied.current = pausePanelPolling(r.status);
       setAccessDenied(denied.current);
       if (!r.ok) {
@@ -78,6 +83,9 @@ export default function FrontendPage({
       setFields(d.fields || null);
       setFuentes(d.sources || undefined);
     } catch {
+      if (version !== loadVersion.current) {
+        return;
+      }
       setMessage("No pudimos cargar los datos.");
     }
   }, [workflowId]);
