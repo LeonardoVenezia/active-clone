@@ -2,9 +2,8 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { anonymous, genericOAuth, organization } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
-import { sendPasswordResetEmail, sendAccountVerificationEmail } from "./email";
 import { isAiGatewayManagedKeysEnabled } from "./ai-gateway/config";
-import { assertCanAccept, assertCanInvite } from "./org-cap";
+import { approvedPreviewAuthOrigins } from "./auth-preview-origin";
 import { db } from "./db";
 import {
   accounts,
@@ -20,6 +19,8 @@ import {
   workflowExecutionsRelations,
   workflows,
 } from "./db/schema";
+import { sendAccountVerificationEmail, sendPasswordResetEmail } from "./email";
+import { assertCanAccept, assertCanInvite } from "./org-cap";
 
 // Construct schema object for drizzle adapter
 const schema = {
@@ -67,11 +68,11 @@ const plugins = [
       // Enforce the org's member cap: invites count members + pending
       // invitations, accepts count members (a pending seat was already
       // reserved when the invitation was created).
-      beforeCreateInvitation: async ({ organization }) => {
-        await assertCanInvite(organization.id);
+      beforeCreateInvitation: async ({ organization: org }) => {
+        await assertCanInvite(org.id);
       },
-      beforeAddMember: async ({ organization }) => {
-        await assertCanAccept(organization.id);
+      beforeAddMember: async ({ organization: org }) => {
+        await assertCanAccept(org.id);
       },
     },
   }),
@@ -82,7 +83,7 @@ const plugins = [
       const toUserId = data.newUser.user.id;
 
       console.log(
-        `[Anonymous Migration] Migrating from user ${fromUserId} to ${toUserId}`,
+        `[Anonymous Migration] Migrating from user ${fromUserId} to ${toUserId}`
       );
 
       try {
@@ -105,12 +106,12 @@ const plugins = [
           .where(eq(integrations.userId, fromUserId));
 
         console.log(
-          `[Anonymous Migration] Successfully migrated data from ${fromUserId} to ${toUserId}`,
+          `[Anonymous Migration] Successfully migrated data from ${fromUserId} to ${toUserId}`
         );
       } catch (error) {
         console.error(
           "[Anonymous Migration] Error migrating user data:",
-          error,
+          error
         );
         throw error;
       }
@@ -141,7 +142,7 @@ const plugins = [
                     headers: {
                       Authorization: `Bearer ${tokens.accessToken}`,
                     },
-                  },
+                  }
                 );
                 const profile = await response.json();
                 console.log("[Vercel OAuth] userinfo response:", profile);
@@ -162,9 +163,10 @@ const plugins = [
 
 export const auth = betterAuth({
   baseURL: getBaseURL(),
-  // Exact production aliases only. Keep the canonical callback URL unchanged.
+  // Keep the canonical callback URL unchanged. Preview trust is exact and scoped.
   trustedOrigins: [
     getBaseURL(),
+    ...approvedPreviewAuthOrigins(process.env.VERCEL_ENV),
     ...(process.env.CONSOLE_ORIGIN ? [process.env.CONSOLE_ORIGIN] : []),
     "https://active-clone.vercel.app",
     "https://active-clone-leonardo-venezias-projects.vercel.app",
