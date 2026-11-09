@@ -435,3 +435,10 @@ Las cinco demos QA (l0dkaj67, sjrejqbx, zd8gmw9n, cmspos2u, bymstnlf) recibieron
 ## (8-nov): bajada sin corte a mitad de frase
 
 - El tope de subheading era 140 y cortaba la frase "…la demo no las consulta." a media palabra en desktop; sube a 240 (test de regresión en solution-config.test.ts). Sin clamp CSS: el texto completo se muestra igual en desktop y móvil.
+
+## 9-nov: recuperación de acceso al panel en preview
+
+- Diagnóstico: los cinco workflows de demo son de la cuenta QA Outlook, sin shares, en la empresa QA. El 403 no demuestra que el lector esté autenticado: antes la pantalla tampoco ofrecía login si faltaba sesión.
+- Entrada corregida: distingue sesión ausente de cuenta sin permiso usando la sesión actual, ofrece login en el mismo enlace, muestra el mail de la cuenta si existe y permite cerrar esa sesión para usar otra. Al cambiar la identidad se vuelve a verificar acceso.
+- Tras 401/403 pausa consultas automáticas; sólo reintenta por cambio de sesión o acción explícita. Se limpian campos/fuentes anteriores al fallar la lectura.
+- No se cambian controles del servidor, shares, membresías, conexiones, secretos ni producción. Login no equivale a permiso. La prueba con el usuario de Leo sigue pendiente de resolver su acceso, sin asumir qué cuenta usa.

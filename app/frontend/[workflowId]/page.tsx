@@ -1,5 +1,5 @@
 "use client";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import {
   FrontendPanel,
   type PanelField,
@@ -7,6 +7,9 @@ import {
   type PanelView,
 } from "@/components/frontend-panel";
 import { CaseFrontend, hasCaseView } from "@/components/frontend-views";
+import { PanelAccessRecovery } from "@/components/panel-access-recovery";
+import { useSession } from "@/lib/auth-client";
+import { panelAccessState, pausePanelPolling } from "@/lib/datos/panel-access";
 
 type View = PanelView;
 type Rec = {
@@ -25,6 +28,11 @@ export default function FrontendPage({
   params: Promise<{ workflowId: string }>;
 }) {
   const { workflowId } = use(params);
+  const { data: session, isPending: sessionPending } = useSession();
+  const userId = session?.user?.id;
+  const signedIn = !!userId && !session?.user?.isAnonymous;
+  const denied = useRef(false);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [view, setView] = useState<View | null>(null);
   const [canRun, setCanRun] = useState(false);
   const [records, setRecords] = useState<Rec[] | null>(null);
@@ -48,12 +56,16 @@ export default function FrontendPage({
         { cache: "no-store" }
       );
       const d = await r.json();
+      denied.current = pausePanelPolling(r.status);
+      setAccessDenied(denied.current);
       if (!r.ok) {
         setMessage(d.error || "No pudimos cargar los datos.");
         setBlocked(true);
         setCanRun(false);
         setView(null);
         setRecords([]);
+        setFields(null);
+        setFuentes(undefined);
         return;
       }
       setBlocked(false);
@@ -70,11 +82,18 @@ export default function FrontendPage({
     }
   }, [workflowId]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retry the server check whenever the signed-in identity changes.
   useEffect(() => {
     load();
-    const t = setInterval(load, 5000);
+    // A session change retries automatically; a denied panel waits instead of
+    // repeating a 401/403 forever. The explicit retry uses the same server gate.
+    const t = setInterval(() => {
+      if (!denied.current) {
+        load();
+      }
+    }, 5000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, userId, signedIn]);
 
   async function run() {
     setRunning(true);
@@ -149,10 +168,18 @@ export default function FrontendPage({
   // Si la solución declara una vista dedicada (slot `view` del nodo Solución),
   // el caso define su experiencia; si no, el panel genérico sigue siendo el fallback.
   const caseView = view && hasCaseView(view) ? view : null;
+  const accessState = panelAccessState(accessDenied, sessionPending, signedIn);
   return (
     <main className="pointer-events-auto fixed inset-0 z-20 flex flex-col bg-background">
       <div className="flex-1 overflow-auto">
-        {caseView ? (
+        {accessState ? (
+          <PanelAccessRecovery
+            email={session?.user?.email}
+            onRetry={load}
+            state={accessState}
+          />
+        ) : null}
+        {!accessState && caseView && (
           <CaseFrontend
             blocked={blocked}
             canRun={canRun}
@@ -163,7 +190,8 @@ export default function FrontendPage({
             running={running}
             view={caseView}
           />
-        ) : (
+        )}
+        {!(accessState || caseView) && (
           <FrontendPanel
             actionBusy={actionBusy}
             blocked={blocked}
