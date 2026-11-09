@@ -442,3 +442,9 @@ Las cinco demos QA (l0dkaj67, sjrejqbx, zd8gmw9n, cmspos2u, bymstnlf) recibieron
 - Entrada corregida: distingue sesión ausente de cuenta sin permiso usando la sesión actual, ofrece login en el mismo enlace, muestra el mail de la cuenta si existe y permite cerrar esa sesión para usar otra. Al cambiar la identidad se vuelve a verificar acceso.
 - Tras 401/403 pausa consultas automáticas; sólo reintenta por cambio de sesión o acción explícita. Se limpian campos/fuentes anteriores al fallar la lectura.
 - No se cambian controles del servidor, shares, membresías, conexiones, secretos ni producción. Login no equivale a permiso. La prueba con el usuario de Leo sigue pendiente de resolver su acceso, sin asumir qué cuenta usa.
+
+## 9-nov: acceso de demo propio solicitado por Leo
+
+- Alta nueva prevista: demo-leo-9nov2026@active-clone.invalid, identificador de prueba no entregable. Clave nueva generada en vault; no cambia credenciales existentes. No se atribuye este identificador a un inbox real.
+- /demo-leo y /api/demo-leo preparan una única empresa privada y cinco casos FIJOS de datos ficticios. Gate: sólo VERCEL_ENV=preview y esa identidad exacta, sesión no anónima, origen mismo sitio. Sin parámetros de copia ni lectura de workflows ajenos, sin shares ni conexiones nuevas. Transacción y lock hacen el botón idempotente.
+- Cada workflow queda privado, inactivo y propio del usuario demo, con fuentes desactivadas; siete registros de fixture más cinco reportes. El botón Ejecutar sigue los pasos internos ya existentes, no integra proveedores. Producción rechaza el preparador.
