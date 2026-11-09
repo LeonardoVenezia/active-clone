@@ -9,7 +9,11 @@ import {
 import { CaseFrontend, hasCaseView } from "@/components/frontend-views";
 import { PanelAccessRecovery } from "@/components/panel-access-recovery";
 import { useSession } from "@/lib/auth-client";
-import { panelAccessState, pausePanelPolling } from "@/lib/datos/panel-access";
+import {
+  panelAccessState,
+  panelEnabledMessage,
+  pausePanelPolling,
+} from "@/lib/datos/panel-access";
 
 type View = PanelView;
 type Rec = {
@@ -51,7 +55,8 @@ export default function FrontendPage({
   }, []);
 
   const load = useCallback(async () => {
-    const version = ++loadVersion.current;
+    loadVersion.current += 1;
+    const version = loadVersion.current;
     try {
       const r = await fetch(
         `/api/datos?workflowId=${encodeURIComponent(workflowId)}`,
@@ -64,7 +69,7 @@ export default function FrontendPage({
       denied.current = pausePanelPolling(r.status);
       setAccessDenied(denied.current);
       if (!r.ok) {
-        setMessage(d.error || "No pudimos cargar los datos.");
+        setMessage(d.error ?? "No pudimos cargar los datos.");
         setBlocked(true);
         setCanRun(false);
         setView(null);
@@ -74,9 +79,7 @@ export default function FrontendPage({
         return;
       }
       setBlocked(false);
-      setMessage(
-        d.enabled === false ? "Los datos todavía no están habilitados." : ""
-      );
+      setMessage(panelEnabledMessage(d.enabled));
       setView(d.view || null);
       setCanRun(!!d.canRun);
       setRecords(d.records || []);

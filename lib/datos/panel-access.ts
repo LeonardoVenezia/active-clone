@@ -19,3 +19,7 @@ export function panelAccessState(
 export function pausePanelPolling(status: number): boolean {
   return status === 401 || status === 403;
 }
+
+export function panelEnabledMessage(enabled: unknown): string {
+  return enabled === false ? "Los datos todavía no están habilitados." : "";
+}
