@@ -95,6 +95,12 @@ export default function FrontendPage({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry the server check whenever the signed-in identity changes.
   useEffect(() => {
+    // Never keep a previous account's visible data while checking a new identity.
+    setView(null);
+    setRecords(null);
+    setFields(null);
+    setFuentes(undefined);
+    setCanRun(false);
     load();
     // A session change retries automatically; a denied panel waits instead of
     // repeating a 401/403 forever. The explicit retry uses the same server gate.
