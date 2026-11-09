@@ -3,6 +3,7 @@ import { canRunWithCompanyVariables } from "@/lib/company/run-policy";
 import { companyVariableKeys } from "@/lib/company-variables";
 import { consoleContext } from "@/lib/console/context";
 import { runtimeAssignments, visibleWorkflows } from "@/lib/console/data";
+import { consoleDataExecution } from "@/lib/console/data-execution";
 import { reserveAndLaunch } from "@/lib/console/execution";
 import { canExecute } from "@/lib/console/policy";
 import { isManualConsoleWorkflow } from "@/lib/console/workflow-summary";
@@ -13,6 +14,17 @@ function allowedOrigin(request: Request) {
   return (
     !!process.env.CONSOLE_ORIGIN &&
     request.headers.get("origin") === process.env.CONSOLE_ORIGIN
+  );
+}
+function deniedCompanyVariables(
+  nodes: Parameters<typeof companyVariableKeys>[0],
+  userId: string,
+  organizationId: string,
+  workflowId: string
+) {
+  return (
+    companyVariableKeys(nodes).length > 0 &&
+    !canRunWithCompanyVariables({ userId, organizationId, workflowId })
   );
 }
 export async function POST(
@@ -91,17 +103,32 @@ export async function POST(
       );
     }
     if (
-      companyVariableKeys(w.nodes).length &&
-      !canRunWithCompanyVariables({
-        userId: w.userId,
-        organizationId: ctx.grant.organizationId,
-        workflowId,
-      })
+      deniedCompanyVariables(
+        w.nodes,
+        w.userId,
+        ctx.grant.organizationId,
+        workflowId
+      )
     ) {
       return NextResponse.json(
         {
           error:
             "Las variables de empresa todavía no están habilitadas para ejecutar. No se inició ningún servicio.",
+        },
+        { status: 409 }
+      );
+    }
+    const dataScope = await consoleDataExecution(
+      request,
+      workflowId,
+      ctx.grant.organizationId,
+      w.nodes
+    );
+    if (!dataScope) {
+      return NextResponse.json(
+        {
+          error:
+            "Datos no está disponible para este workflow. No se inició ningún servicio.",
         },
         { status: 409 }
       );
@@ -129,6 +156,7 @@ export async function POST(
         );
         await start(executeWorkflow, [
           {
+            ...dataScope,
             nodes: flow.nodes,
             edges: flow.edges,
             triggerInput: input,
