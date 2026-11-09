@@ -14,8 +14,9 @@ export async function GET(
 ) {
   try {
     const ctx = await consoleContext(request);
-    if (!ctx)
+    if (!ctx) {
       return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+    }
     const { workflowId } = await params;
     const flow =
       (await visibleWorkflows(ctx.grant, ctx.organization.metadata)).find(
@@ -41,27 +42,28 @@ export async function GET(
       dataEnabled: datosEnabled(),
       executionEnabled: process.env.CONSOLE_EXECUTION_ENABLED === "true",
     });
-    if (decision.status !== 200)
+    if (decision.status !== 200) {
+      const errors: Record<number, string> = {
+        401: "No autorizado.",
+        403: "Sin acceso a esta solución.",
+        404: "Esta solución no tiene una vista de caso disponible.",
+        503: "Los datos de esta solución todavía no están habilitados.",
+      };
       return NextResponse.json(
-        {
-          error:
-            decision.status === 403
-              ? "Sin acceso a esta solución."
-              : decision.status === 404
-                ? "Esta solución no tiene una vista de caso disponible."
-                : "Los datos de esta solución todavía no están habilitados.",
-        },
+        { error: errors[decision.status] },
         { status: decision.status }
       );
+    }
     const result = await datosList(pgDatosRepo, ctx.grant.organizationId, {
       collection: decision.view.collection,
       limit: 50,
     });
-    if (!result.success)
+    if (!result.success) {
       return NextResponse.json(
         { error: "No pudimos cargar los datos de la solución." },
         { status: 503 }
       );
+    }
     return NextResponse.json(
       {
         view: decision.view,

@@ -14,7 +14,7 @@ import { parseSolutionViewKind } from "@/lib/soluciones/views";
 export async function GET(request: Request) {
   try {
     const ctx = await consoleContext(request);
-    if (!ctx)
+    if (!ctx) {
       return NextResponse.json(
         {
           error:
@@ -22,6 +22,7 @@ export async function GET(request: Request) {
         },
         { status: 401 }
       );
+    }
     const rows = await visibleWorkflows(ctx.grant, ctx.organization.metadata);
     const mapped = await runtimeAssignments();
     const runs = await runHistory(rows.map((x) => x.id));

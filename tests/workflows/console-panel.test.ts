@@ -44,11 +44,12 @@ test("console panel: every role rejects a foreign organization or data scope", (
   }
 });
 test("console panel: unassigned operator and manager cannot read", () => {
-  for (const role of ["operator", "manager"] as const)
+  for (const role of ["operator", "manager"] as const) {
     assert.equal(
       consolePanelDecision({ ...base, grant: { ...grant, role } }).status,
       403
     );
+  }
 });
 test("console panel: assigned manager and operator can read but never gain run permission", () => {
   for (const role of ["operator", "manager"] as const) {
@@ -63,7 +64,9 @@ test("console panel: assigned manager and operator can read but never gain run p
       },
     });
     assert.equal(result.status, 200);
-    if (result.status === 200) assert.equal(result.canRun, false);
+    if (result.status === 200) {
+      assert.equal(result.canRun, false);
+    }
   }
 });
 test("console panel: absent assignment or workflow is denied", () => {
@@ -116,6 +119,8 @@ test("console panel: run still needs runtime enabled, active manual workflow and
   });
   for (const r of [a, b, c]) {
     assert.equal(r.status, 200);
-    if (r.status === 200) assert.equal(r.canRun, false);
+    if (r.status === 200) {
+      assert.equal(r.canRun, false);
+    }
   }
 });
