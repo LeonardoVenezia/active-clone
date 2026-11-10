@@ -30,6 +30,9 @@ function deniedCompanyVariables(
     !canRunWithCompanyVariables({ userId, organizationId, workflowId })
   );
 }
+function executionDisabled(demo: boolean) {
+  return process.env.CONSOLE_EXECUTION_ENABLED !== "true" && !demo;
+}
 function rejectsEditedDemo(
   userId: string,
   organizationId: string,
@@ -101,7 +104,7 @@ export async function POST(
         { status: 403 }
       );
     }
-    if (process.env.CONSOLE_EXECUTION_ENABLED !== "true" && !demo) {
+    if (executionDisabled(demo)) {
       return NextResponse.json(
         {
           error:
