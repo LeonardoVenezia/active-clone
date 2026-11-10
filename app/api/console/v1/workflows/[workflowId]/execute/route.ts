@@ -30,6 +30,20 @@ function deniedCompanyVariables(
     !canRunWithCompanyVariables({ userId, organizationId, workflowId })
   );
 }
+function rejectsEditedDemo(
+  userId: string,
+  organizationId: string,
+  demo: boolean
+) {
+  return (
+    !!leoProductionGrant(
+      process.env.VERCEL_ENV,
+      process.env.CONSOLE_ORIGIN,
+      userId,
+      organizationId
+    ) && !demo
+  );
+}
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ workflowId: string }> }
@@ -69,15 +83,7 @@ export async function POST(
         edges: w.edges,
       });
     // The demo grant never runs an edited graph, even if somebody activates it.
-    if (
-      leoProductionGrant(
-        process.env.VERCEL_ENV,
-        process.env.CONSOLE_ORIGIN,
-        ctx.user.id,
-        ctx.organization.id
-      ) &&
-      !demo
-    ) {
+    if (rejectsEditedDemo(ctx.user.id, ctx.organization.id, demo)) {
       return NextResponse.json(
         { error: "El ejemplo de prueba cambió. No se ejecutó nada." },
         { status: 403 }

@@ -67,7 +67,7 @@ export async function runHistory(ids: string[]) {
   if (!ids.length) {
     return [];
   }
-  return db
+  return await db
     .select({
       id: workflowExecutions.id,
       workflowId: workflowExecutions.workflowId,
