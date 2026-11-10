@@ -8,7 +8,10 @@ import { reserveAndLaunch } from "@/lib/console/execution";
 import { canExecute } from "@/lib/console/policy";
 import { isManualConsoleWorkflow } from "@/lib/console/workflow-summary";
 import { validateWorkflowIntegrations } from "@/lib/db/integrations";
-import { isLeoConsoleFixture } from "@/lib/demo/console-scope";
+import {
+  isLeoConsoleFixture,
+  leoProductionGrant,
+} from "@/lib/demo/console-scope";
 
 function allowedOrigin(request: Request) {
   return (
@@ -65,6 +68,21 @@ export async function POST(
         nodes: w.nodes,
         edges: w.edges,
       });
+    // The demo grant never runs an edited graph, even if somebody activates it.
+    if (
+      leoProductionGrant(
+        process.env.VERCEL_ENV,
+        process.env.CONSOLE_ORIGIN,
+        ctx.user.id,
+        ctx.organization.id
+      ) &&
+      !demo
+    ) {
+      return NextResponse.json(
+        { error: "El ejemplo de prueba cambió. No se ejecutó nada." },
+        { status: 403 }
+      );
+    }
     if (
       !(
         assignment &&
