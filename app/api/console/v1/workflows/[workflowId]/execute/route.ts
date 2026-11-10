@@ -8,7 +8,10 @@ import { reserveAndLaunch } from "@/lib/console/execution";
 import { canExecute } from "@/lib/console/policy";
 import { isManualConsoleWorkflow } from "@/lib/console/workflow-summary";
 import { validateWorkflowIntegrations } from "@/lib/db/integrations";
-import { isLeoConsoleFixture } from "@/lib/demo/console-scope";
+import {
+  isLeoConsoleFixture,
+  leoProductionGrant,
+} from "@/lib/demo/console-scope";
 
 function allowedOrigin(request: Request) {
   return (
@@ -25,6 +28,23 @@ function deniedCompanyVariables(
   return (
     companyVariableKeys(nodes).length > 0 &&
     !canRunWithCompanyVariables({ userId, organizationId, workflowId })
+  );
+}
+function executionDisabled(demo: boolean) {
+  return process.env.CONSOLE_EXECUTION_ENABLED !== "true" && !demo;
+}
+function rejectsEditedDemo(
+  userId: string,
+  organizationId: string,
+  demo: boolean
+) {
+  return (
+    !!leoProductionGrant(
+      process.env.VERCEL_ENV,
+      process.env.CONSOLE_ORIGIN,
+      userId,
+      organizationId
+    ) && !demo
   );
 }
 export async function POST(
@@ -65,6 +85,13 @@ export async function POST(
         nodes: w.nodes,
         edges: w.edges,
       });
+    // The demo grant never runs an edited graph, even if somebody activates it.
+    if (rejectsEditedDemo(ctx.user.id, ctx.organization.id, demo)) {
+      return NextResponse.json(
+        { error: "El ejemplo de prueba cambió. No se ejecutó nada." },
+        { status: 403 }
+      );
+    }
     if (
       !(
         assignment &&
@@ -77,7 +104,7 @@ export async function POST(
         { status: 403 }
       );
     }
-    if (process.env.CONSOLE_EXECUTION_ENABLED !== "true" && !demo) {
+    if (executionDisabled(demo)) {
       return NextResponse.json(
         {
           error:
