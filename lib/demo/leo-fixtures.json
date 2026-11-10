@@ -1,0 +1,1185 @@
+{
+  "cases": [
+    {
+      "name": "stock-alertas",
+      "title": "Alertas de stock (demo ficticia)",
+      "nodes": [
+        {
+          "id": "trigger-1",
+          "type": "trigger",
+          "position": {
+            "x": 250,
+            "y": 80
+          },
+          "data": {
+            "config": {},
+            "label": "Inicio",
+            "status": "idle",
+            "type": "trigger"
+          }
+        },
+        {
+          "id": "r_p",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 260
+          },
+          "data": {
+            "config": {
+              "actionType": "Datos",
+              "collection": "qa_fixture_productos",
+              "key": "fx1",
+              "operation": "read"
+            },
+            "label": "Fixture productos",
+            "status": "idle",
+            "type": "action"
+          }
+        },
+        {
+          "id": "stk",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 440
+          },
+          "data": {
+            "config": {
+              "actionType": "Alertas de Stock",
+              "productos": "{{@r_p:Fixture productos.record.value.productos}}",
+              "reporteCollection": "reporte_stock",
+              "umbral": "5"
+            },
+            "label": "Alertas de Stock",
+            "status": "idle",
+            "type": "action"
+          }
+        },
+        {
+          "id": "f1",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 620
+          },
+          "data": {
+            "config": {
+              "actionType": "Frontend",
+              "collection": "reporte_stock",
+              "columns": "producto, sku, nombre, motivo, stock, umbral, deteccion",
+              "labels": "producto=Producto, sku=SKU, nombre=Nombre, motivo=Motivo, stock=Stock, umbral=Umbral, deteccion=Detección",
+              "rowsField": "filas",
+              "showForm": "false",
+              "showRun": "true",
+              "title": "Alertas de stock (demo ficticia)"
+            },
+            "label": "Página alertas",
+            "status": "idle",
+            "type": "action"
+          }
+        },
+        {
+          "id": "solucion-l0dkaj",
+          "type": "action",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "config": {
+              "actionType": "Solución",
+              "brand": "Active-clone · Demo",
+              "emptyText": "No hay alertas de stock: todo por encima del mínimo.",
+              "solutionName": "Alertas de stock",
+              "sources": "tiendanube=inactive, mercadolibre=inactive",
+              "subheading": "Demostración con datos ficticios: detecta productos por debajo del mínimo. Fuentes desactivadas: la demo no las consulta.",
+              "view": "stock-alertas"
+            },
+            "label": "Alertas de stock",
+            "type": "action"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "trigger-1",
+          "target": "r_p",
+          "type": "default"
+        },
+        {
+          "id": "e2",
+          "source": "r_p",
+          "target": "stk",
+          "type": "default"
+        },
+        {
+          "id": "e3",
+          "source": "stk",
+          "target": "f1",
+          "type": "default"
+        }
+      ],
+      "records": [
+        {
+          "collection": "reporte_stock",
+          "key": "ultimo",
+          "value": {
+            "advertencias": [
+              "Solo reporte y marcas internas: no modifica stock ni envía avisos."
+            ],
+            "filas": [
+              {
+                "detalle": "Stock 1 por debajo del umbral 5",
+                "deteccion": "Nuevo",
+                "motivo": "Bajo stock",
+                "nombre": "Remera roja",
+                "producto": "P-1",
+                "sku": "SKU-ROJO",
+                "stock": "1",
+                "umbral": 5
+              },
+              {
+                "detalle": "Stock 8 por debajo del umbral 10",
+                "deteccion": "Ya detectado",
+                "motivo": "Bajo stock",
+                "nombre": "Remera verde",
+                "producto": "P-3",
+                "sku": "SKU-VERDE",
+                "stock": "8",
+                "umbral": 10
+              },
+              {
+                "detalle": "Stock sin dato numérico: no se evalúa como cero",
+                "deteccion": "Ya detectado",
+                "motivo": "Stock sin dato",
+                "nombre": "Sin dato",
+                "producto": "P-4",
+                "sku": "SKU-SIN",
+                "stock": "sin dato",
+                "umbral": 5
+              }
+            ],
+            "generado": "2026-11-08T16:00:03.445Z",
+            "resumen": {
+              "alertasNuevas": 1,
+              "productosRevisados": 4,
+              "yaDetectadas": 2
+            },
+            "total": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "envios-excepciones",
+      "title": "Detecciones de envíos (demo ficticia)",
+      "nodes": [
+        {
+          "id": "trigger-1",
+          "type": "trigger",
+          "position": {
+            "x": 250,
+            "y": 80
+          },
+          "data": {
+            "config": {},
+            "label": "Inicio",
+            "type": "trigger"
+          }
+        },
+        {
+          "id": "r_e",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 260
+          },
+          "data": {
+            "config": {
+              "actionType": "Datos",
+              "collection": "qa_fixture_envios",
+              "key": "fx1",
+              "operation": "read"
+            },
+            "label": "Fixture envíos",
+            "type": "action"
+          }
+        },
+        {
+          "id": "rev",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 440
+          },
+          "data": {
+            "config": {
+              "actionType": "Revisar Envíos",
+              "envios": "{{@r_e:Fixture envíos.record.value.envios}}",
+              "estadosAlerta": "shipped/delayed, devolucion",
+              "reporteCollection": "reporte_envios",
+              "umbralDias": "7"
+            },
+            "label": "Revisar Envíos",
+            "type": "action"
+          }
+        },
+        {
+          "id": "f1",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 620
+          },
+          "data": {
+            "config": {
+              "actionType": "Frontend",
+              "collection": "reporte_envios",
+              "columns": "envio, canal, estado, motivo, referencia, aviso",
+              "labels": "envio=Envío, canal=Canal, estado=Estado, motivo=Motivo, referencia=Referencia, aviso=Detección",
+              "rowsField": "filas",
+              "showForm": "false",
+              "showRun": "true",
+              "title": "Detecciones de envíos (demo ficticia)"
+            },
+            "label": "Página avisos",
+            "type": "action"
+          }
+        },
+        {
+          "id": "solucion-sjrejq",
+          "type": "action",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "config": {
+              "actionType": "Solución",
+              "brand": "Active-clone · Demo",
+              "emptyText": "No hay envíos con problemas.",
+              "solutionName": "Excepciones de envío",
+              "sources": "correoargentino=inactive, mercadolibre=inactive, zipnova=inactive",
+              "subheading": "Demostración con datos ficticios: envíos sin movimiento o con estado de alerta. Fuentes desactivadas: la demo no las consulta.",
+              "view": "envios-excepciones"
+            },
+            "label": "Excepciones de envío",
+            "type": "action"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "trigger-1",
+          "target": "r_e",
+          "type": "default"
+        },
+        {
+          "id": "e2",
+          "source": "r_e",
+          "target": "rev",
+          "type": "default"
+        },
+        {
+          "id": "e3",
+          "source": "rev",
+          "target": "f1",
+          "type": "default"
+        }
+      ],
+      "records": [
+        {
+          "collection": "reporte_envios",
+          "key": "ultimo",
+          "value": {
+            "advertencias": [],
+            "filas": [
+              {
+                "aviso": "Ya detectado",
+                "canal": "correoargentino",
+                "detalle": "9 días en estado en_transito",
+                "envio": "CA-222",
+                "estado": "en_transito",
+                "motivo": "Sin movimiento",
+                "referencia": "TN-1001"
+              },
+              {
+                "aviso": "Ya detectado",
+                "canal": "mercadolibre",
+                "detalle": "Estado shipped/delayed",
+                "envio": "ME2-111",
+                "estado": "shipped/delayed",
+                "motivo": "Estado de alerta",
+                "referencia": "ML-2001"
+              },
+              {
+                "aviso": "Ya detectado",
+                "canal": "zipnova",
+                "detalle": "10 días en estado en_transito",
+                "envio": "ZN-333",
+                "estado": "en_transito",
+                "motivo": "Sin movimiento",
+                "referencia": "TN-1002"
+              }
+            ],
+            "generado": "2026-11-08T15:36:11.006Z",
+            "resumen": {
+              "alertasNuevas": 0,
+              "enviosRevisados": 4,
+              "yaAvisadas": 3
+            },
+            "total": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "conciliacion-diferencias",
+      "title": "Reporte de conciliación (demo ficticia)",
+      "nodes": [
+        {
+          "id": "trigger-1",
+          "type": "trigger",
+          "position": {
+            "x": 250,
+            "y": 80
+          },
+          "data": {
+            "config": {},
+            "label": "Inicio",
+            "type": "trigger"
+          }
+        },
+        {
+          "id": "r_v",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 260
+          },
+          "data": {
+            "config": {
+              "actionType": "Datos",
+              "collection": "qa_fixture_ventas",
+              "key": "fx1",
+              "operation": "read"
+            },
+            "label": "Fixture ventas",
+            "type": "action"
+          }
+        },
+        {
+          "id": "r_p",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 440
+          },
+          "data": {
+            "config": {
+              "actionType": "Datos",
+              "collection": "qa_fixture_pagos",
+              "key": "fx1",
+              "operation": "read"
+            },
+            "label": "Fixture cobros",
+            "type": "action"
+          }
+        },
+        {
+          "id": "rec",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 620
+          },
+          "data": {
+            "config": {
+              "actionType": "Conciliar Pagos",
+              "pagos": "{{@r_p:Fixture cobros.record.value}}",
+              "reporteCollection": "reporte_conciliacion",
+              "tolerancia": "1",
+              "ventas": "{{@r_v:Fixture ventas.record.value.ventas}}"
+            },
+            "label": "Conciliar Pagos",
+            "type": "action"
+          }
+        },
+        {
+          "id": "f1",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 800
+          },
+          "data": {
+            "config": {
+              "actionType": "Frontend",
+              "collection": "reporte_conciliacion",
+              "columns": "estado, referencia, canal, orden, pago, total_venta, cobrado, comision, neto",
+              "labels": "estado=Estado, referencia=Referencia, canal=Canal, orden=Orden, pago=Pago, total_venta=Total venta, cobrado=Cobrado, comision=Comisión, neto=Neto",
+              "rowsField": "filas",
+              "showForm": "false",
+              "showRun": "true",
+              "title": "Reporte de conciliación (demo ficticia)"
+            },
+            "label": "Página reporte",
+            "type": "action"
+          }
+        },
+        {
+          "id": "solucion-zd8gmw",
+          "type": "action",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "config": {
+              "actionType": "Solución",
+              "brand": "Active-clone · Demo",
+              "emptyText": "No hay movimientos para conciliar.",
+              "solutionName": "Conciliación de pagos",
+              "sources": "tiendanube=inactive, mercadolibre=inactive, stripe=inactive",
+              "subheading": "Demostración con datos ficticios: compara ventas y cobros por referencia. Fuentes desactivadas: la demo no las consulta.",
+              "view": "conciliacion-diferencias"
+            },
+            "label": "Conciliación de pagos",
+            "type": "action"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "trigger-1",
+          "target": "r_v",
+          "type": "default"
+        },
+        {
+          "id": "e2",
+          "source": "r_v",
+          "target": "r_p",
+          "type": "default"
+        },
+        {
+          "id": "e3",
+          "source": "r_p",
+          "target": "rec",
+          "type": "default"
+        },
+        {
+          "id": "e4",
+          "source": "rec",
+          "target": "f1",
+          "type": "default"
+        }
+      ],
+      "records": [
+        {
+          "collection": "reporte_conciliacion",
+          "key": "ultimo",
+          "value": {
+            "advertencias": [
+              "Reembolsos y contracargos no se netean: aparecen como cobros o movimientos separados.",
+              "Pagos parciales o en cuotas sobre una misma venta no se suman: se marcan para revisar a mano.",
+              "No hay conversión de monedas: montos en monedas distintas no se comparan.",
+              "No hay matching por monto y fecha: solo por la referencia externa declarada.",
+              "El conector de Mercado Pago no expone comisión ni neto: bruto es el monto de la transacción y el neto queda sin dato."
+            ],
+            "filas": [
+              {
+                "canal": "mercadolibre",
+                "cobrado": "79500",
+                "comision": "sin dato",
+                "detalle": "",
+                "estado": "Diferencia de monto",
+                "neto": "sin dato",
+                "orden": "2000000001",
+                "pago": "902",
+                "referencia": "ML-2001",
+                "total_venta": "80000"
+              },
+              {
+                "canal": "tiendanube",
+                "cobrado": "sin dato",
+                "comision": "sin dato",
+                "detalle": "",
+                "estado": "Venta sin cobro",
+                "neto": "sin dato",
+                "orden": "1002",
+                "pago": "",
+                "referencia": "TN-1002",
+                "total_venta": "50000"
+              },
+              {
+                "canal": "",
+                "cobrado": "12000",
+                "comision": "sin dato",
+                "detalle": "",
+                "estado": "Cobro sin venta",
+                "neto": "sin dato",
+                "orden": "",
+                "pago": "903",
+                "referencia": "EXT-9",
+                "total_venta": "sin dato"
+              },
+              {
+                "canal": "tiendanube",
+                "cobrado": "100000",
+                "comision": "sin dato",
+                "detalle": "",
+                "estado": "Conciliado",
+                "neto": "sin dato",
+                "orden": "1001",
+                "pago": "901",
+                "referencia": "TN-1001",
+                "total_venta": "100000"
+              }
+            ],
+            "fueraDeAlcance": [
+              "Reembolsos y contracargos no se netean: aparecen como cobros o movimientos separados.",
+              "Pagos parciales o en cuotas sobre una misma venta no se suman: se marcan para revisar a mano.",
+              "No hay conversión de monedas: montos en monedas distintas no se comparan.",
+              "No hay matching por monto y fecha: solo por la referencia externa declarada."
+            ],
+            "generado": "2026-11-08T15:42:58.630Z",
+            "resumen": {
+              "ambiguos": 0,
+              "cobrosSinVenta": 1,
+              "conciliados": 1,
+              "diferencias": 1,
+              "pagos": 3,
+              "pagosNoAcreditados": 0,
+              "sinDatosMonto": 0,
+              "ventas": 3,
+              "ventasSinCobro": 1
+            },
+            "total": 4
+          }
+        }
+      ]
+    },
+    {
+      "name": "avisos-borradores",
+      "title": "Avisos postcompra (demo ficticia)",
+      "nodes": [
+        {
+          "id": "trigger-1",
+          "type": "trigger",
+          "position": {
+            "x": 250,
+            "y": 80
+          },
+          "data": {
+            "config": {},
+            "label": "Inicio",
+            "type": "trigger"
+          }
+        },
+        {
+          "id": "r_ev",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 260
+          },
+          "data": {
+            "config": {
+              "actionType": "Datos",
+              "collection": "qa_fixture_eventos",
+              "key": "fx1",
+              "operation": "read"
+            },
+            "label": "Fixture eventos",
+            "type": "action"
+          }
+        },
+        {
+          "id": "av",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 440
+          },
+          "data": {
+            "config": {
+              "actionType": "Preparar Avisos",
+              "eventos": "{{@r_ev:Fixture eventos.record.value.eventos}}",
+              "reporteCollection": "reporte_avisos"
+            },
+            "label": "Preparar Avisos",
+            "type": "action"
+          }
+        },
+        {
+          "id": "f1",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 620
+          },
+          "data": {
+            "config": {
+              "actionType": "Frontend",
+              "collection": "reporte_avisos",
+              "columns": "preparacion, pedido, referencia, evento, canal, texto",
+              "labels": "preparacion=Preparación, pedido=Pedido, referencia=Referencia, evento=Evento, canal=Canal, texto=Borrador",
+              "rowsField": "filas",
+              "showForm": "false",
+              "showRun": "true",
+              "title": "Avisos postcompra (demo ficticia)"
+            },
+            "label": "Página avisos",
+            "type": "action"
+          }
+        },
+        {
+          "id": "solucion-cmspos",
+          "type": "action",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "config": {
+              "actionType": "Solución",
+              "brand": "Active-clone · Demo",
+              "emptyText": "No hay borradores preparados.",
+              "solutionName": "Avisos postcompra",
+              "sources": "mercadolibre=inactive, tiendanube=inactive",
+              "subheading": "Demostración con datos ficticios: borradores de avisos para revisar. Fuentes desactivadas: la demo no las consulta.",
+              "view": "avisos-borradores"
+            },
+            "label": "Avisos postcompra",
+            "type": "action"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "trigger-1",
+          "target": "r_ev",
+          "type": "default"
+        },
+        {
+          "id": "e2",
+          "source": "r_ev",
+          "target": "av",
+          "type": "default"
+        },
+        {
+          "id": "e3",
+          "source": "av",
+          "target": "f1",
+          "type": "default"
+        }
+      ],
+      "records": [
+        {
+          "collection": "reporte_avisos",
+          "key": "ultimo",
+          "value": {
+            "advertencias": [
+              "Solo prepara borradores y marcas internas: estos borradores no se envían desde esta demo.",
+              "Solo eventos transaccionales de postcompra (pago, despacho, entrega): no prepara mensajes de marketing."
+            ],
+            "filas": [
+              {
+                "canal": "mercadolibre",
+                "evento": "Entregado",
+                "pedido": "ML-2001",
+                "preparacion": "Ya preparado",
+                "referencia": "ML-2001",
+                "texto": "Tu pedido ML-2001 fue entregado. ¡Gracias por tu compra!"
+              },
+              {
+                "canal": "tiendanube",
+                "evento": "Despachado",
+                "pedido": "TN-1001",
+                "preparacion": "Ya preparado",
+                "referencia": "TN-1001",
+                "texto": "Tu pedido TN-1001 ya está en camino."
+              },
+              {
+                "canal": "tiendanube",
+                "evento": "Pago confirmado",
+                "pedido": "TN-1001",
+                "preparacion": "Ya preparado",
+                "referencia": "TN-1001",
+                "texto": "Recibimos tu pago del pedido TN-1001."
+              },
+              {
+                "canal": "",
+                "evento": "Pago confirmado",
+                "pedido": "TN-1003",
+                "preparacion": "Ya preparado",
+                "referencia": "TN-1003",
+                "texto": "Recibimos tu pago del pedido TN-1003."
+              }
+            ],
+            "generado": "2026-11-08T20:39:23.362Z",
+            "omitidos": [
+              {
+                "evento": "cumpleanos",
+                "motivo": "Evento no permitido: solo avisos transaccionales de postcompra",
+                "pedidoId": "ML-2002"
+              }
+            ],
+            "resumen": {
+              "avisosNuevos": 0,
+              "eventosRecibidos": 5,
+              "omitidos": 1,
+              "yaPreparados": 4
+            },
+            "total": 4
+          }
+        }
+      ]
+    },
+    {
+      "name": "soporte-consultas",
+      "title": "Soporte asistido (demo ficticia)",
+      "nodes": [
+        {
+          "id": "trigger-1",
+          "type": "trigger",
+          "position": {
+            "x": 250,
+            "y": 80
+          },
+          "data": {
+            "config": {},
+            "label": "Inicio",
+            "type": "trigger"
+          }
+        },
+        {
+          "id": "r_c",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 260
+          },
+          "data": {
+            "config": {
+              "actionType": "Datos",
+              "collection": "qa_fixture_consultas",
+              "key": "fx1",
+              "operation": "read"
+            },
+            "label": "Fixture consultas",
+            "type": "action"
+          }
+        },
+        {
+          "id": "r_x",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 440
+          },
+          "data": {
+            "config": {
+              "actionType": "Datos",
+              "collection": "qa_fixture_consultas",
+              "key": "fx2",
+              "operation": "read"
+            },
+            "label": "Fixture contexto",
+            "type": "action"
+          }
+        },
+        {
+          "id": "sr",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 620
+          },
+          "data": {
+            "config": {
+              "actionType": "Preparar Respuestas",
+              "consultas": "{{@r_c:Fixture consultas.record.value.consultas}}",
+              "contextoPedidos": "{{@r_x:Fixture contexto.record.value}}",
+              "reporteCollection": "reporte_soporte"
+            },
+            "label": "Preparar Respuestas",
+            "type": "action"
+          }
+        },
+        {
+          "id": "f1",
+          "type": "action",
+          "position": {
+            "x": 250,
+            "y": 800
+          },
+          "data": {
+            "config": {
+              "actionType": "Frontend",
+              "collection": "reporte_soporte",
+              "columns": "preparacion, consulta, cliente, tema, estado, borrador",
+              "labels": "preparacion=Preparación, consulta=Consulta, cliente=Cliente, tema=Tema, estado=Estado, borrador=Borrador",
+              "rowsField": "filas",
+              "showForm": "false",
+              "showRun": "true",
+              "title": "Soporte asistido (demo ficticia)"
+            },
+            "label": "Página soporte",
+            "type": "action"
+          }
+        },
+        {
+          "id": "solucion-bymstn",
+          "type": "action",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "data": {
+            "config": {
+              "actionType": "Solución",
+              "brand": "Active-clone · Demo",
+              "emptyText": "No hay consultas registradas.",
+              "solutionName": "Soporte asistido",
+              "sources": "tiendanube=inactive",
+              "subheading": "Demostración con datos ficticios: borradores y derivaciones a una persona. Fuentes desactivadas: la demo no las consulta.",
+              "view": "soporte-consultas"
+            },
+            "label": "Soporte asistido",
+            "type": "action"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "trigger-1",
+          "target": "r_c",
+          "type": "default"
+        },
+        {
+          "id": "e2",
+          "source": "r_c",
+          "target": "r_x",
+          "type": "default"
+        },
+        {
+          "id": "e3",
+          "source": "r_x",
+          "target": "sr",
+          "type": "default"
+        },
+        {
+          "id": "e4",
+          "source": "sr",
+          "target": "f1",
+          "type": "default"
+        }
+      ],
+      "records": [
+        {
+          "collection": "reporte_soporte",
+          "key": "ultimo",
+          "value": {
+            "advertencias": [
+              "Solo prepara borradores y marcas internas: estos borradores no se envían desde esta demo.",
+              "Solo responde con el contexto provisto; lo que no tiene dato se deriva a una persona, nunca se inventa."
+            ],
+            "filas": [
+              {
+                "borrador": "Hola Ana, tu pedido TN-1001 está en estado: pagado (pago acreditado).",
+                "cliente": "Ana",
+                "consulta": "C-1",
+                "estado": "Pendiente de aprobación",
+                "preparacion": "Ya preparado",
+                "tema": "Estado del pedido"
+              },
+              {
+                "borrador": "Hola Bruno, el envío de tu pedido TN-1002 está en estado: despachado.",
+                "cliente": "Bruno",
+                "consulta": "C-2",
+                "estado": "Pendiente de aprobación",
+                "preparacion": "Ya preparado",
+                "tema": "Estado del envío"
+              },
+              {
+                "borrador": "Hola Carla, el envío de tu pedido TN-1002 registra estado: despachado.",
+                "cliente": "Carla",
+                "consulta": "C-3",
+                "estado": "Pendiente de aprobación",
+                "preparacion": "Ya preparado",
+                "tema": "Demora de envío"
+              },
+              {
+                "borrador": "(sin borrador)",
+                "cliente": "Damián",
+                "consulta": "C-4",
+                "estado": "Deriva a humano: Devoluciones requieren decisión humana (política de la tienda)",
+                "preparacion": "Derivación registrada",
+                "tema": "Devolución"
+              },
+              {
+                "borrador": "(sin borrador)",
+                "cliente": "Elsa",
+                "consulta": "C-5",
+                "estado": "Deriva a humano: Consulta sin pedido identificado",
+                "preparacion": "Derivación registrada",
+                "tema": "Estado del envío"
+              },
+              {
+                "borrador": "(sin borrador)",
+                "cliente": "Fede",
+                "consulta": "C-6",
+                "estado": "Deriva a humano: Sin contexto del pedido TN-9999: no se responde sin dato",
+                "preparacion": "Derivación registrada",
+                "tema": "Estado del pedido"
+              }
+            ],
+            "generado": "2026-11-08T20:39:24.020Z",
+            "resumen": {
+              "borradoresNuevos": 0,
+              "consultasRecibidas": 6,
+              "derivadas": 3,
+              "yaPreparadas": 6
+            },
+            "total": 6
+          }
+        }
+      ]
+    }
+  ],
+  "seeds": [
+    {
+      "collection": "qa_fixture_consultas",
+      "key": "fx1",
+      "value": {
+        "consultas": [
+          {
+            "consultaId": "C-1",
+            "cliente": "Ana",
+            "texto": "Hola, ¿cómo viene mi pedido?",
+            "pedidoId": "TN-1001"
+          },
+          {
+            "consultaId": "C-2",
+            "cliente": "Bruno",
+            "texto": "¿Dónde está el envío? ¿Tienen tracking?",
+            "pedidoId": "TN-1002"
+          },
+          {
+            "consultaId": "C-3",
+            "cliente": "Carla",
+            "texto": "El paquete no llega, viene con demora",
+            "pedidoId": "TN-1002"
+          },
+          {
+            "consultaId": "C-4",
+            "cliente": "Damián",
+            "texto": "Quiero devolver el producto",
+            "pedidoId": "TN-1001"
+          },
+          {
+            "consultaId": "C-5",
+            "cliente": "Elsa",
+            "texto": "¿Hacen envíos a Tierra del Fuego?",
+            "pedidoId": ""
+          },
+          {
+            "consultaId": "C-6",
+            "cliente": "Fede",
+            "texto": "¿Cómo viene mi pedido?",
+            "pedidoId": "TN-9999"
+          }
+        ]
+      }
+    },
+    {
+      "collection": "qa_fixture_consultas",
+      "key": "fx2",
+      "value": {
+        "TN-1001": {
+          "estado": "pagado",
+          "detalle": "pago acreditado"
+        },
+        "TN-1002": {
+          "estado": "despachado"
+        }
+      }
+    },
+    {
+      "collection": "qa_fixture_eventos",
+      "key": "fx1",
+      "value": {
+        "eventos": [
+          {
+            "pedidoId": "TN-1001",
+            "referencia": "TN-1001",
+            "evento": "pago_confirmado",
+            "canal": "tiendanube",
+            "cliente": "Ana"
+          },
+          {
+            "pedidoId": "TN-1001",
+            "referencia": "TN-1001",
+            "evento": "despachado",
+            "canal": "tiendanube",
+            "cliente": "Ana"
+          },
+          {
+            "pedidoId": "ML-2001",
+            "referencia": "ML-2001",
+            "evento": "entregado",
+            "canal": "mercadolibre"
+          },
+          {
+            "pedidoId": "ML-2002",
+            "referencia": "ML-2002",
+            "evento": "cumpleanos",
+            "canal": "mercadolibre"
+          },
+          {
+            "pedidoId": "TN-1003",
+            "evento": "pago_confirmado"
+          }
+        ]
+      }
+    },
+    {
+      "collection": "qa_fixture_productos",
+      "key": "fx1",
+      "value": {
+        "productos": [
+          {
+            "productoId": "P-1",
+            "sku": "SKU-ROJO",
+            "nombre": "Remera roja",
+            "stock": 1
+          },
+          {
+            "productoId": "P-2",
+            "sku": "SKU-AZUL",
+            "nombre": "Remera azul",
+            "stock": 20
+          },
+          {
+            "productoId": "P-3",
+            "sku": "SKU-VERDE",
+            "nombre": "Remera verde",
+            "stock": 8,
+            "umbral": 10
+          },
+          {
+            "productoId": "P-4",
+            "sku": "SKU-SIN",
+            "nombre": "Sin dato",
+            "stock": "no se"
+          }
+        ]
+      }
+    },
+    {
+      "collection": "qa_fixture_ventas",
+      "key": "fx1",
+      "value": {
+        "ventas": [
+          {
+            "canal": "tiendanube",
+            "ordenId": "1001",
+            "referencia": "TN-1001",
+            "total": 100000
+          },
+          {
+            "canal": "tiendanube",
+            "ordenId": "1002",
+            "referencia": "TN-1002",
+            "total": 50000
+          },
+          {
+            "canal": "mercadolibre",
+            "ordenId": "2000000001",
+            "referencia": "ML-2001",
+            "total": 80000
+          }
+        ]
+      }
+    },
+    {
+      "collection": "qa_fixture_pagos",
+      "key": "fx1",
+      "value": {
+        "total": 3,
+        "count": 3,
+        "payments": [
+          {
+            "id": 901,
+            "status": "approved",
+            "amount": 100000,
+            "currency": "ARS",
+            "externalReference": "TN-1001",
+            "payerEmail": "",
+            "dateCreated": "2026-11-08T10:00:00Z"
+          },
+          {
+            "id": 902,
+            "status": "approved",
+            "amount": 79500,
+            "currency": "ARS",
+            "externalReference": "ML-2001",
+            "payerEmail": "",
+            "dateCreated": "2026-11-08T10:05:00Z"
+          },
+          {
+            "id": 903,
+            "status": "approved",
+            "amount": 12000,
+            "currency": "ARS",
+            "externalReference": "EXT-9",
+            "payerEmail": "",
+            "dateCreated": "2026-11-08T10:10:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "collection": "qa_fixture_envios",
+      "key": "fx1",
+      "value": {
+        "envios": [
+          {
+            "envioId": "ME2-111",
+            "canal": "mercadolibre",
+            "estado": "shipped",
+            "subestado": "delayed",
+            "referencia": "ML-2001"
+          },
+          {
+            "envioId": "CA-222",
+            "canal": "correoargentino",
+            "estado": "en_transito",
+            "diasEnEstado": 9,
+            "referencia": "TN-1001"
+          },
+          {
+            "envioId": "ZN-333",
+            "canal": "zipnova",
+            "estado": "en_transito",
+            "diasEnEstado": 10,
+            "referencia": "TN-1002"
+          },
+          {
+            "envioId": "EP-444",
+            "canal": "enviopack",
+            "estado": "delivered",
+            "referencia": "TN-1003"
+          }
+        ]
+      }
+    }
+  ]
+}

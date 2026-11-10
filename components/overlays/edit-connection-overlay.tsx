@@ -139,13 +139,14 @@ export function EditConnectionOverlay({
   const { push, closeAll } = useOverlay();
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{
+  const [_testResult, setTestResult] = useState<{
     status: "success" | "error";
     message: string;
   } | null>(null);
   const [name, setName] = useState(integration.name);
   const [config, setConfig] = useState<Record<string, string>>({});
   // Which secret fields already have a saved value (values are never shown).
+  const [configReadable, setConfigReadable] = useState<boolean | null>(null);
   const [savedKeys, setSavedKeys] = useState<Set<string> | null>(null);
 
   useEffect(() => {
@@ -156,6 +157,9 @@ export function EditConnectionOverlay({
         if (cancelled) {
           return;
         }
+        setConfigReadable(
+          !("configReadable" in full && full.configReadable === false)
+        );
         const keys = Object.entries(full.config ?? {})
           .filter(([, value]) => typeof value === "string" && value.length > 0)
           .map(([key]) => key);
@@ -184,7 +188,11 @@ export function EditConnectionOverlay({
       closeAll();
     } catch (error) {
       console.error("Failed to update integration:", error);
-      toast.error("Failed to update connection");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar la conexión"
+      );
     } finally {
       setSaving(false);
     }
@@ -289,11 +297,13 @@ export function EditConnectionOverlay({
   const formFields = plugin?.formFields;
 
   // Incoming webhook URL (only for plugins that receive notifications)
-  const notificationUrl = plugin?.webhook
-    ? integration.type === "mercadolibre"
-      ? `${window.location.origin}/api/integrations/mercadolibre/notifications`
-      : `${window.location.origin}/api/integrations/webhooks/${integration.type}/${integration.id}`
-    : "";
+  let notificationUrl = "";
+  if (plugin?.webhook) {
+    notificationUrl =
+      integration.type === "mercadolibre"
+        ? `${window.location.origin}/api/integrations/mercadolibre/notifications`
+        : `${window.location.origin}/api/integrations/webhooks/${integration.type}/${integration.id}`;
+  }
 
   // Render config fields
   const renderConfigFields = () => {
@@ -311,7 +321,9 @@ export function EditConnectionOverlay({
       );
     }
 
-    if (!formFields) return null;
+    if (!formFields) {
+      return null;
+    }
 
     return formFields.map((field) => {
       if (field.type === "password") {
@@ -368,16 +380,21 @@ export function EditConnectionOverlay({
           label: "Delete",
           variant: "ghost",
           onClick: handleDelete,
-          disabled: saving || testing,
+          disabled: saving || testing || configReadable !== true,
         },
         {
           label: "Test",
           variant: "outline",
           onClick: handleTest,
           loading: testing,
-          disabled: saving,
+          disabled: saving || configReadable !== true,
         },
-        { label: "Update", onClick: handleSave, loading: saving },
+        {
+          label: "Update",
+          onClick: handleSave,
+          loading: saving,
+          disabled: configReadable !== true,
+        },
       ]}
       overlayId={overlayId}
       title={`Edit ${getLabel(integration.type)}`}
@@ -386,7 +403,17 @@ export function EditConnectionOverlay({
         Update your connection credentials
       </p>
 
-      <div className="space-y-4">
+      {configReadable === false && (
+        <p
+          className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-950 text-sm"
+          role="alert"
+        >
+          No se puede leer la configuración de esta conexión en este entorno.
+          Para proteger los datos originales, la edición y el borrado están
+          bloqueados. Usá el entorno donde la conexión funciona para cambiarla.
+        </p>
+      )}
+      <fieldset className="space-y-4" disabled={configReadable !== true}>
         {renderConfigFields()}
 
         {notificationUrl && (
@@ -426,7 +453,7 @@ export function EditConnectionOverlay({
             value={name}
           />
         </div>
-      </div>
+      </fieldset>
     </Overlay>
   );
 }
@@ -463,7 +490,11 @@ export function DeleteConnectionOverlay({
       onSuccess?.();
     } catch (error) {
       console.error("Failed to delete integration:", error);
-      toast.error("Failed to delete connection");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo eliminar la conexión"
+      );
       setDeleting(false);
     }
   };

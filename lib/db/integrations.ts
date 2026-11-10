@@ -1,78 +1,21 @@
 import "server-only";
 
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
+import {
+  assertIntegrationConfigReadable,
+  decrypt as decryptValue,
+  encrypt as encryptValue,
+} from "@/lib/integrations/crypto";
 import type { IntegrationConfig, IntegrationType } from "../types/integration";
 import { db } from "./index";
 import { integrations, type NewIntegration } from "./schema";
 
-// Encryption configuration
-const ALGORITHM = "aes-256-gcm";
-const IV_LENGTH = 16;
-const ENCRYPTION_KEY_ENV = "INTEGRATION_ENCRYPTION_KEY";
-
-/**
- * Get or generate encryption key from environment
- * Key should be a 32-byte hex string (64 characters)
- */
-function getEncryptionKey(): Buffer {
-  const keyHex = process.env[ENCRYPTION_KEY_ENV];
-
-  if (!keyHex) {
-    throw new Error(
-      `${ENCRYPTION_KEY_ENV} environment variable is required for encrypting integration credentials`
-    );
-  }
-
-  if (keyHex.length !== 64) {
-    throw new Error(
-      `${ENCRYPTION_KEY_ENV} must be a 64-character hex string (32 bytes)`
-    );
-  }
-
-  return Buffer.from(keyHex, "hex");
-}
-
-/**
- * Encrypt sensitive data
- * Returns a string in format: iv:authTag:encryptedData (all hex-encoded)
- */
+// Compatibility for callers that already import these functions here.
 export function encrypt(plaintext: string): string {
-  const key = getEncryptionKey();
-  const iv = randomBytes(IV_LENGTH);
-  const cipher = createCipheriv(ALGORITHM, key, iv);
-
-  let encrypted = cipher.update(plaintext, "utf8", "hex");
-  encrypted += cipher.final("hex");
-
-  const authTag = cipher.getAuthTag();
-
-  // Return format: iv:authTag:ciphertext (all hex)
-  return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted}`;
+  return encryptValue(plaintext);
 }
-
-/**
- * Decrypt encrypted data
- */
 export function decrypt(ciphertext: string): string {
-  const key = getEncryptionKey();
-  const parts = ciphertext.split(":");
-
-  if (parts.length !== 3) {
-    throw new Error("Invalid encrypted data format");
-  }
-
-  const iv = Buffer.from(parts[0], "hex");
-  const authTag = Buffer.from(parts[1], "hex");
-  const encrypted = parts[2];
-
-  const decipher = createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(authTag);
-
-  let decrypted = decipher.update(encrypted, "hex", "utf8");
-  decrypted += decipher.final("utf8");
-
-  return decrypted;
+  return decryptValue(ciphertext);
 }
 
 /**
@@ -95,12 +38,22 @@ function decryptConfig(encryptedConfig: string): Record<string, unknown> {
   }
 }
 
+function isConfigReadable(ciphertext: string): boolean {
+  try {
+    assertIntegrationConfigReadable(ciphertext);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export type DecryptedIntegration = {
   id: string;
   userId: string;
   name: string;
   type: IntegrationType;
   config: IntegrationConfig;
+  configReadable?: boolean;
   isManaged: boolean | null;
   createdAt: Date;
   updatedAt: Date;
@@ -127,6 +80,7 @@ export async function getIntegrations(
   return results.map((integration) => ({
     ...integration,
     config: decryptConfig(integration.config as string) as IntegrationConfig,
+    configReadable: isConfigReadable(integration.config as string),
   }));
 }
 
@@ -152,6 +106,7 @@ export async function getIntegration(
   return {
     ...result[0],
     config: decryptConfig(result[0].config as string) as IntegrationConfig,
+    configReadable: isConfigReadable(result[0].config as string),
   };
 }
 
@@ -174,6 +129,7 @@ export async function getIntegrationById(
   return {
     ...result[0],
     config: decryptConfig(result[0].config as string) as IntegrationConfig,
+    configReadable: isConfigReadable(result[0].config as string),
   };
 }
 
@@ -215,34 +171,43 @@ export async function updateIntegration(
     config?: IntegrationConfig;
   }
 ): Promise<DecryptedIntegration | null> {
-  const updateData: Partial<NewIntegration> = {
-    updatedAt: new Date(),
-  };
+  return await db.transaction(async (tx) => {
+    // Lock the exact owned row until commit. Never validate a stale ciphertext
+    // and then overwrite a newer config installed by another environment.
+    const [current] = await tx
+      .select()
+      .from(integrations)
+      .where(
+        and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
+      )
+      .for("update");
+    if (!current) {
+      return null;
+    }
+    assertIntegrationConfigReadable(current.config as string);
 
-  if (updates.name !== undefined) {
-    updateData.name = updates.name;
-  }
-
-  if (updates.config !== undefined) {
-    updateData.config = encryptConfig(updates.config);
-  }
-
-  const [result] = await db
-    .update(integrations)
-    .set(updateData)
-    .where(
-      and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
-    )
-    .returning();
-
-  if (!result) {
-    return null;
-  }
-
-  return {
-    ...result,
-    config: decryptConfig(result.config as string) as IntegrationConfig,
-  };
+    const updateData: Partial<NewIntegration> = { updatedAt: new Date() };
+    if (updates.name !== undefined) {
+      updateData.name = updates.name;
+    }
+    if (updates.config !== undefined) {
+      updateData.config = encryptConfig(updates.config);
+    }
+    const [result] = await tx
+      .update(integrations)
+      .set(updateData)
+      .where(
+        and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
+      )
+      .returning();
+    return result
+      ? {
+          ...result,
+          config: decryptConfig(result.config as string) as IntegrationConfig,
+          configReadable: true,
+        }
+      : null;
+  });
 }
 
 /**
@@ -252,14 +217,26 @@ export async function deleteIntegration(
   integrationId: string,
   userId: string
 ): Promise<boolean> {
-  const result = await db
-    .delete(integrations)
-    .where(
-      and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
-    )
-    .returning();
-
-  return result.length > 0;
+  return await db.transaction(async (tx) => {
+    const [current] = await tx
+      .select()
+      .from(integrations)
+      .where(
+        and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
+      )
+      .for("update");
+    if (!current) {
+      return false;
+    }
+    assertIntegrationConfigReadable(current.config as string);
+    const result = await tx
+      .delete(integrations)
+      .where(
+        and(eq(integrations.id, integrationId), eq(integrations.userId, userId))
+      )
+      .returning();
+    return result.length > 0;
+  });
 }
 
 /**
@@ -346,5 +323,6 @@ export async function getIntegrationsByType(
   return rows.map((row) => ({
     ...row,
     config: decryptConfig(row.config as string) as IntegrationConfig,
+    configReadable: isConfigReadable(row.config as string),
   }));
 }

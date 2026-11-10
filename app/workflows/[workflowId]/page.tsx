@@ -1,6 +1,5 @@
 "use client";
 
-import { LAST_WORKFLOW_KEY } from "@/lib/last-workflow";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
@@ -16,8 +15,10 @@ import {
   integrationsLoadedAtom,
   integrationsVersionAtom,
 } from "@/lib/integrations-store";
+import { LAST_WORKFLOW_KEY } from "@/lib/last-workflow";
 import type { IntegrationType } from "@/lib/types/integration";
 import {
+  canEditWorkflowAtom,
   currentWorkflowIdAtom,
   currentWorkflowNameAtom,
   currentWorkflowVisibilityAtom,
@@ -28,7 +29,6 @@ import {
   isPanelAnimatingAtom,
   isSavingAtom,
   isSidebarCollapsedAtom,
-  canEditWorkflowAtom,
   isWorkflowOwnerAtom,
   nodesAtom,
   rightPanelWidthAtom,
@@ -39,6 +39,7 @@ import {
   type WorkflowVisibility,
   workflowNotFoundAtom,
 } from "@/lib/workflow-store";
+import { ensureNodePositions } from "@/lib/workflows/positions";
 import { findActionById } from "@/plugins";
 
 type WorkflowPageProps = {
@@ -319,10 +320,11 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
       try {
         const workflowData = await api.ai.generate(prompt);
 
-        // Clear selection on all nodes
-        const nodesWithoutSelection = (workflowData.nodes || []).map(
-          (node: WorkflowNode) => ({ ...node, selected: false })
-        );
+        // Clear selection on all nodes; default position so the canvas
+        // never crashes on a node saved without one
+        const nodesWithoutSelection = ensureNodePositions(
+          workflowData.nodes || []
+        ).map((node: WorkflowNode) => ({ ...node, selected: false }));
         setNodes(nodesWithoutSelection);
         setEdges(workflowData.edges || []);
         setCurrentWorkflowName(workflowData.name || "AI Generated Workflow");
@@ -360,15 +362,19 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
         return;
       }
 
-      // Reset node statuses to idle and clear selection when loading from database
-      const nodesWithIdleStatus = workflow.nodes.map((node: WorkflowNode) => ({
-        ...node,
-        selected: false,
-        data: {
-          ...node.data,
-          status: "idle" as const,
-        },
-      }));
+      // Reset node statuses to idle and clear selection when loading from
+      // database; default position so a node saved without one cannot crash
+      // the canvas (React Flow reads position.x)
+      const nodesWithIdleStatus = ensureNodePositions(workflow.nodes).map(
+        (node: WorkflowNode) => ({
+          ...node,
+          selected: false,
+          data: {
+            ...node.data,
+            status: "idle" as const,
+          },
+        })
+      );
 
       setNodes(nodesWithIdleStatus);
       setEdges(workflow.edges);
@@ -397,6 +403,7 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
     setIsWorkflowOwner,
     setHasUnsavedChanges,
     setWorkflowNotFound,
+    setCanEditWorkflow,
   ]);
 
   // Track if we've already auto-fixed integrations for this workflow+version
@@ -702,7 +709,7 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
       {/* Expand button when panel is collapsed */}
       {!isMobile && panelCollapsed && (
         <button
-          className="pointer-events-auto absolute top-1/2 right-0 z-20 flex size-6 -translate-y-1/2 items-center justify-center rounded-l-full border border-r-0 bg-background shadow-sm transition-colors hover:bg-muted"
+          className="-translate-y-1/2 pointer-events-auto absolute top-1/2 right-0 z-20 flex size-6 items-center justify-center rounded-l-full border border-r-0 bg-background shadow-sm transition-colors hover:bg-muted"
           onClick={() => {
             setIsPanelAnimating(true);
             setPanelCollapsed(false);
@@ -717,8 +724,8 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
       {/* Right panel overlay (desktop only) */}
       {!isMobile && (
         <div
-          data-right-panel="true"
           className="pointer-events-auto absolute inset-y-0 right-0 z-20 border-l bg-background transition-transform duration-300 ease-out"
+          data-right-panel="true"
           style={{
             width: `${panelWidth}%`,
             transform:
@@ -742,7 +749,7 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
             {/* Collapse button - hidden while resizing */}
             {!(isDraggingResize || panelCollapsed) && (
               <button
-                className="absolute top-1/2 left-0 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border bg-background opacity-0 shadow-sm transition-opacity hover:bg-muted group-hover:opacity-100"
+                className="-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-0 flex size-6 items-center justify-center rounded-full border bg-background opacity-0 shadow-sm transition-opacity hover:bg-muted group-hover:opacity-100"
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsPanelAnimating(true);

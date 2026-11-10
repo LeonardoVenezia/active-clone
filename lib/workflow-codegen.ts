@@ -1,7 +1,6 @@
-import { generateErrorPolicyRunner } from "./workflow-error-policy-codegen";
+import { findActionById, flattenConfigFields } from "@/plugins";
 import { preValidateConditionExpression } from "./condition-validator";
 import { explicitErrorPolicy } from "./node-error-policy";
-import { findActionById, flattenConfigFields } from "@/plugins";
 import {
   analyzeNodeUsage,
   buildAccessPath,
@@ -12,6 +11,7 @@ import {
   toFriendlyVarName,
   toTypeScriptLiteral,
 } from "./workflow-codegen-shared";
+import { generateErrorPolicyRunner } from "./workflow-error-policy-codegen";
 import type { WorkflowEdge, WorkflowNode } from "./workflow-store";
 
 type CodeGenOptions = {
@@ -32,18 +32,43 @@ const CONST_ASSIGNMENT_PATTERN = /^(\s*)(const\s+\w+\s*=\s*)(.*)$/;
 /**
  * Generate TypeScript code from workflow JSON with "use workflow" directive
  */
-const PLATFORM_ONLY_ACTIONS = ["Datos", "Frontend", "Comparar Stock"];
-const PLATFORM_ONLY_GUARD_LINES: string[] = ["  // EXPORT BLOCKED: this flow has a Datos or Frontend node. They depend on the platform (per-company data store and workflow page);", "  // this exported code cannot reproduce them, so it refuses to run instead of silently behaving differently.", "  const platformOnlyNotSupported: boolean = true;", "  if (platformOnlyNotSupported) {", "    throw new Error(\"Export not supported: this flow uses a Datos or Frontend node. Run it on the platform.\");", "  }"];
-const UNIR_GUARD_LINES: string[] = ["  // EXPORT BLOCKED: this flow has a Unir (join) node. The platform engine waits there for parallel branches (or a timeout);", "  // this exported code cannot reproduce that, so it refuses to run instead of silently behaving differently.", "  const unirNotSupported: boolean = true;", "  if (unirNotSupported) {", "    throw new Error(\"Export not supported: this flow uses a Unir node (join of parallel branches). Run it on the platform.\");", "  }"];
+const PLATFORM_ONLY_ACTIONS = [
+  "Datos",
+  "Frontend",
+  "Comparar Stock",
+  "Conciliar Pagos",
+  "Revisar Envíos",
+  "Alertas de Stock",
+  "Preparar Avisos",
+  "Preparar Respuestas",
+];
+const PLATFORM_ONLY_GUARD_LINES: string[] = [
+  "  // EXPORT BLOCKED: this flow has a Datos or Frontend node. They depend on the platform (per-company data store and workflow page);",
+  "  // this exported code cannot reproduce them, so it refuses to run instead of silently behaving differently.",
+  "  const platformOnlyNotSupported: boolean = true;",
+  "  if (platformOnlyNotSupported) {",
+  '    throw new Error("Export not supported: this flow uses a Datos or Frontend node. Run it on the platform.");',
+  "  }",
+];
+const UNIR_GUARD_LINES: string[] = [
+  "  // EXPORT BLOCKED: this flow has a Unir (join) node. The platform engine waits there for parallel branches (or a timeout);",
+  "  // this exported code cannot reproduce that, so it refuses to run instead of silently behaving differently.",
+  "  const unirNotSupported: boolean = true;",
+  "  if (unirNotSupported) {",
+  '    throw new Error("Export not supported: this flow uses a Unir node (join of parallel branches). Run it on the platform.");',
+  "  }",
+];
 
 export function generateWorkflowCode(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[],
   options: CodeGenOptions = {}
 ): GeneratedCode {
-  const functionName = sanitizeFunctionName(options.functionName ?? "executeWorkflow");
+  const functionName = sanitizeFunctionName(
+    options.functionName ?? "executeWorkflow"
+  );
 
-  const hasErrorPolicy = nodes.some(n => explicitErrorPolicy(n.data.config));
+  const hasErrorPolicy = nodes.some((n) => explicitErrorPolicy(n.data.config));
   // Analyze which node outputs are actually used
   const usedNodeOutputs = analyzeNodeUsage(nodes);
 
@@ -75,17 +100,28 @@ export function generateWorkflowCode(
   const visited = new Set<string>();
 
   // Generate function signature
-  const functionSignature = inputIsUsed || hasErrorPolicy
-    ? `export async function ${functionName}<TInput>(input: TInput) {`
-    : `export async function ${functionName}() {`;
+  const functionSignature =
+    inputIsUsed || hasErrorPolicy
+      ? `export async function ${functionName}<TInput>(input: TInput) {`
+      : `export async function ${functionName}() {`;
   codeLines.push(functionSignature);
   codeLines.push(`  "use workflow";`);
   codeLines.push("");
-  if (nodes.some((n) => n.data.type === "action" && n.data.config?.actionType === "Unir")) {
+  if (
+    nodes.some(
+      (n) => n.data.type === "action" && n.data.config?.actionType === "Unir"
+    )
+  ) {
     codeLines.push(...UNIR_GUARD_LINES);
     codeLines.push("");
   }
-  if (nodes.some((n) => n.data.type === "action" && PLATFORM_ONLY_ACTIONS.includes(String(n.data.config?.actionType)))) {
+  if (
+    nodes.some(
+      (n) =>
+        n.data.type === "action" &&
+        PLATFORM_ONLY_ACTIONS.includes(String(n.data.config?.actionType))
+    )
+  ) {
     codeLines.push(...PLATFORM_ONLY_GUARD_LINES);
     codeLines.push("");
   }
@@ -456,7 +492,6 @@ export function generateWorkflowCode(
     return lines;
   }
 
-
   function generateDelayActionCode(
     node: WorkflowNode,
     indent: string,
@@ -467,8 +502,15 @@ export function generateWorkflowCode(
     const minutes = Number(config.durationMinutes ?? 0) || 0;
     const seconds = Number(config.durationSeconds ?? 0) || 0;
     const totalSeconds = Math.round(minutes * 60 + seconds);
-    if (hasErrorPolicy && (!Number.isFinite(totalSeconds) || totalSeconds <= 0 || totalSeconds > 86400)) {
-      return [`${indent}const ${varName} = {success:false,error:"Invalid delay duration (1 second to 24 hours)."};`];
+    if (
+      hasErrorPolicy &&
+      (!Number.isFinite(totalSeconds) ||
+        totalSeconds <= 0 ||
+        totalSeconds > 86_400)
+    ) {
+      return [
+        `${indent}const ${varName} = {success:false,error:"Invalid delay duration (1 second to 24 hours)."};`,
+      ];
     }
     return [
       `${indent}// Delay (durable sleep)`,
@@ -856,13 +898,41 @@ export function generateWorkflowCode(
       return removeVariableAssignment(actionLines);
     };
 
-    if (hasErrorPolicy && !["Delay", "Approval", "Unir", "Datos", "Frontend", "Loop", "Comparar Stock"].includes(actionType)) {
-      if (!actionType || (!findActionById(actionType) && !["HTTP Request", "Database Query", "Fórmula"].includes(actionType))) {
-        return [`${indent}const ${varName} = {success:false,error:${JSON.stringify("Unknown action type: " + actionType)}};`];
+    if (
+      hasErrorPolicy &&
+      ![
+        "Delay",
+        "Approval",
+        "Unir",
+        "Datos",
+        "Frontend",
+        "Loop",
+        "Comparar Stock",
+        "Conciliar Pagos",
+        "Revisar Envíos",
+        "Alertas de Stock",
+        "Preparar Avisos",
+        "Preparar Respuestas",
+      ].includes(actionType)
+    ) {
+      if (
+        !(
+          actionType &&
+          (findActionById(actionType) ||
+            ["HTTP Request", "Database Query", "Fórmula"].includes(actionType))
+        )
+      ) {
+        return [
+          `${indent}const ${varName} = {success:false,error:${JSON.stringify("Unknown action type: " + actionType)}};`,
+        ];
       }
       const stepInfo = getStepInfo(actionType);
-      imports.add(`import { ${stepInfo.functionName} } from '${stepInfo.importPath}';`);
-      return [`${indent}const ${varName} = await ${stepInfo.functionName}(__policyConfig(${JSON.stringify(node.data.config || {})}));`];
+      imports.add(
+        `import { ${stepInfo.functionName} } from '${stepInfo.importPath}';`
+      );
+      return [
+        `${indent}const ${varName} = await ${stepInfo.functionName}(__policyConfig(${JSON.stringify(node.data.config || {})}));`,
+      ];
     }
 
     // Check explicit actionType first
@@ -1121,7 +1191,9 @@ export function generateWorkflowCode(
     const actionType = node.data.config?.actionType as string;
     const actionLabel = node.data.label || actionType || "Unknown Action";
     if (PLATFORM_ONLY_ACTIONS.includes(actionType)) {
-      return [`${indent}// ${actionType} "${actionLabel}": NOT exported. It depends on the platform (data store / workflow page).`];
+      return [
+        `${indent}// ${actionType} "${actionLabel}": NOT exported. It depends on the platform (data store / workflow page).`,
+      ];
     }
     if (actionType === "Unir") {
       return [
@@ -1289,7 +1361,11 @@ export function generateWorkflowCode(
   }
 
   // Keys to exclude from generated code (internal app fields)
-  const EXCLUDED_CONFIG_KEYS = new Set(["actionType", "integrationId", "onError"]);
+  const EXCLUDED_CONFIG_KEYS = new Set([
+    "actionType",
+    "integrationId",
+    "onError",
+  ]);
 
   /**
    * Build config parameters using fallback logic
@@ -1408,35 +1484,47 @@ export function generateWorkflowCode(
 
   if (hasErrorPolicy) {
     // Limits that predate this policy remain explicit, before any step can run.
-    if(nodes.some(n=>n.data.config?.actionType==="Loop")) codeLines.push('  throw new Error("Export not supported: Loop execution is not available in this export. Run it on the platform.");');
-    const callbacks: string[]=[];
-    for(const node of nodes) {
+    if (nodes.some((n) => n.data.config?.actionType === "Loop"))
+      codeLines.push(
+        '  throw new Error("Export not supported: Loop execution is not available in this export. Run it on the platform.");'
+      );
+    const callbacks: string[] = [];
+    for (const node of nodes) {
       callbacks.push(`    ${JSON.stringify(node.id)}: async () => {`);
-      if(node.data.type==="trigger") callbacks.push('      return input;');
-      else if(node.data.config?.actionType==="Condition") {
-        const raw=node.data.config?.condition;
-        const valid=typeof raw!=="string" || preValidateConditionExpression(raw).valid;
-        const expression=typeof raw==="string" ? convertConditionToJS(raw) : String(Boolean(raw));
-        callbacks.push(valid ? `      try { return {condition:Boolean(${expression || "false"})}; } catch { return {condition:false}; }` : '      return {condition:false};');
+      if (node.data.type === "trigger") callbacks.push("      return input;");
+      else if (node.data.config?.actionType === "Condition") {
+        const raw = node.data.config?.condition;
+        const valid =
+          typeof raw !== "string" || preValidateConditionExpression(raw).valid;
+        const expression =
+          typeof raw === "string"
+            ? convertConditionToJS(raw)
+            : String(Boolean(raw));
+        callbacks.push(
+          valid
+            ? `      try { return {condition:Boolean(${expression || "false"})}; } catch { return {condition:false}; }`
+            : "      return {condition:false};"
+        );
       } else {
-        const varName=nodeIdToVarName.get(node.id)!;
-        callbacks.push(...generateActionNodeCode(node,node.id,"      ",varName));
+        const varName = nodeIdToVarName.get(node.id)!;
+        callbacks.push(
+          ...generateActionNodeCode(node, node.id, "      ", varName)
+        );
         callbacks.push(`      return ${varName};`);
       }
-      callbacks.push('    },');
+      callbacks.push("    },");
     }
-    codeLines.push(...generateErrorPolicyRunner(nodes,edges,callbacks));
+    codeLines.push(...generateErrorPolicyRunner(nodes, edges, callbacks));
   } else {
-  // Generate code starting from trigger nodes
-  if (triggerNodes.length === 0) {
-    codeLines.push("  // No trigger nodes found");
-  } else {
-    for (const trigger of triggerNodes) {
-      const triggerCode = generateNodeCode(trigger.id, "  ");
-      codeLines.push(...triggerCode);
+    // Generate code starting from trigger nodes
+    if (triggerNodes.length === 0) {
+      codeLines.push("  // No trigger nodes found");
+    } else {
+      for (const trigger of triggerNodes) {
+        const triggerCode = generateNodeCode(trigger.id, "  ");
+        codeLines.push(...triggerCode);
+      }
     }
-  }
-
   }
   codeLines.push("}");
 
@@ -1471,4 +1559,4 @@ export function generateWorkflowModule(
 
 ${code}
 `;
-    }
+}

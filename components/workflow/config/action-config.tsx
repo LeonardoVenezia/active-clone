@@ -8,9 +8,9 @@ import { AiGatewayConsentOverlay } from "@/components/overlays/ai-gateway-consen
 import { useOverlay } from "@/components/overlays/overlay-provider";
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/code-editor";
+import { Input } from "@/components/ui/input";
 import { IntegrationIcon } from "@/components/ui/integration-icon";
 import { IntegrationSelector } from "@/components/ui/integration-selector";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -28,8 +28,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { parseTogether, sameValueText, serializeTogether, TOGETHER_LABEL, TOGETHER_MAX, type TogetherRow, validateTogether, valueKindHint } from "@/lib/datos/together-config";
 import { aiGatewayStatusAtom } from "@/lib/ai-gateway/state";
+import {
+  parseTogether,
+  sameValueText,
+  serializeTogether,
+  TOGETHER_LABEL,
+  TOGETHER_MAX,
+  type TogetherRow,
+  validateTogether,
+  valueKindHint,
+} from "@/lib/datos/together-config";
 import {
   integrationsAtom,
   integrationsVersionAtom,
@@ -276,7 +285,6 @@ function FormulaFields({
   );
 }
 
-
 // Delay fields component
 // Frontend fields component (one basic page per workflow; prototype)
 function FrontendFields({
@@ -302,7 +310,9 @@ function FrontendFields({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="frontend-rowsfield">Lista dentro del registro (opcional)</Label>
+        <Label htmlFor="frontend-rowsfield">
+          Lista dentro del registro (opcional)
+        </Label>
         <Input
           disabled={disabled}
           id="frontend-rowsfield"
@@ -316,7 +326,9 @@ function FrontendFields({
         </p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="frontend-labels">Etiquetas de columnas (opcional)</Label>
+        <Label htmlFor="frontend-labels">
+          Etiquetas de columnas (opcional)
+        </Label>
         <Input
           disabled={disabled}
           id="frontend-labels"
@@ -326,7 +338,9 @@ function FrontendFields({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="frontend-collection">Colección de Datos a mostrar</Label>
+        <Label htmlFor="frontend-collection">
+          Colección de Datos a mostrar
+        </Label>
         <Input
           disabled={disabled}
           id="frontend-collection"
@@ -340,7 +354,9 @@ function FrontendFields({
         </p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="frontend-columns">Columnas de la tabla (opcional)</Label>
+        <Label htmlFor="frontend-columns">
+          Columnas de la tabla (opcional)
+        </Label>
         <Input
           disabled={disabled}
           id="frontend-columns"
@@ -349,7 +365,8 @@ function FrontendFields({
           value={(config?.columns as string) || ""}
         />
         <p className="text-muted-foreground text-xs">
-          Campos del valor que se muestran como columnas (hasta 12). Vacío: tabla básica Clave / Valor.
+          Campos del valor que se muestran como columnas (hasta 12). Vacío:
+          tabla básica Clave / Valor.
         </p>
       </div>
       <div className="space-y-2">
@@ -365,14 +382,17 @@ function FrontendFields({
           <option value="true">Mostrar</option>
         </select>
         <p className="text-muted-foreground text-xs">
-          Se arma con los campos que definas para la colección en un nodo Datos (Definir campos).
-          Cada envío se valida en el servidor y se guarda en la colección.
+          Se arma con los campos que definas para la colección en un nodo Datos
+          (Definir campos). Cada envío se valida en el servidor y se guarda en
+          la colección.
         </p>
       </div>
       {config?.showForm === "true" && (
         <>
           <div className="space-y-2">
-            <Label htmlFor="frontend-keyfield">Campo que se usa como clave (opcional)</Label>
+            <Label htmlFor="frontend-keyfield">
+              Campo que se usa como clave (opcional)
+            </Label>
             <Input
               disabled={disabled}
               id="frontend-keyfield"
@@ -380,10 +400,15 @@ function FrontendFields({
               placeholder="sku"
               value={(config?.keyField as string) || ""}
             />
-            <p className="text-muted-foreground text-xs">Vacío: clave automática. Con clave, enviar de nuevo el mismo valor actualiza ese registro.</p>
+            <p className="text-muted-foreground text-xs">
+              Vacío: clave automática. Con clave, enviar de nuevo el mismo valor
+              actualiza ese registro.
+            </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="frontend-runsubmit">Al enviar, ejecutar este workflow</Label>
+            <Label htmlFor="frontend-runsubmit">
+              Al enviar, ejecutar este workflow
+            </Label>
             <select
               className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
               disabled={disabled}
@@ -395,7 +420,8 @@ function FrontendFields({
               <option value="true">Sí, con los valores del formulario</option>
             </select>
             <p className="text-muted-foreground text-xs">
-              Los valores validados llegan al disparador Manual (si ese disparador declara campos, recibe solo esos).
+              Los valores validados llegan al disparador Manual (si ese
+              disparador declara campos, recibe solo esos).
             </p>
           </div>
         </>
@@ -422,90 +448,272 @@ function FrontendFields({
 }
 
 // Datos "Aplicar cambios juntos": editable list of changes (stored as a JSON string in config.operations).
-function DatosTogetherEditor({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled: boolean }) {
+function DatosTogetherEditor({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+}) {
   const [collapsed, setCollapsed] = useState<number[]>([]);
   // Text the user is typing: kept as typed (no reformatting) while it still means the same as what is stored.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const rows = parseTogether(value);
-  if (rows === null)
+  if (rows === null) {
     return (
       <div className="space-y-2">
         <Label htmlFor="datos-operations-raw">Lista de cambios (JSON)</Label>
-        <textarea className="min-h-32 w-full rounded-md border bg-background p-2 font-mono text-xs" disabled={disabled} id="datos-operations-raw" onChange={(e) => onChange(e.target.value)} value={value} />
-        <p className="text-foreground/80 text-sm">No se pudo leer la lista como cambios editables. Corregí el JSON o borrá el contenido para armarla con el editor.</p>
+        <textarea
+          className="min-h-32 w-full rounded-md border bg-background p-2 font-mono text-xs"
+          disabled={disabled}
+          id="datos-operations-raw"
+          onChange={(e) => onChange(e.target.value)}
+          value={value}
+        />
+        <p className="text-foreground/80 text-sm">
+          No se pudo leer la lista como cambios editables. Corregí el JSON o
+          borrá el contenido para armarla con el editor.
+        </p>
       </div>
     );
-  const set = (i: number, patch: Partial<TogetherRow>) => onChange(serializeTogether(rows.map((r, j) => (j === i ? { ...r, ...patch } : r))));
-  const setText = (i: number, k: "value" | "expected", text: string) => { setDrafts((d) => ({ ...d, [`${i}:${k}`]: text })); set(i, { [k]: text }); };
-  const shown = (i: number, k: "value" | "expected", stored: string | undefined) => { const d = drafts[`${i}:${k}`]; return d !== undefined && sameValueText(d, stored ?? "") ? d : (stored ?? ""); };
+  }
+  const set = (i: number, patch: Partial<TogetherRow>) =>
+    onChange(
+      serializeTogether(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+    );
+  const setText = (i: number, k: "value" | "expected", text: string) => {
+    setDrafts((d) => ({ ...d, [`${i}:${k}`]: text }));
+    set(i, { [k]: text });
+  };
+  const shown = (
+    i: number,
+    k: "value" | "expected",
+    stored: string | undefined
+  ) => {
+    const d = drafts[`${i}:${k}`];
+    return d !== undefined && sameValueText(d, stored ?? "")
+      ? d
+      : (stored ?? "");
+  };
   const check = validateTogether(rows);
   return (
     <div className="space-y-3">
-      <p className="text-foreground/80 text-sm">Los cambios se aplican todos juntos o ninguno. Si uno no se cumple, no se guarda nada y el resultado dice estado = rechazado y cuál cambio falló. Si el paso se reintenta, devuelve el mismo resultado (repetido = verdadero). Hasta {TOGETHER_MAX} cambios; cada colección y clave solo una vez.</p>
-      {rows.map((r, i) => (
-        <div className="space-y-2 rounded-md border p-3" key={i}>
-          <div className="flex items-center justify-between gap-2">
-            <button className="min-w-0 flex-1 break-words text-left text-sm font-medium" onClick={() => setCollapsed((c) => (c.includes(i) ? c.filter((x) => x !== i) : [...c, i]))} type="button">
-              {collapsed.includes(i) ? "▸" : "▾"} Cambio {i + 1}: {TOGETHER_LABEL[r.operation] ?? r.operation}
-              {r.collection || r.key ? ` · ${r.collection}${r.key ? ` / ${r.key}` : ""}` : ""}
-            </button>
-            <Button disabled={disabled} onClick={() => { setCollapsed([]); setDrafts({}); onChange(serializeTogether(rows.filter((_, j) => j !== i))); }} size="sm" type="button" variant="ghost">Quitar</Button>
+      <p className="text-foreground/80 text-sm">
+        Los cambios se aplican todos juntos o ninguno. Si uno no se cumple, no
+        se guarda nada y el resultado dice estado = rechazado y cuál cambio
+        falló. Si el paso se reintenta, devuelve el mismo resultado (repetido =
+        verdadero). Hasta {TOGETHER_MAX} cambios; cada colección y clave solo
+        una vez.
+      </p>
+      {rows.map(
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: fila del editor con validaciones por campo; refactor fuera de alcance
+        (r, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: filas de pares valor/esperado sin id estable
+          <div className="space-y-2 rounded-md border p-3" key={i}>
+            <div className="flex items-center justify-between gap-2">
+              <button
+                className="min-w-0 flex-1 break-words text-left font-medium text-sm"
+                onClick={() =>
+                  setCollapsed((c) =>
+                    c.includes(i) ? c.filter((x) => x !== i) : [...c, i]
+                  )
+                }
+                type="button"
+              >
+                {collapsed.includes(i) ? "▸" : "▾"} Cambio {i + 1}:{" "}
+                {TOGETHER_LABEL[r.operation] ?? r.operation}
+                {r.collection || r.key
+                  ? ` · ${r.collection}${r.key ? ` / ${r.key}` : ""}`
+                  : ""}
+              </button>
+              <Button
+                disabled={disabled}
+                onClick={() => {
+                  setCollapsed([]);
+                  setDrafts({});
+                  onChange(serializeTogether(rows.filter((_, j) => j !== i)));
+                }}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                Quitar
+              </Button>
+            </div>
+            {check.errors[i].length > 0 && (
+              <ul className="space-y-1 text-destructive text-xs" role="alert">
+                {check.errors[i].map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+              </ul>
+            )}
+            {!collapsed.includes(i) && (
+              <>
+                <select
+                  className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                  disabled={disabled}
+                  id={`datos-t-${i}-op`}
+                  onChange={(e) => set(i, { operation: e.target.value })}
+                  value={r.operation}
+                >
+                  {Object.entries(TOGETHER_LABEL).map(([k, l]) => (
+                    <option key={k} value={k}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+                <Label htmlFor={`datos-t-${i}-col`}>Colección</Label>
+                <Input
+                  disabled={disabled}
+                  id={`datos-t-${i}-col`}
+                  onChange={(e) => set(i, { collection: e.target.value })}
+                  placeholder="productos"
+                  value={r.collection}
+                />
+                <Label htmlFor={`datos-t-${i}-key`}>Clave</Label>
+                <Input
+                  disabled={disabled}
+                  id={`datos-t-${i}-key`}
+                  onChange={(e) => set(i, { key: e.target.value })}
+                  placeholder="SKU-123"
+                  value={r.key}
+                />
+                {r.operation === "add" && (
+                  <>
+                    <Label htmlFor={`datos-t-${i}-field`}>Campo numérico</Label>
+                    <Input
+                      disabled={disabled}
+                      id={`datos-t-${i}-field`}
+                      onChange={(e) => set(i, { field: e.target.value })}
+                      placeholder="stock"
+                      value={r.field ?? ""}
+                    />
+                    <Label htmlFor={`datos-t-${i}-amount`}>
+                      Cantidad a sumar (negativa para restar)
+                    </Label>
+                    <Input
+                      disabled={disabled}
+                      id={`datos-t-${i}-amount`}
+                      onChange={(e) => set(i, { amount: e.target.value })}
+                      placeholder="-1"
+                      value={r.amount ?? ""}
+                    />
+                    <Label htmlFor={`datos-t-${i}-min`}>
+                      Mínimo permitido (opcional)
+                    </Label>
+                    <Input
+                      disabled={disabled}
+                      id={`datos-t-${i}-min`}
+                      onChange={(e) => set(i, { min: e.target.value })}
+                      placeholder="0"
+                      value={r.min ?? ""}
+                    />
+                    <Label htmlFor={`datos-t-${i}-max`}>
+                      Máximo permitido (opcional)
+                    </Label>
+                    <Input
+                      disabled={disabled}
+                      id={`datos-t-${i}-max`}
+                      onChange={(e) => set(i, { max: e.target.value })}
+                      value={r.max ?? ""}
+                    />
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        checked={!!r.startAtZero}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          set(i, { startAtZero: e.target.checked })
+                        }
+                        type="checkbox"
+                      />
+                      Si el campo no existe, empezar en 0
+                    </label>
+                  </>
+                )}
+                {r.operation === "updateIfMatches" && (
+                  <>
+                    <Label htmlFor={`datos-t-${i}-exp`}>
+                      Valor esperado actual
+                    </Label>
+                    <Input
+                      disabled={disabled}
+                      id={`datos-t-${i}-exp`}
+                      onChange={(e) => setText(i, "expected", e.target.value)}
+                      placeholder='{"estado": "pendiente"}'
+                      value={shown(i, "expected", r.expected)}
+                    />
+                    {valueKindHint(r.expected) && (
+                      <p className="text-muted-foreground text-xs">
+                        {valueKindHint(r.expected)}
+                      </p>
+                    )}
+                  </>
+                )}
+                {(r.operation === "saveIfAbsent" ||
+                  r.operation === "updateIfMatches") && (
+                  <>
+                    <Label htmlFor={`datos-t-${i}-val`}>
+                      {r.operation === "updateIfMatches"
+                        ? "Valor nuevo"
+                        : "Valor"}
+                    </Label>
+                    <Input
+                      disabled={disabled}
+                      id={`datos-t-${i}-val`}
+                      onChange={(e) => setText(i, "value", e.target.value)}
+                      placeholder='{"estado": "pagado"}'
+                      value={shown(i, "value", r.value)}
+                    />
+                    {valueKindHint(r.value) && (
+                      <p className="text-muted-foreground text-xs">
+                        {valueKindHint(r.value)}
+                      </p>
+                    )}
+                  </>
+                )}
+              </>
+            )}
           </div>
-          {check.errors[i].length > 0 && (
-            <ul className="space-y-1 text-destructive text-xs" role="alert">
-              {check.errors[i].map((m) => (<li key={m}>{m}</li>))}
-            </ul>
-          )}
-          {!collapsed.includes(i) && (
-          <>
-          <select className="h-9 w-full rounded-md border bg-transparent px-3 text-sm" disabled={disabled} id={`datos-t-${i}-op`} onChange={(e) => set(i, { operation: e.target.value })} value={r.operation}>
-            {Object.entries(TOGETHER_LABEL).map(([k, l]) => (<option key={k} value={k}>{l}</option>))}
-          </select>
-          <Label htmlFor={`datos-t-${i}-col`}>Colección</Label>
-          <Input disabled={disabled} id={`datos-t-${i}-col`} onChange={(e) => set(i, { collection: e.target.value })} placeholder="productos" value={r.collection} />
-          <Label htmlFor={`datos-t-${i}-key`}>Clave</Label>
-          <Input disabled={disabled} id={`datos-t-${i}-key`} onChange={(e) => set(i, { key: e.target.value })} placeholder="SKU-123" value={r.key} />
-          {r.operation === "add" && (
-            <>
-              <Label htmlFor={`datos-t-${i}-field`}>Campo numérico</Label>
-              <Input disabled={disabled} id={`datos-t-${i}-field`} onChange={(e) => set(i, { field: e.target.value })} placeholder="stock" value={r.field ?? ""} />
-              <Label htmlFor={`datos-t-${i}-amount`}>Cantidad a sumar (negativa para restar)</Label>
-              <Input disabled={disabled} id={`datos-t-${i}-amount`} onChange={(e) => set(i, { amount: e.target.value })} placeholder="-1" value={r.amount ?? ""} />
-              <Label htmlFor={`datos-t-${i}-min`}>Mínimo permitido (opcional)</Label>
-              <Input disabled={disabled} id={`datos-t-${i}-min`} onChange={(e) => set(i, { min: e.target.value })} placeholder="0" value={r.min ?? ""} />
-              <Label htmlFor={`datos-t-${i}-max`}>Máximo permitido (opcional)</Label>
-              <Input disabled={disabled} id={`datos-t-${i}-max`} onChange={(e) => set(i, { max: e.target.value })} value={r.max ?? ""} />
-              <label className="flex items-center gap-2 text-sm"><input checked={!!r.startAtZero} disabled={disabled} onChange={(e) => set(i, { startAtZero: e.target.checked })} type="checkbox" />Si el campo no existe, empezar en 0</label>
-            </>
-          )}
-          {r.operation === "updateIfMatches" && (
-            <>
-              <Label htmlFor={`datos-t-${i}-exp`}>Valor esperado actual</Label>
-              <Input disabled={disabled} id={`datos-t-${i}-exp`} onChange={(e) => setText(i, "expected", e.target.value)} placeholder='{"estado": "pendiente"}' value={shown(i, "expected", r.expected)} />
-              {valueKindHint(r.expected) && <p className="text-muted-foreground text-xs">{valueKindHint(r.expected)}</p>}
-            </>
-          )}
-          {(r.operation === "saveIfAbsent" || r.operation === "updateIfMatches") && (
-            <>
-              <Label htmlFor={`datos-t-${i}-val`}>{r.operation === "updateIfMatches" ? "Valor nuevo" : "Valor"}</Label>
-              <Input disabled={disabled} id={`datos-t-${i}-val`} onChange={(e) => setText(i, "value", e.target.value)} placeholder='{"estado": "pagado"}' value={shown(i, "value", r.value)} />
-              {valueKindHint(r.value) && <p className="text-muted-foreground text-xs">{valueKindHint(r.value)}</p>}
-            </>
-          )}
-          </>
-          )}
-        </div>
-      ))}
-      <Button disabled={disabled || rows.length >= TOGETHER_MAX} onClick={() => onChange(serializeTogether([...rows, { operation: "add", collection: "", key: "", field: "", amount: "" }]))} size="sm" type="button" variant="outline">
+        )
+      )}
+      <Button
+        disabled={disabled || rows.length >= TOGETHER_MAX}
+        onClick={() =>
+          onChange(
+            serializeTogether([
+              ...rows,
+              {
+                operation: "add",
+                collection: "",
+                key: "",
+                field: "",
+                amount: "",
+              },
+            ])
+          )
+        }
+        size="sm"
+        type="button"
+        variant="outline"
+      >
         <Plus className="mr-1 size-4" />
         Agregar cambio
       </Button>
-      {check.general.length > 0 && <p className="text-destructive text-xs" role="alert">{check.general.join(" ")}</p>}
-      {rows.length >= TOGETHER_MAX && <p className="text-muted-foreground text-xs">Máximo {TOGETHER_MAX} cambios.</p>}
+      {check.general.length > 0 && (
+        <p className="text-destructive text-xs" role="alert">
+          {check.general.join(" ")}
+        </p>
+      )}
+      {rows.length >= TOGETHER_MAX && (
+        <p className="text-muted-foreground text-xs">
+          Máximo {TOGETHER_MAX} cambios.
+        </p>
+      )}
     </div>
   );
 }
-
 
 // Comparar Stock fields: compares ML snapshot vs TN products via SKU
 function StockCompareFields({
@@ -550,7 +758,9 @@ function StockCompareFields({
         <Input
           disabled={disabled}
           id="stock-compare-eq"
-          onChange={(e) => onUpdateConfig("equivalenciasCollection", e.target.value)}
+          onChange={(e) =>
+            onUpdateConfig("equivalenciasCollection", e.target.value)
+          }
           placeholder="equivalencias_sku"
           value={(config?.equivalenciasCollection as string) || ""}
         />
@@ -564,7 +774,285 @@ function StockCompareFields({
   );
 }
 
+// Conciliar Pagos fields: matches sales vs payment records by reference
+function ConciliarPagosFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="reconcile-ventas">Ventas</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="reconcile-ventas"
+          onChange={(value) => onUpdateConfig("ventas", value)}
+          placeholder="Salida del paso de ventas (canal, ordenId, referencia, total)"
+          value={(config?.ventas as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Usá @ para referenciar la salida del paso con las ventas de Tiendanube
+          y/o Mercado Libre. Acepta la salida cruda del conector (órdenes).
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="reconcile-canal">Canal de ventas (opcional)</Label>
+        <Input
+          disabled={disabled}
+          id="reconcile-canal"
+          onChange={(e) => onUpdateConfig("canalVentas", e.target.value)}
+          placeholder="tiendanube o mercadolibre"
+          value={(config?.canalVentas as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Solo si pegás la salida cruda del conector y no se puede detectar
+          solo. Vacío = detectar.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="reconcile-pagos">Cobros</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="reconcile-pagos"
+          onChange={(value) => onUpdateConfig("pagos", value)}
+          placeholder="Salida del paso de cobros (pagoId, referencia, bruto, comision, neto)"
+          value={(config?.pagos as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Usá @ para referenciar la salida del paso con los cobros de Mercado
+          Pago.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="reconcile-tolerancia">Tolerancia de monto</Label>
+        <Input
+          disabled={disabled}
+          id="reconcile-tolerancia"
+          onChange={(e) => onUpdateConfig("tolerancia", e.target.value)}
+          placeholder="1"
+          value={(config?.tolerancia as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Diferencia máxima entre el total de la venta y el cobro para
+          considerarlos conciliados (en la moneda de la venta). Vacío = 1.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="reconcile-reporte">Colección del reporte</Label>
+        <Input
+          disabled={disabled}
+          id="reconcile-reporte"
+          onChange={(e) => onUpdateConfig("reporteCollection", e.target.value)}
+          placeholder="reporte_conciliacion"
+          value={(config?.reporteCollection as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Colección de Datos de tu empresa donde se guarda el último reporte (se
+          sobrescribe en cada corrida).
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Revisar Envíos fields: flags delayed/alert-state shipments, deduped
+function RevisarEnviosFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="review-envios">Envíos</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="review-envios"
+          onChange={(value) => onUpdateConfig("envios", value)}
+          placeholder="Salida del paso de envíos (envioId, canal, estado, subestado, diasEnEstado)"
+          value={(config?.envios as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Usá @ para referenciar la salida del paso con los envíos.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="review-estados">Estados de alerta</Label>
+        <Input
+          disabled={disabled}
+          id="review-estados"
+          onChange={(e) => onUpdateConfig("estadosAlerta", e.target.value)}
+          placeholder="shipped/delayed, devolucion"
+          value={(config?.estadosAlerta as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Separados por coma. Cada courier nombra los estados distinto; podés
+          usar estado solo o estado/subestado.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="review-umbral">Días sin movimiento</Label>
+        <Input
+          disabled={disabled}
+          id="review-umbral"
+          onChange={(e) => onUpdateConfig("umbralDias", e.target.value)}
+          placeholder="7"
+          value={(config?.umbralDias as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Avisa si un envío lleva al menos esa cantidad de días en el mismo
+          estado. Vacío = no avisar por demora.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Alertas de Stock fields: flags products below a stock threshold, deduped
+function AlertasStockFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="alerts-productos">Productos</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="alerts-productos"
+          onChange={(value) => onUpdateConfig("productos", value)}
+          placeholder="Salida del paso de productos (productoId, sku, nombre, stock, umbral opcional)"
+          value={(config?.productos as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Usá @ para referenciar la salida del paso con los productos. Solo
+          reporte y marcas internas: no modifica el stock ni envía avisos.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="alerts-umbral">Umbral de stock</Label>
+        <Input
+          disabled={disabled}
+          id="alerts-umbral"
+          onChange={(e) => onUpdateConfig("umbral", e.target.value)}
+          placeholder="5"
+          value={(config?.umbral as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Avisa si el stock es menor que ese número. Cada producto puede traer
+          su propio umbral; este es el valor por defecto (vacío = 5).
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Preparar Avisos fields: drafts permitted post-purchase notices for human
+// approval; never sends anything.
+function PrepararAvisosFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="notices-eventos">Eventos de pedidos</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="notices-eventos"
+          onChange={(value) => onUpdateConfig("eventos", value)}
+          placeholder="Salida del paso con eventos (pedidoId, referencia, evento, canal, cliente)"
+          value={(config?.eventos as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Usá @ para referenciar la salida del paso con los eventos. Solo
+          prepara borradores: el envío requiere un paso de aprobación humana.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="notices-habilitados">Eventos habilitados</Label>
+        <Input
+          disabled={disabled}
+          id="notices-habilitados"
+          onChange={(e) => onUpdateConfig("eventosHabilitados", e.target.value)}
+          placeholder="pago_confirmado, despachado, entregado"
+          value={(config?.eventosHabilitados as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Separados por coma. Solo eventos transaccionales de postcompra; vacío
+          = los tres. Cualquier otro evento se omite y se reporta.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Preparar Respuestas fields: drafts support answers from provided context
+// for human approval; never sends anything.
+function PrepararRespuestasFields({
+  config,
+  onUpdateConfig,
+  disabled,
+}: {
+  config: Record<string, unknown>;
+  onUpdateConfig: (key: string, value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="support-consultas">Consultas</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="support-consultas"
+          onChange={(value) => onUpdateConfig("consultas", value)}
+          placeholder="Salida del paso con consultas (consultaId, cliente, texto, pedidoId)"
+          value={(config?.consultas as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Usá @ para referenciar la salida del paso con las consultas. Solo
+          prepara borradores: el envío requiere aprobación humana.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="support-contexto">Contexto de pedidos</Label>
+        <TemplateBadgeInput
+          disabled={disabled}
+          id="support-contexto"
+          onChange={(value) => onUpdateConfig("contextoPedidos", value)}
+          placeholder='Mapa pedidoId {"{"}"estado","detalle"{"}"} desde Datos u otro paso'
+          value={(config?.contextoPedidos as string) || ""}
+        />
+        <p className="text-muted-foreground text-xs">
+          Sin contexto del pedido, la consulta se deriva a una persona: nunca se
+          responde sin dato.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Datos fields component (generic per-company records; prototype)
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: componente de campos Datos con ramas por tipo; refactor fuera de alcance
 function DatosFields({
   config,
   onUpdateConfig,
@@ -586,66 +1074,137 @@ function DatosFields({
           onChange={(e) => onUpdateConfig("operation", e.target.value)}
           value={operation}
         >
-          <option disabled value="">Elegí qué hacer</option>
+          <option disabled value="">
+            Elegí qué hacer
+          </option>
           <option value="save">Guardar un dato</option>
           <option value="saveIfAbsent">Guardar solo si no existe</option>
-          <option value="updateIfMatches">Actualizar solo si el valor actual coincide</option>
+          <option value="updateIfMatches">
+            Actualizar solo si el valor actual coincide
+          </option>
           <option value="add">Sumar a un número</option>
-          <option value="applyTogether">Aplicar cambios juntos (todos o ninguno)</option>
+          <option value="applyTogether">
+            Aplicar cambios juntos (todos o ninguno)
+          </option>
           <option value="read">Leer un dato</option>
           <option value="list">Listar los últimos datos</option>
-          <option value="fields">Definir campos de la colección (opcional)</option>
+          <option value="fields">
+            Definir campos de la colección (opcional)
+          </option>
         </select>
       </div>
       {operation !== "applyTogether" && (
-      <div className="space-y-2">
-        <Label htmlFor="datos-collection">Colección</Label>
-        <Input
-          disabled={disabled}
-          id="datos-collection"
-          onChange={(e) => onUpdateConfig("collection", e.target.value)}
-          placeholder="productos"
-          value={(config?.collection as string) || ""}
-        />
-        <p className="text-muted-foreground text-xs">
-          Minúsculas, números y _ (por ejemplo: productos). Los datos son de tu empresa.
-        </p>
-      </div>
-      )}
-      {operation !== "list" && operation !== "fields" && operation !== "applyTogether" && (
         <div className="space-y-2">
-          <Label htmlFor="datos-key">Clave</Label>
+          <Label htmlFor="datos-collection">Colección</Label>
           <Input
             disabled={disabled}
-            id="datos-key"
-            onChange={(e) => onUpdateConfig("key", e.target.value)}
-            placeholder="SKU-123"
-            value={(config?.key as string) || ""}
+            id="datos-collection"
+            onChange={(e) => onUpdateConfig("collection", e.target.value)}
+            placeholder="productos"
+            value={(config?.collection as string) || ""}
           />
+          <p className="text-muted-foreground text-xs">
+            Minúsculas, números y _ (por ejemplo: productos). Los datos son de
+            tu empresa.
+          </p>
         </div>
       )}
+      {operation !== "list" &&
+        operation !== "fields" &&
+        operation !== "applyTogether" && (
+          <div className="space-y-2">
+            <Label htmlFor="datos-key">Clave</Label>
+            <Input
+              disabled={disabled}
+              id="datos-key"
+              onChange={(e) => onUpdateConfig("key", e.target.value)}
+              placeholder="SKU-123"
+              value={(config?.key as string) || ""}
+            />
+          </div>
+        )}
       {operation === "applyTogether" && (
-        <DatosTogetherEditor disabled={disabled} onChange={(v) => onUpdateConfig("operations", v)} value={(config?.operations as string) || ""} />
+        <DatosTogetherEditor
+          disabled={disabled}
+          onChange={(v) => onUpdateConfig("operations", v)}
+          value={(config?.operations as string) || ""}
+        />
       )}
       {operation === "add" && (
         <div className="space-y-2">
           <Label htmlFor="datos-field">Campo numérico</Label>
-          <Input disabled={disabled} id="datos-field" onChange={(e) => onUpdateConfig("field", e.target.value)} placeholder="stock" value={(config?.field as string) || ""} />
-          <Label htmlFor="datos-amount">Cantidad a sumar (negativa para restar)</Label>
-          <Input disabled={disabled} id="datos-amount" onChange={(e) => onUpdateConfig("amount", e.target.value)} placeholder="-1" value={(config?.amount as string) || ""} />
+          <Input
+            disabled={disabled}
+            id="datos-field"
+            onChange={(e) => onUpdateConfig("field", e.target.value)}
+            placeholder="stock"
+            value={(config?.field as string) || ""}
+          />
+          <Label htmlFor="datos-amount">
+            Cantidad a sumar (negativa para restar)
+          </Label>
+          <Input
+            disabled={disabled}
+            id="datos-amount"
+            onChange={(e) => onUpdateConfig("amount", e.target.value)}
+            placeholder="-1"
+            value={(config?.amount as string) || ""}
+          />
           <Label htmlFor="datos-min">Mínimo permitido (opcional)</Label>
-          <Input disabled={disabled} id="datos-min" onChange={(e) => onUpdateConfig("min", e.target.value)} placeholder="0" value={(config?.min as string) || ""} />
+          <Input
+            disabled={disabled}
+            id="datos-min"
+            onChange={(e) => onUpdateConfig("min", e.target.value)}
+            placeholder="0"
+            value={(config?.min as string) || ""}
+          />
           <Label htmlFor="datos-max">Máximo permitido (opcional)</Label>
-          <Input disabled={disabled} id="datos-max" onChange={(e) => onUpdateConfig("max", e.target.value)} placeholder="" value={(config?.max as string) || ""} />
-          <label className="flex items-center gap-2 text-sm" htmlFor="datos-start-zero">
-            <input checked={config?.startAtZero === "true" || config?.startAtZero === true} disabled={disabled} id="datos-start-zero" onChange={(e) => onUpdateConfig("startAtZero", e.target.checked ? "true" : "false")} type="checkbox" />
+          <Input
+            disabled={disabled}
+            id="datos-max"
+            onChange={(e) => onUpdateConfig("max", e.target.value)}
+            placeholder=""
+            value={(config?.max as string) || ""}
+          />
+          <label
+            className="flex items-center gap-2 text-sm"
+            htmlFor="datos-start-zero"
+          >
+            <input
+              checked={
+                config?.startAtZero === "true" || config?.startAtZero === true
+              }
+              disabled={disabled}
+              id="datos-start-zero"
+              onChange={(e) =>
+                onUpdateConfig(
+                  "startAtZero",
+                  e.target.checked ? "true" : "false"
+                )
+              }
+              type="checkbox"
+            />
             Si el campo no existe, empezar en 0
           </label>
           <div className="space-y-1 text-sm">
-            <p className="text-foreground/80">Suma o resta en un solo paso, sin pisar cambios simultáneos. Si queda fuera del mínimo/máximo no cambia nada y devuelve aplicado = falso: usá un nodo Condición sobre aplicado.</p>
+            <p className="text-foreground/80">
+              Suma o resta en un solo paso, sin pisar cambios simultáneos. Si
+              queda fuera del mínimo/máximo no cambia nada y devuelve aplicado =
+              falso: usá un nodo Condición sobre aplicado.
+            </p>
             <details className="text-foreground/70">
-              <summary className="cursor-pointer font-medium">Más detalles</summary>
-              <p className="mt-1">Si este mismo paso se reintenta dentro de la misma ejecución, no suma dos veces y devuelve el mismo resultado que la primera vez (con repetido = verdadero). Una ejecución nueva sí suma: si el mismo evento puede llegar repetido (por ejemplo un aviso de venta duplicado), antes usá &quot;Guardar solo si no existe&quot; con una clave única por evento y sumá solo si creado = verdadero.</p>
+              <summary className="cursor-pointer font-medium">
+                Más detalles
+              </summary>
+              <p className="mt-1">
+                Si este mismo paso se reintenta dentro de la misma ejecución, no
+                suma dos veces y devuelve el mismo resultado que la primera vez
+                (con repetido = verdadero). Una ejecución nueva sí suma: si el
+                mismo evento puede llegar repetido (por ejemplo un aviso de
+                venta duplicado), antes usá &quot;Guardar solo si no
+                existe&quot; con una clave única por evento y sumá solo si
+                creado = verdadero.
+              </p>
             </details>
           </div>
         </div>
@@ -653,19 +1212,40 @@ function DatosFields({
       {operation === "updateIfMatches" && (
         <div className="space-y-2">
           <Label htmlFor="datos-expected">Valor esperado actual</Label>
-          <Input disabled={disabled} id="datos-expected" onChange={(e) => onUpdateConfig("expected", e.target.value)} placeholder='{"estado": "pendiente"}' value={(config?.expected as string) || ""} />
+          <Input
+            disabled={disabled}
+            id="datos-expected"
+            onChange={(e) => onUpdateConfig("expected", e.target.value)}
+            placeholder='{"estado": "pendiente"}'
+            value={(config?.expected as string) || ""}
+          />
           <div className="space-y-1 text-sm">
-            <p className="text-foreground/80">Cambia el dato solo si es igual a este valor (1 y 1.0 son iguales). Si no coincide o no existe, no cambia nada y devuelve actualizado = falso: usá un nodo Condición sobre actualizado.</p>
+            <p className="text-foreground/80">
+              Cambia el dato solo si es igual a este valor (1 y 1.0 son
+              iguales). Si no coincide o no existe, no cambia nada y devuelve
+              actualizado = falso: usá un nodo Condición sobre actualizado.
+            </p>
             <details className="text-foreground/70">
-              <summary className="cursor-pointer font-medium">Más detalles</summary>
-              <p className="mt-1">Si este mismo paso se reintenta dentro de la misma ejecución, devuelve el mismo resultado que la primera vez (con repetido = verdadero) y no vuelve a aplicar el cambio, aunque el dato haya cambiado en el medio.</p>
+              <summary className="cursor-pointer font-medium">
+                Más detalles
+              </summary>
+              <p className="mt-1">
+                Si este mismo paso se reintenta dentro de la misma ejecución,
+                devuelve el mismo resultado que la primera vez (con repetido =
+                verdadero) y no vuelve a aplicar el cambio, aunque el dato haya
+                cambiado en el medio.
+              </p>
             </details>
           </div>
         </div>
       )}
-      {(operation === "save" || operation === "saveIfAbsent" || operation === "updateIfMatches") && (
+      {(operation === "save" ||
+        operation === "saveIfAbsent" ||
+        operation === "updateIfMatches") && (
         <div className="space-y-2">
-          <Label htmlFor="datos-value">{operation === "updateIfMatches" ? "Valor nuevo" : "Valor"}</Label>
+          <Label htmlFor="datos-value">
+            {operation === "updateIfMatches" ? "Valor nuevo" : "Valor"}
+          </Label>
           <Input
             disabled={disabled}
             id="datos-value"
@@ -675,7 +1255,9 @@ function DatosFields({
           />
           <p className="text-muted-foreground text-xs">
             Texto o JSON, hasta 16 KB.
-            {operation === "saveIfAbsent" ? " Si la clave ya existe, no se cambia y se devuelve el dato existente (creado = falso)." : ""}
+            {operation === "saveIfAbsent"
+              ? " Si la clave ya existe, no se cambia y se devuelve el dato existente (creado = falso)."
+              : ""}
           </p>
         </div>
       )}
@@ -687,13 +1269,16 @@ function DatosFields({
             disabled={disabled}
             id="datos-fields"
             onChange={(e) => onUpdateConfig("fields", e.target.value)}
-            placeholder={"nombre:texto:obligatorio\nprecio:numero\nactivo:booleano\nalta:fecha"}
+            placeholder={
+              "nombre:texto:obligatorio\nprecio:numero\nactivo:booleano\nalta:fecha"
+            }
             value={(config?.fields as string) || ""}
           />
           <p className="text-muted-foreground text-xs">
-            Un campo por línea: nombre:tipo (texto, numero, booleano, fecha) o nombre:tipo:obligatorio.
-            Desde ese momento, Guardar en esta colección acepta solo objetos con esos campos.
-            Los registros ya guardados no se cambian ni se borran.
+            Un campo por línea: nombre:tipo (texto, numero, booleano, fecha) o
+            nombre:tipo:obligatorio. Desde ese momento, Guardar en esta
+            colección acepta solo objetos con esos campos. Los registros ya
+            guardados no se cambian ni se borran.
           </p>
         </div>
       )}
@@ -774,7 +1359,10 @@ function UnirFields({
   return (
     <div className="space-y-4">
       {(config.onError === "stop" || config.onError === "continue") && (
-        <p className="text-muted-foreground text-xs">Las opciones de error guardadas abajo no se usan mientras haya una política común explícita. Podés cambiarla en "Si este paso falla".</p>
+        <p className="text-muted-foreground text-xs">
+          Las opciones de error guardadas abajo no se usan mientras haya una
+          política común explícita. Podés cambiarla en "Si este paso falla".
+        </p>
       )}
       <div className="space-y-2">
         <Label htmlFor="unir-mode">Cuándo seguir</Label>
@@ -811,7 +1399,11 @@ function UnirFields({
             <Label htmlFor="unir-timeout">Si se acaba el tiempo</Label>
             <select
               className={selectClass}
-              disabled={disabled || config.onError === "stop" || config.onError === "continue"}
+              disabled={
+                disabled ||
+                config.onError === "stop" ||
+                config.onError === "continue"
+              }
               id="unir-timeout"
               onChange={(e) => onUpdateConfig("onTimeout", e.target.value)}
               value={config?.onTimeout === "continue" ? "continue" : "fail"}
@@ -831,7 +1423,11 @@ function UnirFields({
         <Label htmlFor="unir-fail">Si una rama falla</Label>
         <select
           className={selectClass}
-          disabled={disabled || config.onError === "stop" || config.onError === "continue"}
+          disabled={
+            disabled ||
+            config.onError === "stop" ||
+            config.onError === "continue"
+          }
           id="unir-fail"
           onChange={(e) => onUpdateConfig("onParentFailure", e.target.value)}
           value={config?.onParentFailure === "continue" ? "continue" : "fail"}
@@ -861,7 +1457,9 @@ function ApprovalFields({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="approval-message">Qué tiene que revisar la persona</Label>
+        <Label htmlFor="approval-message">
+          Qué tiene que revisar la persona
+        </Label>
         <TemplateBadgeTextarea
           disabled={disabled}
           id="approval-message"
@@ -872,8 +1470,7 @@ function ApprovalFields({
         />
         <p className="text-muted-foreground text-xs">
           El flujo se pausa acá y muestra Aprobar/Rechazar en la ejecución. Si
-          rechazan, el flujo termina con error. La salida expone
-          {" "}
+          rechazan, el flujo termina con error. La salida expone{" "}
           {"{{@...approved}}"} y {"{{@...note}}"}.
         </p>
       </div>
@@ -917,7 +1514,9 @@ function LoopFields({
           id="loop-max"
           max={50}
           min={1}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onUpdateConfig("maxItems", e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            onUpdateConfig("maxItems", e.target.value)
+          }
           type="number"
           value={String(config?.maxItems ?? 50)}
         />
@@ -927,7 +1526,9 @@ function LoopFields({
         {innerSteps.length ? (
           <ol className="list-decimal space-y-1 pl-5 text-sm">
             {innerSteps.map((step, i) => (
-              <li key={step.id || i}>{step.actionType || "Paso sin configurar"}</li>
+              <li key={step.id || i}>
+                {step.actionType || "Paso sin configurar"}
+              </li>
             ))}
           </ol>
         ) : (
@@ -1005,6 +1606,46 @@ function SystemActionFields({
           onUpdateConfig={onUpdateConfig}
         />
       );
+    case "Conciliar Pagos":
+      return (
+        <ConciliarPagosFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
+    case "Revisar Envíos":
+      return (
+        <RevisarEnviosFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
+    case "Alertas de Stock":
+      return (
+        <AlertasStockFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
+    case "Preparar Avisos":
+      return (
+        <PrepararAvisosFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
+    case "Preparar Respuestas":
+      return (
+        <PrepararRespuestasFields
+          config={config}
+          disabled={disabled}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
     case "Datos":
       return (
         <DatosFields
@@ -1061,6 +1702,11 @@ const SYSTEM_ACTIONS: Array<{ id: string; label: string }> = [
   { id: "Unir", label: "Unir" },
   { id: "Datos", label: "Datos" },
   { id: "Comparar Stock", label: "Comparar Stock" },
+  { id: "Conciliar Pagos", label: "Conciliar Pagos" },
+  { id: "Revisar Envíos", label: "Revisar Envíos" },
+  { id: "Alertas de Stock", label: "Alertas de Stock" },
+  { id: "Preparar Avisos", label: "Preparar Avisos" },
+  { id: "Preparar Respuestas", label: "Preparar Respuestas" },
   { id: "Frontend", label: "Frontend" },
 ];
 
@@ -1187,7 +1833,9 @@ export function ActionConfig({
     // Check plugin actions
     const action = findActionById(actionType);
     // Composio uses the server project key, not a per-user credential record.
-    if (action?.integration === "composio") return undefined;
+    if (action?.integration === "composio") {
+      return;
+    }
     return action?.integration as IntegrationType | undefined;
   }, [actionType]);
 
@@ -1199,7 +1847,9 @@ export function ActionConfig({
 
   // Check if there are existing connections for this integration type
   const hasExistingConnections = useMemo(() => {
-    if (!integrationType) return false;
+    if (!integrationType) {
+      return false;
+    }
     return globalIntegrations.some((i) => i.type === integrationType);
   }, [integrationType, globalIntegrations]);
 
